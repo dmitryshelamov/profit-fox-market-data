@@ -5,9 +5,43 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "common", "common", "{AA2F3D
 		..\.gitignore = ..\.gitignore
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6C887AAC-45F9-4192-A8B6-603396F917AA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Presentation", "src\ProfitFox.MarketData.Presentation\ProfitFox.MarketData.Presentation.csproj", "{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Infrastructure", "src\ProfitFox.MarketData.Infrastructure\ProfitFox.MarketData.Infrastructure.csproj", "{23FF742B-6555-482E-B44F-96001CA2FBC3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Application", "src\ProfitFox.MarketData.Application\ProfitFox.MarketData.Application.csproj", "{48B9C03F-D2B4-4577-AA30-B0CA1423130A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Domain", "src\ProfitFox.MarketData.Domain\ProfitFox.MarketData.Domain.csproj", "{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{23FF742B-6555-482E-B44F-96001CA2FBC3} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
