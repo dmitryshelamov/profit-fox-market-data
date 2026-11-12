@@ -17,6 +17,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- The root the channel to T-Invest trusts; read from next to the app, so every app and test project that references this one gets it. -->
+        <None Include="Exchanges/TInvest/Certificates/*.cer" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <InternalsVisibleTo Include="ProfitFox.MarketData.Tests.Integration"/>
     </ItemGroup>
 
