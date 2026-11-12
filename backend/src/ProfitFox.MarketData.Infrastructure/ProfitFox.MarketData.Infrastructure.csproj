@@ -1,7 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CryptoClients.Net"/>
+        <PackageReference Include="Dapper"/>
+        <PackageReference Include="FluentMigrator.Runner.Postgres"/>
+        <PackageReference Include="Npgsql"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\ProfitFox.MarketData.Application\ProfitFox.MarketData.Application.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="ProfitFox.MarketData.Tests.Integration"/>
     </ItemGroup>
 
 </Project>

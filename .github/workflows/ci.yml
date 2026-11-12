@@ -39,6 +39,16 @@ jobs:
       - name: Build
         run: dotnet build ProfitFox.MarketData.sln --configuration Release --no-restore
 
+      - name: Verify format
+        run: dotnet format ProfitFox.MarketData.sln --verify-no-changes --no-restore
+
+      - name: Verify XML doc summaries
+        run: |
+          if grep -rnE --include='*.cs' '/// <summary>.+</summary>' src tests; then
+            echo "One-line <summary>; write it on three lines."
+            exit 1
+          fi
+
       - name: Test
         run: >
           dotnet test ProfitFox.MarketData.sln
