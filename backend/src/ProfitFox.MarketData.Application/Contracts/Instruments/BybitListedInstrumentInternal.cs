@@ -1,3 +1,4 @@
+using ProfitFox.MarketData.Application.Contracts.Instruments.Base;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 
 namespace ProfitFox.MarketData.Application.Contracts.Instruments;
@@ -10,4 +11,4 @@ public sealed record BybitListedInstrumentInternal(
     InstrumentStatus Status,
     InstrumentRulesInternal Rules,
     BybitContractType? ContractType,
-    DateTimeOffset? LaunchTime);
+    DateTimeOffset? LaunchTime) : ListedInstrumentInternal;

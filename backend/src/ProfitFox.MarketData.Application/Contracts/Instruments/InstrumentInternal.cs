@@ -1,7 +1,9 @@
+using ProfitFox.MarketData.Application.Contracts.Instruments.Base;
+
 namespace ProfitFox.MarketData.Application.Contracts.Instruments;
 
 public sealed record InstrumentInternal(
     Guid Id,
-    BybitListedInstrumentInternal Listing,
+    ListedInstrumentInternal Listing,
     DateTimeOffset FirstSeenAt,
     DateTimeOffset? DelistedAt);

@@ -1,9 +1,7 @@
-using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
-
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     The <c>InstrumentSync</c> section of the settings: how often the catalog syncs and which categories of Bybit it syncs.
+///     The <c>InstrumentSync</c> section of the settings: how often the catalog syncs and what it syncs of each exchange.
 /// </summary>
 internal sealed class InstrumentSyncSettings
 {
@@ -14,5 +12,7 @@ internal sealed class InstrumentSyncSettings
     /// </summary>
     public int IntervalMinutes { get; init; }
 
-    public BybitCategory[] Categories { get; init; } = [];
+    public BybitInstrumentSyncSettings Bybit { get; init; } = new BybitInstrumentSyncSettings();
+
+    public TInvestInstrumentSyncSettings TInvest { get; init; } = new TInvestInstrumentSyncSettings();
 }

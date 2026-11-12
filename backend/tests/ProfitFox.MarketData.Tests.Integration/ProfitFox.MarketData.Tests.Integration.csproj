@@ -17,6 +17,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- The server certificate and Sub CA T-Invest presented on 2026-11-13, to check the trust of the channel without a connection. -->
+        <None Include="Infrastructure/Exchanges/TInvest/Certificates/*.cer" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\..\src\ProfitFox.MarketData.Presentation\ProfitFox.MarketData.Presentation.csproj"/>
         <ProjectReference Include="..\ProfitFox.MarketData.Tests.Shared\ProfitFox.MarketData.Tests.Shared.csproj"/>
     </ItemGroup>

@@ -9,10 +9,16 @@
         <PackageReference Include="Dapper"/>
         <PackageReference Include="FluentMigrator.Runner.Postgres"/>
         <PackageReference Include="Npgsql"/>
+        <PackageReference Include="Tinkoff.InvestApi"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\ProfitFox.MarketData.Application\ProfitFox.MarketData.Application.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The root the channel to T-Invest trusts; read from next to the app, so every app and test project that references this one gets it. -->
+        <None Include="Exchanges/TInvest/Certificates/*.cer" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>

@@ -1,5 +1,5 @@
 using ProfitFox.MarketData.Domain.Entities.Base;
-using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 
 namespace ProfitFox.MarketData.Domain.Entities.Instruments;
 
@@ -18,7 +18,7 @@ public sealed class Instrument : AggregateRoot
     /// <summary>
     ///     What the exchange last told about the instrument.
     /// </summary>
-    public BybitListedInstrument Listing { get; private set; }
+    public ListedInstrument Listing { get; private set; }
 
     /// <summary>
     ///     When the catalog first saw the instrument in the list of its exchange.
@@ -30,7 +30,7 @@ public sealed class Instrument : AggregateRoot
     /// </summary>
     public DateTimeOffset? DelistedAt { get; private set; }
 
-    private Instrument(Guid id, BybitListedInstrument listing, DateTimeOffset firstSeenAt, DateTimeOffset? delistedAt)
+    private Instrument(Guid id, ListedInstrument listing, DateTimeOffset firstSeenAt, DateTimeOffset? delistedAt)
     {
         Id = id;
         Listing = listing;
@@ -41,7 +41,7 @@ public sealed class Instrument : AggregateRoot
     /// <summary>
     ///     An instrument the catalog sees in the list of its exchange for the first time, at <paramref name="now" />.
     /// </summary>
-    public static Instrument Create(Guid id, BybitListedInstrument listing, DateTimeOffset now)
+    public static Instrument Create(Guid id, ListedInstrument listing, DateTimeOffset now)
     {
         return new Instrument(id, listing, now, delistedAt: null);
     }
@@ -50,7 +50,7 @@ public sealed class Instrument : AggregateRoot
     ///     A stored instrument brought back as it was saved, for a repository: nothing happens to it, so it changes no state and raises no
     ///     event.
     /// </summary>
-    public static Instrument Restore(Guid id, BybitListedInstrument listing, DateTimeOffset firstSeenAt, DateTimeOffset? delistedAt)
+    public static Instrument Restore(Guid id, ListedInstrument listing, DateTimeOffset firstSeenAt, DateTimeOffset? delistedAt)
     {
         return new Instrument(id, listing, firstSeenAt, delistedAt);
     }
@@ -58,7 +58,7 @@ public sealed class Instrument : AggregateRoot
     /// <summary>
     ///     Takes what the exchange tells about the instrument now; a delisted instrument is listed again.
     /// </summary>
-    public void Refresh(BybitListedInstrument listing)
+    public void Refresh(ListedInstrument listing)
     {
         Listing = listing;
         DelistedAt = null;

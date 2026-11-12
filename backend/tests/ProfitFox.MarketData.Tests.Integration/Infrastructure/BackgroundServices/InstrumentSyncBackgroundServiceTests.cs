@@ -10,7 +10,9 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
-using ProfitFox.MarketData.Application.Commands.Instruments.Sync;
+using ProfitFox.MarketData.Application.Commands.Instruments.Base;
+using ProfitFox.MarketData.Application.Commands.Instruments.SyncBybitInstruments;
+using ProfitFox.MarketData.Application.Commands.Instruments.SyncTInvestShares;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -23,13 +25,13 @@ public class InstrumentSyncBackgroundServiceTests
     [SetUp]
     public void SetUp()
     {
-        _sent = Channel.CreateUnbounded<SyncInstrumentsCommand>();
+        _sent = Channel.CreateUnbounded<BaseSyncInstrumentsCommand>();
         _time = new FakeTimeProvider(Start);
         _sender = Substitute.For<ISender>();
-        _sender.Send(Arg.Any<SyncInstrumentsCommand>(), Arg.Any<CancellationToken>())
+        _sender.Send(Arg.Any<BaseSyncInstrumentsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                if (call[0] is SyncInstrumentsCommand command)
+                if (call[0] is BaseSyncInstrumentsCommand command)
                 {
                     _sent.Writer.TryWrite(command);
                 }
@@ -57,7 +59,7 @@ public class InstrumentSyncBackgroundServiceTests
 
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
 
-    private Channel<SyncInstrumentsCommand> _sent = null!;
+    private Channel<BaseSyncInstrumentsCommand> _sent = null!;
     private IConfigurationRoot _configuration = null!;
     private FakeTimeProvider _time = null!;
     private ISender _sender = null!;
@@ -65,13 +67,29 @@ public class InstrumentSyncBackgroundServiceTests
     private InstrumentSyncBackgroundService? _service;
 
     // The settings as the app binds them, every 60 minutes; the sender is the last ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(params string[] categories)
+    private Task StartAsync(params string[] categories)
     {
-        var values = new Dictionary<string, string?> { ["InstrumentSync:IntervalMinutes"] = "60" };
+        return StartAsync(tinvest: false, bybit: true, categories);
+    }
+
+    private Task StartAsync(bool tinvest, params string[] categories)
+    {
+        return StartAsync(tinvest, bybit: true, categories);
+    }
+
+    private async Task StartAsync(bool tinvest, bool bybit, params string[] categories)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["InstrumentSync:IntervalMinutes"] = "60",
+            ["InstrumentSync:Bybit:Enabled"] = bybit.ToString(),
+            ["InstrumentSync:TInvest:Enabled"] = tinvest.ToString(),
+            ["TInvestApi:Token"] = "test-token"
+        };
 
         for (var index = 0; index < categories.Length; index++)
         {
-            values[$"InstrumentSync:Categories:{index}"] = categories[index];
+            values[$"InstrumentSync:Bybit:Categories:{index}"] = categories[index];
         }
 
         _configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
@@ -92,9 +110,9 @@ public class InstrumentSyncBackgroundServiceTests
         _configuration.Reload();
     }
 
-    private async Task<IReadOnlyList<SyncInstrumentsCommand>> SentAsync(int count)
+    private async Task<IReadOnlyList<BaseSyncInstrumentsCommand>> SentAsync(int count)
     {
-        var sent = new List<SyncInstrumentsCommand>();
+        var sent = new List<BaseSyncInstrumentsCommand>();
 
         while (sent.Count < count)
         {
@@ -119,20 +137,20 @@ public class InstrumentSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
-                    new SyncInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
+                    new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
                 }));
     }
 
     [Test]
     public async Task A_category_that_fails_does_not_stop_the_others()
     {
-        _sender.Send(Arg.Is<SyncInstrumentsCommand>(command => command != null && command.Category == BybitCategory.Spot), Arg.Any<CancellationToken>())
+        _sender.Send(Arg.Is<BaseSyncInstrumentsCommand>(command => command == new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start)), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new HttpRequestException("Bybit is down.")));
 
         await StartAsync("Spot", "Linear");
 
-        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncInstrumentsCommand(BybitCategory.Linear, Start) }));
+        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start) }));
     }
 
     [Test]
@@ -144,15 +162,47 @@ public class InstrumentSyncBackgroundServiceTests
 
         Save("InstrumentSync:IntervalMinutes", "5");
         _time.Advance(TimeSpan.FromMinutes(50));
-        IReadOnlyList<SyncInstrumentsCommand> afterCurrentWait = await SentAsync(count: 1);
+        IReadOnlyList<BaseSyncInstrumentsCommand> afterCurrentWait = await SentAsync(count: 1);
         _time.Advance(TimeSpan.FromMinutes(5));
-        IReadOnlyList<SyncInstrumentsCommand> afterNewInterval = await SentAsync(count: 1);
+        IReadOnlyList<BaseSyncInstrumentsCommand> afterNewInterval = await SentAsync(count: 1);
 
         Assert.Multiple(() =>
         {
-            Assert.That(afterCurrentWait, Is.EqualTo(new[] { new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(60)) }));
-            Assert.That(afterNewInterval, Is.EqualTo(new[] { new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(65)) }));
+            Assert.That(afterCurrentWait, Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(60)) }));
+            Assert.That(afterNewInterval, Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(65)) }));
         });
+    }
+
+    [Test]
+    public async Task A_sync_of_bybit_that_hangs_does_not_hold_back_tinvest()
+    {
+        _sender.Send(Arg.Is<BaseSyncInstrumentsCommand>(command => command is SyncBybitInstrumentsCommand), Arg.Any<CancellationToken>())
+            .Returns(call => Task.Delay(Timeout.Infinite, call.Arg<CancellationToken>()));
+
+        await StartAsync(tinvest: true, "Spot");
+
+        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncTInvestSharesCommand(Start) }));
+    }
+
+    [Test]
+    public async Task A_sync_of_tinvest_that_fails_does_not_stop_bybit()
+    {
+        _sender.Send(Arg.Is<BaseSyncInstrumentsCommand>(command => command is SyncTInvestSharesCommand), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("T-Invest is down.")));
+
+        await StartAsync(tinvest: true, "Spot");
+
+        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start) }));
+    }
+
+    [Test]
+    public async Task An_exchange_that_is_not_enabled_does_not_sync()
+    {
+        await StartAsync(tinvest: true, bybit: false, "Spot");
+        await SentAsync(count: 1);
+        _time.Advance(TimeSpan.FromMinutes(60));
+
+        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncTInvestSharesCommand(Start.AddHours(1)) }));
     }
 
     [Test]
@@ -165,8 +215,8 @@ public class InstrumentSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new SyncInstrumentsCommand(BybitCategory.Spot, Start),
-                    new SyncInstrumentsCommand(BybitCategory.Linear, Start)
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start),
+                    new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start)
                 }));
     }
 
@@ -176,7 +226,7 @@ public class InstrumentSyncBackgroundServiceTests
         await StartAsync("Spot");
         await SentAsync(count: 1);
 
-        Save("InstrumentSync:Categories:1", "Linear");
+        Save("InstrumentSync:Bybit:Categories:1", "Linear");
         _time.Advance(TimeSpan.FromMinutes(60));
 
         Assert.That(
@@ -184,8 +234,8 @@ public class InstrumentSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
-                    new SyncInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
+                    new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
                 }));
     }
 
@@ -198,7 +248,7 @@ public class InstrumentSyncBackgroundServiceTests
         _time.Advance(TimeSpan.FromMinutes(59));
         bool syncedEarly = _sent.Reader.TryRead(out _);
         _time.Advance(TimeSpan.FromMinutes(1));
-        IReadOnlyList<SyncInstrumentsCommand> sent = await SentAsync(count: 2);
+        IReadOnlyList<BaseSyncInstrumentsCommand> sent = await SentAsync(count: 2);
 
         Assert.Multiple(() =>
         {
@@ -208,9 +258,24 @@ public class InstrumentSyncBackgroundServiceTests
                 Is.EqualTo(
                     new[]
                     {
-                        new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
-                        new SyncInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
+                        new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
+                        new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
                     }));
         });
+    }
+
+    [Test]
+    public async Task The_shares_of_tinvest_sync_with_the_categories_of_bybit()
+    {
+        await StartAsync(tinvest: true, "Spot");
+
+        Assert.That(
+            await SentAsync(count: 2),
+            Is.EquivalentTo(
+                new BaseSyncInstrumentsCommand[]
+                {
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start),
+                    new SyncTInvestSharesCommand(Start)
+                }));
     }
 }

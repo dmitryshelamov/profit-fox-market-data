@@ -2,12 +2,13 @@ using MediatR;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using ProfitFox.MarketData.Application.Commands.Instruments.Sync;
+using ProfitFox.MarketData.Application.Commands.Instruments.SyncBybitInstruments;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
 using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
@@ -44,7 +45,7 @@ public class PostgresTransactionBehaviorTests
         using IServiceScope scope = services.CreateScope();
         IReadOnlyList<Instrument> stored = await scope.ServiceProvider.GetRequiredService<IInstrumentRepository>().GetAllAsync(CancellationToken.None);
 
-        return [.. stored.Select(instrument => instrument.Listing.Symbol)];
+        return [.. stored.Select(instrument => ((BybitListedInstrument)instrument.Listing).Symbol)];
     }
 
     private static Instrument Linear(string baseAsset)
@@ -55,11 +56,11 @@ public class PostgresTransactionBehaviorTests
     [Test]
     public async Task A_command_that_fails_saves_nothing()
     {
-        IPipelineBehavior<SyncInstrumentsCommand, Unit> behavior =
-            _scope.ServiceProvider.GetServices<IPipelineBehavior<SyncInstrumentsCommand, Unit>>().Single();
+        IPipelineBehavior<SyncBybitInstrumentsCommand, Unit> behavior =
+            _scope.ServiceProvider.GetServices<IPipelineBehavior<SyncBybitInstrumentsCommand, Unit>>().Single();
 
         Assert.ThrowsAsync<InvalidOperationException>(() => behavior.Handle(
-            new SyncInstrumentsCommand(BybitCategory.Linear, Now),
+            new SyncBybitInstrumentsCommand(BybitCategory.Linear, Now),
             async cancellationToken =>
             {
                 await _repository.SaveAsync([Linear("BTC")], cancellationToken);
