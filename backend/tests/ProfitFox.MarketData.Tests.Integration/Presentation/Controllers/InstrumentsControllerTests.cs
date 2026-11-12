@@ -107,4 +107,22 @@ public class InstrumentsControllerTests
                     }));
         });
     }
+
+    [Test]
+    public async Task Each_exchange_lists_only_its_own_instruments()
+    {
+        _app.Bybit.RespondJson(BybitAnswers.List("linear", items: BybitAnswers.LinearContract("BTCUSDT", "BTC")));
+        _app.TInvest.Respond("Shares", TInvestAnswers.Shares(TInvestAnswers.Share("SBER", SberUid)));
+        await _client.PostAsync("api/instruments/bybit/sync?category=Linear", content: null);
+        await _client.PostAsync("api/instruments/tinvest/sync", content: null);
+
+        IReadOnlyList<InstrumentInternal>? bybit = await _client.GetFromJsonAsync<IReadOnlyList<InstrumentInternal>>("api/instruments/bybit", Json);
+        IReadOnlyList<InstrumentInternal>? tinvest = await _client.GetFromJsonAsync<IReadOnlyList<InstrumentInternal>>("api/instruments/tinvest", Json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(bybit!.Select(instrument => instrument.Listing).Cast<BybitListedInstrumentInternal>().Select(listing => listing.Symbol), Is.EqualTo(new[] { "BTCUSDT" }));
+            Assert.That(tinvest!.Select(instrument => instrument.Listing).Cast<TInvestListedShareInternal>().Select(listing => listing.Uid), Is.EqualTo(new[] { SberUid }));
+        });
+    }
 }

@@ -28,6 +28,30 @@ public sealed class InstrumentsController(ISender sender, TimeProvider time) : C
     }
 
     /// <summary>
+    ///     Every instrument of Bybit in the catalog, listed or delisted.
+    /// </summary>
+    [HttpGet("bybit")]
+    [ProducesResponseType<IReadOnlyCollection<InstrumentInternal>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListBybit(CancellationToken cancellationToken)
+    {
+        IReadOnlyCollection<InstrumentInternal> instruments = await sender.Send(new GetBybitInstrumentsQuery(), cancellationToken);
+
+        return Ok(instruments);
+    }
+
+    /// <summary>
+    ///     Every share of T-Invest in the catalog, listed or delisted.
+    /// </summary>
+    [HttpGet("tinvest")]
+    [ProducesResponseType<IReadOnlyCollection<InstrumentInternal>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListTInvest(CancellationToken cancellationToken)
+    {
+        IReadOnlyCollection<InstrumentInternal> instruments = await sender.Send(new GetTInvestSharesQuery(), cancellationToken);
+
+        return Ok(instruments);
+    }
+
+    /// <summary>
     ///     Brings the catalog of the category in line with the list of Bybit now; a category the catalog does not sync is a 400.
     /// </summary>
     [HttpPost("bybit/sync")]
