@@ -47,6 +47,10 @@ and this file is silent, ask which to follow.
   its PascalCase name (`CreateInstrumentsTableMigration`). It derives from `Migration` and undoes itself in `Down()`.
 - Names of constraints are snake_case: `<table>_pk`, `<table>_<columns>_unique`.
 - Enums are stored as `text` with the names of their members, not as Postgres `ENUM` types.
+- A hosted service lives in `BackgroundServices` with its settings (`InstrumentSyncSettings`, the `InstrumentSync` section of
+  `appsettings.json`), bound with `AddOptions().Bind().Validate().ValidateOnStart()` and read through `IOptionsMonitor` before every
+  run, so a saved change applies from the next run without a restart; a broken change is logged and the last valid settings stay. Each run takes its own scope and sends a
+  command through `ISender`; a failure is logged and the service goes on. `MarketDataTestApplication` leaves it out.
 
 ## Files and code style
 
