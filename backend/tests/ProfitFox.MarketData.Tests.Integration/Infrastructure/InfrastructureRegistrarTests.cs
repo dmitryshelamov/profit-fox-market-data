@@ -20,12 +20,53 @@ public class InfrastructureRegistrarTests
     }
 
     [Test]
-    public void A_sync_without_categories_is_refused()
+    public void A_sync_of_bybit_without_categories_is_refused()
     {
         Assert.Throws<OptionsValidationException>(() => SyncSettings(
             new Dictionary<string, string?>
             {
-                ["InstrumentSync:IntervalMinutes"] = "60"
+                ["InstrumentSync:IntervalMinutes"] = "60",
+                ["InstrumentSync:Bybit:Enabled"] = "true"
+            }));
+    }
+
+    [Test]
+    public void A_sync_of_nothing_is_refused()
+    {
+        Assert.Throws<OptionsValidationException>(() => SyncSettings(
+            new Dictionary<string, string?>
+            {
+                ["InstrumentSync:IntervalMinutes"] = "60",
+                ["InstrumentSync:Bybit:Categories:0"] = "Spot"
+            }));
+    }
+
+    [Test]
+    public void A_sync_of_shares_alone_takes_the_token()
+    {
+        InstrumentSyncSettings settings = SyncSettings(
+            new Dictionary<string, string?>
+            {
+                ["InstrumentSync:IntervalMinutes"] = "60",
+                ["InstrumentSync:TInvest:Enabled"] = "true",
+                ["TInvestApi:Token"] = "test-token"
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(settings.TInvest.Enabled, Is.True);
+            Assert.That(settings.Bybit.Enabled, Is.False);
+        });
+    }
+
+    [Test]
+    public void A_sync_of_shares_without_a_token_is_refused()
+    {
+        Assert.Throws<OptionsValidationException>(() => SyncSettings(
+            new Dictionary<string, string?>
+            {
+                ["InstrumentSync:IntervalMinutes"] = "60",
+                ["InstrumentSync:TInvest:Enabled"] = "true"
             }));
     }
 
@@ -36,25 +77,29 @@ public class InfrastructureRegistrarTests
             new Dictionary<string, string?>
             {
                 ["InstrumentSync:IntervalMinutes"] = "0",
-                ["InstrumentSync:Categories:0"] = "Spot"
+                ["InstrumentSync:Bybit:Enabled"] = "true",
+                ["InstrumentSync:Bybit:Categories:0"] = "Spot"
             }));
     }
 
     [Test]
-    public void The_sync_takes_its_interval_and_categories_from_the_settings()
+    public void The_sync_takes_its_interval_and_exchanges_from_the_settings()
     {
         InstrumentSyncSettings settings = SyncSettings(
             new Dictionary<string, string?>
             {
                 ["InstrumentSync:IntervalMinutes"] = "60",
-                ["InstrumentSync:Categories:0"] = "Spot",
-                ["InstrumentSync:Categories:1"] = "Linear"
+                ["InstrumentSync:Bybit:Enabled"] = "true",
+                ["InstrumentSync:Bybit:Categories:0"] = "Spot",
+                ["InstrumentSync:Bybit:Categories:1"] = "Linear"
             });
 
         Assert.Multiple(() =>
         {
             Assert.That(settings.IntervalMinutes, Is.EqualTo(60));
-            Assert.That(settings.Categories, Is.EqualTo(new[] { BybitCategory.Spot, BybitCategory.Linear }));
+            Assert.That(settings.Bybit.Enabled, Is.True);
+            Assert.That(settings.Bybit.Categories, Is.EqualTo(new[] { BybitCategory.Spot, BybitCategory.Linear }));
+            Assert.That(settings.TInvest.Enabled, Is.False);
         });
     }
 }

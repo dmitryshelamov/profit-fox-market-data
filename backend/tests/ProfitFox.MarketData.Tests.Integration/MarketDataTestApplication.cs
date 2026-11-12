@@ -11,13 +11,16 @@ using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
 using ProfitFox.MarketData.Presentation;
+using ProfitFox.MarketData.Tests.Integration.Grpc;
 using ProfitFox.MarketData.Tests.Integration.Http;
+
+using Tinkoff.InvestApi.V1;
 
 namespace ProfitFox.MarketData.Tests.Integration;
 
 /// <summary>
 ///     The whole app in memory for a test: the Testing environment (appsettings.Testing.json), the database of the test container and
-///     Bybit answered by <see cref="Bybit" />, so no request reaches the real exchange. The background sync is left out.
+///     Bybit and T-Invest answered by <see cref="Bybit" /> and <see cref="TInvest" />, so no request reaches a real exchange. The background sync is left out.
 /// </summary>
 internal sealed class MarketDataTestApplication : WebApplicationFactory<Program>
 {
@@ -28,11 +31,17 @@ internal sealed class MarketDataTestApplication : WebApplicationFactory<Program>
     /// </summary>
     internal StubHttpHandler Bybit { get; } = new StubHttpHandler();
 
+    /// <summary>
+    ///     Answers every call of the app to T-Invest.
+    /// </summary>
+    internal StubGrpcInvoker TInvest { get; } = new StubGrpcInvoker();
+
     // The connection string comes from the container: its port is random, so appsettings.Testing.json cannot hold it.
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(TestingEnvironment);
         builder.UseSetting("ConnectionStrings:MarketData", IntegrationEnvironment.ConnectionString);
+        builder.UseSetting("TInvestApi:Token", "test-token");
 
         builder.ConfigureTestServices(services =>
         {
@@ -41,6 +50,8 @@ internal sealed class MarketDataTestApplication : WebApplicationFactory<Program>
                 new HttpClient(Bybit, disposeHandler: false),
                 NullLoggerFactory.Instance,
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })));
+
+            services.AddSingleton(new InstrumentsService.InstrumentsServiceClient(TInvest));
 
             // A test syncs when it asks to: the background sync would take the answers it prepared for Bybit.
             services.Remove(services.Single(service => service.ImplementationType == typeof(InstrumentSyncBackgroundService)));

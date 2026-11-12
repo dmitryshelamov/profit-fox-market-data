@@ -18,6 +18,8 @@
         <PackageVersion Include="Dapper" Version="2.1.89"/>
         <PackageVersion Include="FluentMigrator.Runner.Postgres" Version="8.0.1"/>
         <PackageVersion Include="Npgsql" Version="10.0.3"/>
+        <!-- The generated gRPC clients of T-Invest Invest API; the facade of the SDK is not used. -->
+        <PackageVersion Include="Tinkoff.InvestApi" Version="0.6.25"/>
     </ItemGroup>
 
     <ItemGroup Label="Logging">
