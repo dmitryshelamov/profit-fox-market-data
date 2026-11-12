@@ -20,9 +20,10 @@ namespace ProfitFox.MarketData.Tests.Integration;
 
 /// <summary>
 ///     The whole app in memory for a test: the Testing environment (appsettings.Testing.json), the database of the test container and
-///     Bybit and T-Invest answered by <see cref="Bybit" /> and <see cref="TInvest" />, so no request reaches a real exchange. The background sync is left out.
+///     Bybit and T-Invest answered by <see cref="Bybit" /> and <see cref="TInvest" />, so no request reaches a real exchange. T-Invest goes
+///     with <paramref name="tinvestToken" />; an empty one is an app without a token. The background sync is left out.
 /// </summary>
-internal sealed class MarketDataTestApplication : WebApplicationFactory<Program>
+internal sealed class MarketDataTestApplication(string tinvestToken = "test-token") : WebApplicationFactory<Program>
 {
     private const string TestingEnvironment = "Testing";
 
@@ -41,7 +42,10 @@ internal sealed class MarketDataTestApplication : WebApplicationFactory<Program>
     {
         builder.UseEnvironment(TestingEnvironment);
         builder.UseSetting("ConnectionStrings:MarketData", IntegrationEnvironment.ConnectionString);
-        builder.UseSetting("TInvestApi:Token", "test-token");
+        builder.UseSetting("TInvestApi:Token", tinvestToken);
+
+        // The background sync is left out, so nothing it would sync needs a token at start.
+        builder.UseSetting("InstrumentSync:TInvest:Enabled", "false");
 
         builder.ConfigureTestServices(services =>
         {

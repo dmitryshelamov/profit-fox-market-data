@@ -76,5 +76,5 @@ and this file is silent, ask which to follow.
   (`InstrumentGenerator.Generate(listing, firstSeenAt, id)`, `BybitListedInstrumentGenerator.GenerateLinear("ETH")`). A test passes
   only the values it checks. A helper only one test project uses lives in that project.
 - `Tests.Unit` and `Tests.Integration` mirror the folders of `src` (`Tests.Unit/Domain/Entities/Instruments/InstrumentTests.cs`,
-  `Tests.Integration/Infrastructure/Exchanges/Bybit/BybitExchangeInstrumentsTests.cs`).
+  `Tests.Integration/Infrastructure/Exchanges/Bybit/BybitInstrumentsTests.cs`).
 - NUnit with the constraint model (`Assert.That`, `Assert.Multiple`).
