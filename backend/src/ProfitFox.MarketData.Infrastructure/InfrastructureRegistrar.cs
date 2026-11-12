@@ -23,7 +23,7 @@ public static class InfrastructureRegistrar
         PostgresRegistrar.Configure(configuration, services);
 
         services.AddBybit();
-        services.AddScoped<IExchangeInstruments, BybitExchangeInstruments>();
+        services.AddScoped<IBybitInstruments, BybitInstruments>();
 
         // An app with a broken InstrumentSync section stops at start rather than never syncing.
         services.AddOptions<InstrumentSyncSettings>()

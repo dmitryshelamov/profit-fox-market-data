@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using ProfitFox.MarketData.Application.Commands.Instruments.Sync;
+using ProfitFox.MarketData.Application.Commands.Instruments.SyncBybitInstruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -63,7 +63,7 @@ internal sealed class InstrumentSyncBackgroundService(
                 await using AsyncServiceScope scope = scopes.CreateAsyncScope();
                 ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-                await sender.Send(new SyncInstrumentsCommand(category, time.GetUtcNow()), stoppingToken);
+                await sender.Send(new SyncBybitInstrumentsCommand(category, time.GetUtcNow()), stoppingToken);
                 logger.LogInformation("Synced the {Category} instruments of Bybit.", category);
             }
             catch (Exception exception) when (!stoppingToken.IsCancellationRequested)

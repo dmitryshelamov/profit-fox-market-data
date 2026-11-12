@@ -58,7 +58,9 @@ public class InstrumentsControllerTests
         Assert.Multiple(() =>
         {
             Assert.That(sync.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
-            Assert.That(catalog!.Select(instrument => (instrument.Listing.Category, instrument.Listing.Symbol)), Is.EqualTo(new[] { (BybitCategory.Linear, "BTCUSDT") }));
+            Assert.That(
+                catalog!.Select(instrument => instrument.Listing).Cast<BybitListedInstrumentInternal>().Select(listing => (listing.Category, listing.Symbol)),
+                Is.EqualTo(new[] { (BybitCategory.Linear, "BTCUSDT") }));
             Assert.That(catalog!.Single().FirstSeenAt, Is.InRange(before, after));
             Assert.That(catalog!.Single().DelistedAt, Is.Null);
         });

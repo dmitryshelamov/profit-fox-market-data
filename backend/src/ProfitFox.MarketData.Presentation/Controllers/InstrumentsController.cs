@@ -2,7 +2,7 @@ using MediatR;
 
 using Microsoft.AspNetCore.Mvc;
 
-using ProfitFox.MarketData.Application.Commands.Instruments.Sync;
+using ProfitFox.MarketData.Application.Commands.Instruments.SyncBybitInstruments;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
 using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
@@ -35,7 +35,7 @@ public sealed class InstrumentsController(ISender sender, TimeProvider time) : C
     {
         try
         {
-            await sender.Send(new SyncInstrumentsCommand(category, time.GetUtcNow()), cancellationToken);
+            await sender.Send(new SyncBybitInstrumentsCommand(category, time.GetUtcNow()), cancellationToken);
 
             return NoContent();
         }

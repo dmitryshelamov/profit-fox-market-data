@@ -10,7 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 
 using NSubstitute;
 
-using ProfitFox.MarketData.Application.Commands.Instruments.Sync;
+using ProfitFox.MarketData.Application.Commands.Instruments.SyncBybitInstruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -23,13 +23,13 @@ public class InstrumentSyncBackgroundServiceTests
     [SetUp]
     public void SetUp()
     {
-        _sent = Channel.CreateUnbounded<SyncInstrumentsCommand>();
+        _sent = Channel.CreateUnbounded<SyncBybitInstrumentsCommand>();
         _time = new FakeTimeProvider(Start);
         _sender = Substitute.For<ISender>();
-        _sender.Send(Arg.Any<SyncInstrumentsCommand>(), Arg.Any<CancellationToken>())
+        _sender.Send(Arg.Any<SyncBybitInstrumentsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                if (call[0] is SyncInstrumentsCommand command)
+                if (call[0] is SyncBybitInstrumentsCommand command)
                 {
                     _sent.Writer.TryWrite(command);
                 }
@@ -57,7 +57,7 @@ public class InstrumentSyncBackgroundServiceTests
 
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
 
-    private Channel<SyncInstrumentsCommand> _sent = null!;
+    private Channel<SyncBybitInstrumentsCommand> _sent = null!;
     private IConfigurationRoot _configuration = null!;
     private FakeTimeProvider _time = null!;
     private ISender _sender = null!;
@@ -92,9 +92,9 @@ public class InstrumentSyncBackgroundServiceTests
         _configuration.Reload();
     }
 
-    private async Task<IReadOnlyList<SyncInstrumentsCommand>> SentAsync(int count)
+    private async Task<IReadOnlyList<SyncBybitInstrumentsCommand>> SentAsync(int count)
     {
-        var sent = new List<SyncInstrumentsCommand>();
+        var sent = new List<SyncBybitInstrumentsCommand>();
 
         while (sent.Count < count)
         {
@@ -119,20 +119,20 @@ public class InstrumentSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
-                    new SyncInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
+                    new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
                 }));
     }
 
     [Test]
     public async Task A_category_that_fails_does_not_stop_the_others()
     {
-        _sender.Send(Arg.Is<SyncInstrumentsCommand>(command => command != null && command.Category == BybitCategory.Spot), Arg.Any<CancellationToken>())
+        _sender.Send(Arg.Is<SyncBybitInstrumentsCommand>(command => command != null && command.Category == BybitCategory.Spot), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new HttpRequestException("Bybit is down.")));
 
         await StartAsync("Spot", "Linear");
 
-        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncInstrumentsCommand(BybitCategory.Linear, Start) }));
+        Assert.That(await SentAsync(count: 1), Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start) }));
     }
 
     [Test]
@@ -144,14 +144,14 @@ public class InstrumentSyncBackgroundServiceTests
 
         Save("InstrumentSync:IntervalMinutes", "5");
         _time.Advance(TimeSpan.FromMinutes(50));
-        IReadOnlyList<SyncInstrumentsCommand> afterCurrentWait = await SentAsync(count: 1);
+        IReadOnlyList<SyncBybitInstrumentsCommand> afterCurrentWait = await SentAsync(count: 1);
         _time.Advance(TimeSpan.FromMinutes(5));
-        IReadOnlyList<SyncInstrumentsCommand> afterNewInterval = await SentAsync(count: 1);
+        IReadOnlyList<SyncBybitInstrumentsCommand> afterNewInterval = await SentAsync(count: 1);
 
         Assert.Multiple(() =>
         {
-            Assert.That(afterCurrentWait, Is.EqualTo(new[] { new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(60)) }));
-            Assert.That(afterNewInterval, Is.EqualTo(new[] { new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(65)) }));
+            Assert.That(afterCurrentWait, Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(60)) }));
+            Assert.That(afterNewInterval, Is.EqualTo(new[] { new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddMinutes(65)) }));
         });
     }
 
@@ -165,8 +165,8 @@ public class InstrumentSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new SyncInstrumentsCommand(BybitCategory.Spot, Start),
-                    new SyncInstrumentsCommand(BybitCategory.Linear, Start)
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start),
+                    new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start)
                 }));
     }
 
@@ -184,8 +184,8 @@ public class InstrumentSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
-                    new SyncInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
+                    new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
+                    new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
                 }));
     }
 
@@ -198,7 +198,7 @@ public class InstrumentSyncBackgroundServiceTests
         _time.Advance(TimeSpan.FromMinutes(59));
         bool syncedEarly = _sent.Reader.TryRead(out _);
         _time.Advance(TimeSpan.FromMinutes(1));
-        IReadOnlyList<SyncInstrumentsCommand> sent = await SentAsync(count: 2);
+        IReadOnlyList<SyncBybitInstrumentsCommand> sent = await SentAsync(count: 2);
 
         Assert.Multiple(() =>
         {
@@ -208,8 +208,8 @@ public class InstrumentSyncBackgroundServiceTests
                 Is.EqualTo(
                     new[]
                     {
-                        new SyncInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
-                        new SyncInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
+                        new SyncBybitInstrumentsCommand(BybitCategory.Spot, Start.AddHours(1)),
+                        new SyncBybitInstrumentsCommand(BybitCategory.Linear, Start.AddHours(1))
                     }));
         });
     }
