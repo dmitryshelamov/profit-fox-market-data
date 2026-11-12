@@ -9,6 +9,10 @@
         <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerUI" Version="11.0.0"/>
     </ItemGroup>
 
+    <ItemGroup Label="Application">
+        <PackageVersion Include="MediatR" Version="12.5.0"/>
+    </ItemGroup>
+
     <ItemGroup Label="Logging">
         <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0"/>
     </ItemGroup>
@@ -19,6 +23,7 @@
         <PackageVersion Include="NUnit" Version="4.3.2"/>
         <PackageVersion Include="NUnit.Analyzers" Version="4.7.0"/>
         <PackageVersion Include="NUnit3TestAdapter" Version="5.0.0"/>
+        <PackageVersion Include="NSubstitute" Version="6.0.0"/>
     </ItemGroup>
 
 </Project>

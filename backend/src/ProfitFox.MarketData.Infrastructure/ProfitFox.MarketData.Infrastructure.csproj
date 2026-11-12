@@ -4,4 +4,8 @@
         <ProjectReference Include="..\ProfitFox.MarketData.Application\ProfitFox.MarketData.Application.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="ProfitFox.MarketData.Tests.Unit"/>
+    </ItemGroup>
+
 </Project>
