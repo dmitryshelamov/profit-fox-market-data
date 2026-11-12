@@ -1,6 +1,6 @@
 using ProfitFox.MarketData.Domain.Entities.Instruments;
-using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
 namespace ProfitFox.MarketData.Tests.Unit.Domain.Entities.Instruments;
 
@@ -14,7 +14,7 @@ public class InstrumentTests
     [Test]
     public void Create_makes_a_listed_instrument_first_seen_now()
     {
-        BybitListedInstrument listing = Listing(tickSize: 0.1m);
+        BybitListedInstrument listing = BybitListedInstrumentGenerator.GenerateLinear(tickSize: 0.1m);
 
         var instrument = Instrument.Create(Id, listing, Now);
 
@@ -28,11 +28,22 @@ public class InstrumentTests
     }
 
     [Test]
+    public void Delist_keeps_the_time_it_went()
+    {
+        var instrument = Instrument.Create(Id, BybitListedInstrumentGenerator.GenerateLinear(tickSize: 0.1m), Now);
+
+        instrument.Delist(Now.AddDays(1));
+        instrument.Delist(Now.AddDays(2));
+
+        Assert.That(instrument.DelistedAt, Is.EqualTo(Now.AddDays(1)));
+    }
+
+    [Test]
     public void Refresh_takes_the_new_listing_and_lists_a_delisted_instrument_again()
     {
-        var instrument = Instrument.Create(Id, Listing(tickSize: 0.1m), Now);
+        var instrument = Instrument.Create(Id, BybitListedInstrumentGenerator.GenerateLinear(tickSize: 0.1m), Now);
         instrument.Delist(Now.AddDays(1));
-        BybitListedInstrument listing = Listing(tickSize: 0.5m);
+        BybitListedInstrument listing = BybitListedInstrumentGenerator.GenerateLinear(tickSize: 0.5m);
 
         instrument.Refresh(listing);
 
@@ -41,28 +52,5 @@ public class InstrumentTests
             Assert.That(instrument.Listing, Is.SameAs(listing));
             Assert.That(instrument.DelistedAt, Is.Null);
         });
-    }
-
-    [Test]
-    public void Delist_keeps_the_time_it_went()
-    {
-        var instrument = Instrument.Create(Id, Listing(tickSize: 0.1m), Now);
-
-        instrument.Delist(Now.AddDays(1));
-        instrument.Delist(Now.AddDays(2));
-
-        Assert.That(instrument.DelistedAt, Is.EqualTo(Now.AddDays(1)));
-    }
-
-    private static BybitListedInstrument Listing(decimal tickSize)
-    {
-        return new BybitListedInstrument(
-            BybitCategory.Linear,
-            "BTCUSDT",
-            "BTC",
-            "USDT",
-            InstrumentStatus.Trading,
-            new InstrumentRules(tickSize, quantityStep: 0.001m, minQuantity: 0.001m),
-            BybitContractType.LinearPerpetual);
     }
 }

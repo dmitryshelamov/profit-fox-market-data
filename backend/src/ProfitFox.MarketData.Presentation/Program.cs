@@ -1,3 +1,8 @@
+using System.Text.Json.Serialization;
+
+using ProfitFox.MarketData.Infrastructure;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
+
 using Serilog;
 
 namespace ProfitFox.MarketData.Presentation;
@@ -19,12 +24,18 @@ public class Program
                 .ReadFrom.Configuration(builder.Configuration)
                 .ReadFrom.Services(services));
 
-            builder.Services.AddControllers();
+            builder.Services.AddInfrastructure(builder.Configuration);
+
+            builder.Services
+                .AddControllers()
+                .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
             // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
 
             WebApplication app = builder.Build();
+
+            app.Services.MigrateToLatestVersion();
 
             app.UseSerilogRequestLogging();
 

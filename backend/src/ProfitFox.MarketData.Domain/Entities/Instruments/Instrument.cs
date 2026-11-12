@@ -30,11 +30,12 @@ public sealed class Instrument : AggregateRoot
     /// </summary>
     public DateTimeOffset? DelistedAt { get; private set; }
 
-    private Instrument(Guid id, BybitListedInstrument listing, DateTimeOffset firstSeenAt)
+    private Instrument(Guid id, BybitListedInstrument listing, DateTimeOffset firstSeenAt, DateTimeOffset? delistedAt)
     {
         Id = id;
         Listing = listing;
         FirstSeenAt = firstSeenAt;
+        DelistedAt = delistedAt;
     }
 
     /// <summary>
@@ -42,7 +43,16 @@ public sealed class Instrument : AggregateRoot
     /// </summary>
     public static Instrument Create(Guid id, BybitListedInstrument listing, DateTimeOffset now)
     {
-        return new Instrument(id, listing, now);
+        return new Instrument(id, listing, now, delistedAt: null);
+    }
+
+    /// <summary>
+    ///     A stored instrument brought back as it was saved, for a repository: nothing happens to it, so it changes no state and raises no
+    ///     event.
+    /// </summary>
+    public static Instrument Restore(Guid id, BybitListedInstrument listing, DateTimeOffset firstSeenAt, DateTimeOffset? delistedAt)
+    {
+        return new Instrument(id, listing, firstSeenAt, delistedAt);
     }
 
     /// <summary>
