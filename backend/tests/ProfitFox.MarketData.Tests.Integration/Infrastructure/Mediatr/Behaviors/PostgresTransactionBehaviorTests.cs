@@ -8,6 +8,7 @@ using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
@@ -44,7 +45,7 @@ public class PostgresTransactionBehaviorTests
         using IServiceScope scope = services.CreateScope();
         IReadOnlyList<Instrument> stored = await scope.ServiceProvider.GetRequiredService<IInstrumentRepository>().GetAllAsync(CancellationToken.None);
 
-        return [.. stored.Select(instrument => instrument.Listing.Symbol)];
+        return [.. stored.Select(instrument => ((BybitListedInstrument)instrument.Listing).Symbol)];
     }
 
     private static Instrument Linear(string baseAsset)

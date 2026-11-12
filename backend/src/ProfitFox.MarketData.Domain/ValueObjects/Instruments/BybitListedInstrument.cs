@@ -1,4 +1,5 @@
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 
 namespace ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 
@@ -7,7 +8,7 @@ namespace ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 ///     <see cref="Symbol" /> identify it. A contract of linear or inverse tells its <see cref="ContractType" />, which must belong to its
 ///     category; spot and option have none.
 /// </summary>
-public sealed record BybitListedInstrument
+public sealed record BybitListedInstrument : ListedInstrument
 {
     public BybitCategory Category { get; }
 

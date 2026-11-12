@@ -12,7 +12,8 @@ internal static class InstrumentDbConverter
 {
     internal static InstrumentDb FromDomain(Instrument instrument)
     {
-        BybitListedInstrument listing = instrument.Listing;
+        BybitListedInstrument listing = instrument.Listing as BybitListedInstrument
+            ?? throw new NotSupportedException($"Instrument {instrument.Id} has a listing of {instrument.Listing.GetType().Name}, which the catalog does not store yet.");
 
         return new InstrumentDb
         {

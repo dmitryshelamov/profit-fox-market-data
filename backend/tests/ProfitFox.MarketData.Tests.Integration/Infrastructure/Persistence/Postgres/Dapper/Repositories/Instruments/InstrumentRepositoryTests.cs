@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
@@ -68,7 +69,7 @@ public class InstrumentRepositoryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(stored.Listing.Rules.TickSize, Is.EqualTo(0.5m));
+            Assert.That(((BybitListedInstrument)stored.Listing).Rules.TickSize, Is.EqualTo(0.5m));
             Assert.That(stored.DelistedAt, Is.Null);
         });
     }

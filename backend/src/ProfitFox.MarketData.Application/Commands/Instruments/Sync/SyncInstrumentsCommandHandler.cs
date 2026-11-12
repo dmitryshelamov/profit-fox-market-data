@@ -19,14 +19,14 @@ internal sealed class SyncInstrumentsCommandHandler(
     {
         IReadOnlyList<BybitListedInstrument> listed = await exchange.ListAsync(request.Category, cancellationToken);
         IReadOnlyList<Instrument> catalog = await instruments.GetAllAsync(cancellationToken);
-        var stored = catalog.Where(instrument => instrument.Listing.Category == request.Category).ToList();
+        var stored = catalog.Where(instrument => instrument.Listing is BybitListedInstrument listing && listing.Category == request.Category).ToList();
         DateTimeOffset now = request.RequestedAt;
 
         var listingsBySymbol = listed.ToDictionary(listing => listing.Symbol);
 
         foreach (Instrument instrument in stored)
         {
-            if (listingsBySymbol.TryGetValue(instrument.Listing.Symbol, out BybitListedInstrument? listing))
+            if (listingsBySymbol.TryGetValue(Symbol(instrument), out BybitListedInstrument? listing))
             {
                 instrument.Refresh(listing);
             }
@@ -36,12 +36,18 @@ internal sealed class SyncInstrumentsCommandHandler(
             }
         }
 
-        var storedSymbols = stored.Select(instrument => instrument.Listing.Symbol).ToHashSet();
+        var storedSymbols = stored.Select(Symbol).ToHashSet();
 
         IEnumerable<Instrument> added = listed
             .Where(listing => !storedSymbols.Contains(listing.Symbol))
             .Select(listing => Instrument.Create(Guid.CreateVersion7(now), listing, now));
 
         await instruments.SaveAsync([.. stored, .. added], cancellationToken);
+    }
+
+    // Only instruments of Bybit reach here: the stored ones are picked by their listing.
+    private static string Symbol(Instrument instrument)
+    {
+        return ((BybitListedInstrument)instrument.Listing).Symbol;
     }
 }
