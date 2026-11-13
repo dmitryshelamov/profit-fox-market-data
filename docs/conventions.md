@@ -23,7 +23,7 @@ and this file is silent, ask which to follow.
 
 ## Domain (`ProfitFox.MarketData.Domain`)
 
-- Areas: `Instruments` (the catalog of exchange instruments).
+- Areas: `Instruments` (the catalog of exchange instruments), `Candles` (the minute candles of the instruments and how far storage holds them).
 - `Entities/<Area>` holds entities, `Entities/<Area>/Enums` the enums and their pure extensions (`BybitContractTypeExtensions`).
   `Entities/Base` holds `AggregateRoot`; `Events` holds `IDomainEvent`. Both are the shared base copied from profit-fox and stay
   even while no aggregate raises an event.
