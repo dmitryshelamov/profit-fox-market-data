@@ -121,8 +121,12 @@ public class InstrumentsControllerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(bybit!.Select(instrument => instrument.Listing).Cast<BybitListedInstrumentInternal>().Select(listing => listing.Symbol), Is.EqualTo(new[] { "BTCUSDT" }));
-            Assert.That(tinvest!.Select(instrument => instrument.Listing).Cast<TInvestListedShareInternal>().Select(listing => listing.Uid), Is.EqualTo(new[] { SberUid }));
+            Assert.That(
+                bybit!.Select(instrument => instrument.Listing).Cast<BybitListedInstrumentInternal>().Select(listing => listing.Symbol),
+                Is.EqualTo(new[] { "BTCUSDT" }));
+            Assert.That(
+                tinvest!.Select(instrument => instrument.Listing).Cast<TInvestListedShareInternal>().Select(listing => listing.Uid),
+                Is.EqualTo(new[] { SberUid }));
         });
     }
 }
