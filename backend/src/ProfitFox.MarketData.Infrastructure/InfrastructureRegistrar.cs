@@ -13,8 +13,9 @@ namespace ProfitFox.MarketData.Infrastructure;
 public static class InfrastructureRegistrar
 {
     /// <summary>
-    ///     MediatR with its handlers, the catalog and the candles in Postgres with their migrations, the public API of Bybit, the Invest
-    ///     API of T-Invest, the background sync of the catalog, the background loading of candles and the clock.
+    ///     MediatR with its handlers, the catalog and the candles in Postgres with their migrations, the public API and streams of Bybit,
+    ///     the Invest API of T-Invest, the background sync of the catalog, the background loading of candles, the stream of closed candles
+    ///     and the clock.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {

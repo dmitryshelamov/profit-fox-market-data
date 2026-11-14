@@ -5,6 +5,8 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Reposi
 /// </summary>
 internal sealed record CoveredRangeDb
 {
+    public Guid InstrumentId { get; init; }
+
     public DateTimeOffset? From { get; init; }
 
     public DateTimeOffset? Until { get; init; }

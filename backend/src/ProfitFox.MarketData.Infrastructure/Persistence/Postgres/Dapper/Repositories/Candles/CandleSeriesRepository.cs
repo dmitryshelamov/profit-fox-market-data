@@ -22,15 +22,30 @@ internal sealed class CandleSeriesRepository(
 {
     public async Task<CandleSeries?> GetAsync(Guid instrumentId, CancellationToken cancellationToken)
     {
-        List<CoveredRangeDb> rows =
-            [.. await connection.QueryAsync<CoveredRangeDb>(CandleSeriesRepositoryQueries.Covered(instrumentId, transactions.Current, cancellationToken))];
+        return (await GetAsync([instrumentId], cancellationToken)).SingleOrDefault();
+    }
 
-        return rows.Count == 0 ? null : CandleSeriesDbConverter.ToDomain(instrumentId, rows);
+    public async Task<IReadOnlyCollection<CandleSeries>> GetAsync(IReadOnlyCollection<Guid> instrumentIds, CancellationToken cancellationToken)
+    {
+        IEnumerable<CoveredRangeDb> rows = await connection.QueryAsync<CoveredRangeDb>(
+            CandleSeriesRepositoryQueries.Covered(instrumentIds, transactions.Current, cancellationToken));
+
+        return [.. rows.GroupBy(row => row.InstrumentId).Select(series => CandleSeriesDbConverter.ToDomain(series.Key, series))];
+    }
+
+    public Task SaveAsync(CandleSeries series, CancellationToken cancellationToken)
+    {
+        return SaveAsync([series], cancellationToken);
     }
 
     // The candles and the coverage go together even outside a command, so the coverage never claims a minute storage does not hold.
-    public async Task SaveAsync(CandleSeries series, CancellationToken cancellationToken)
+    public async Task SaveAsync(IReadOnlyCollection<CandleSeries> series, CancellationToken cancellationToken)
     {
+        if (series.Count == 0)
+        {
+            return;
+        }
+
         CandleSeriesDb row = CandleSeriesDbConverter.FromDomain(series);
         CandlesDb candles = CandleSeriesDbConverter.CandlesFromDomain(series);
 

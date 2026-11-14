@@ -10,8 +10,8 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal static class BackgroundServicesRegistrar
 {
     /// <summary>
-    ///     The background sync of the catalog and the background loading of candles with their settings; an app with a broken section
-    ///     stops at start rather than never working.
+    ///     The background sync of the catalog, the background loading of candles and the stream of closed candles with their settings; an
+    ///     app with a broken section stops at start rather than never working.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -44,5 +44,12 @@ internal static class BackgroundServicesRegistrar
         services.AddSingleton<CandleLoadQueue>();
         services.AddSingleton<ICandleLoadQueue>(provider => provider.GetRequiredService<CandleLoadQueue>());
         services.AddHostedService<CandleSyncBackgroundService>();
+
+        services.AddOptions<CandleStreamSettings>()
+            .Bind(configuration.GetSection(CandleStreamSettings.Section))
+            .Validate(stream => stream.RefreshSeconds > 0, "CandleStream:RefreshSeconds must be above zero.")
+            .Validate(stream => stream.BatchSeconds > 0, "CandleStream:BatchSeconds must be above zero.")
+            .ValidateOnStart();
+        services.AddHostedService<CandleStreamBackgroundService>();
     }
 }

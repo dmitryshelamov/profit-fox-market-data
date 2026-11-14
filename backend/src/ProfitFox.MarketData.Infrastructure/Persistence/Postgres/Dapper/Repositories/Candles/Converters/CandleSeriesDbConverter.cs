@@ -6,17 +6,21 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Reposi
 
 internal static class CandleSeriesDbConverter
 {
-    internal static CandleSeriesDb FromDomain(CandleSeries series)
+    internal static CandleSeriesDb FromDomain(IReadOnlyCollection<CandleSeries> series)
     {
+        (Guid InstrumentId, MinuteRange Range)[] covered =
+            [.. series.SelectMany(one => one.Covered.Select(range => (one.InstrumentId, range)))];
+
         return new CandleSeriesDb
         {
-            InstrumentId = series.InstrumentId,
-            CoveredFroms = [.. series.Covered.Select(range => range.From.ToUniversalTime())],
-            CoveredUntils = [.. series.Covered.Select(range => range.Until.ToUniversalTime())]
+            InstrumentIds = [.. series.Select(one => one.InstrumentId)],
+            CoveredInstrumentIds = [.. covered.Select(range => range.InstrumentId)],
+            CoveredFroms = [.. covered.Select(range => range.Range.From.ToUniversalTime())],
+            CoveredUntils = [.. covered.Select(range => range.Range.Until.ToUniversalTime())]
         };
     }
 
-    // A series that covers nothing comes as one row with both ends null.
+    // The rows of one series; a series that covers nothing comes as one row with both ends null.
     internal static CandleSeries ToDomain(Guid instrumentId, IEnumerable<CoveredRangeDb> rows)
     {
         return CandleSeries.Restore(
@@ -24,19 +28,22 @@ internal static class CandleSeriesDbConverter
             rows.Where(row => row.From is not null).Select(row => new MinuteRange(row.From!.Value, row.Until!.Value)));
     }
 
-    internal static CandlesDb CandlesFromDomain(CandleSeries series)
+    internal static CandlesDb CandlesFromDomain(IReadOnlyCollection<CandleSeries> series)
     {
+        (Guid InstrumentId, Candle Candle)[] candles =
+            [.. series.SelectMany(one => one.NewCandles.Select(candle => (one.InstrumentId, candle)))];
+
         return new CandlesDb
         {
-            InstrumentId = series.InstrumentId,
-            OpenTimes = [.. series.NewCandles.Select(candle => candle.OpenTime.ToUniversalTime())],
-            Opens = [.. series.NewCandles.Select(candle => candle.Open)],
-            Highs = [.. series.NewCandles.Select(candle => candle.High)],
-            Lows = [.. series.NewCandles.Select(candle => candle.Low)],
-            Closes = [.. series.NewCandles.Select(candle => candle.Close)],
-            Volumes = [.. series.NewCandles.Select(candle => candle.Volume)],
-            Turnovers = [.. series.NewCandles.Select(candle => candle.Turnover)],
-            BuyVolumes = [.. series.NewCandles.Select(candle => candle.BuyVolume)]
+            InstrumentIds = [.. candles.Select(candle => candle.InstrumentId)],
+            OpenTimes = [.. candles.Select(candle => candle.Candle.OpenTime.ToUniversalTime())],
+            Opens = [.. candles.Select(candle => candle.Candle.Open)],
+            Highs = [.. candles.Select(candle => candle.Candle.High)],
+            Lows = [.. candles.Select(candle => candle.Candle.Low)],
+            Closes = [.. candles.Select(candle => candle.Candle.Close)],
+            Volumes = [.. candles.Select(candle => candle.Candle.Volume)],
+            Turnovers = [.. candles.Select(candle => candle.Candle.Turnover)],
+            BuyVolumes = [.. candles.Select(candle => candle.Candle.BuyVolume)]
         };
     }
 }

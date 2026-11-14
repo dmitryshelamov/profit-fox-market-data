@@ -8,25 +8,32 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Reposi
 
 /// <summary>
 ///     A series is a row of <c>candle_series</c>, its covered ranges one multirange; its candles are rows of <c>candles</c>. Arrays go to
-///     Postgres as they are, so a page of candles is one statement.
+///     Postgres as they are, so the candles of a page, or of many series, are one statement.
 /// </summary>
 internal static class CandleSeriesRepositoryQueries
 {
     // No row for a series never saved; one row with null ends for a series that covers nothing.
     private const string CoveredSql = """
-                                      SELECT lower(r) AS "From", upper(r) AS "Until"
+                                      SELECT s.instrument_id AS "InstrumentId", lower(r) AS "From", upper(r) AS "Until"
                                       FROM candle_series s
                                       LEFT JOIN LATERAL unnest(s.covered) AS r ON true
-                                      WHERE s.instrument_id = @InstrumentId
-                                      ORDER BY 1
+                                      WHERE s.instrument_id = ANY(@InstrumentIds)
+                                      ORDER BY 1, 2
                                       """;
 
-    // The saved ranges are added to the stored ones: two loaders of one instrument (the background and a read) each keep what the other
-    // covered since they read the series.
+    // The saved ranges are added to the stored ones: two writers of one instrument (the background loading, a read, the stream) each
+    // keep what the others covered since they read the series. A series without ranges joins none and gets an empty multirange.
     private const string UpsertSeriesSql = """
                                            INSERT INTO candle_series (instrument_id, covered)
-                                           SELECT @InstrumentId, coalesce(range_agg(tstzrange(r.from_time, r.until_time, '[)')), '{}'::tstzmultirange)
-                                           FROM unnest(@CoveredFroms::timestamptz[], @CoveredUntils::timestamptz[]) AS r(from_time, until_time)
+                                           SELECT s.instrument_id,
+                                                  coalesce(
+                                                      range_agg(tstzrange(r.from_time, r.until_time, '[)')) FILTER (WHERE r.instrument_id IS NOT NULL),
+                                                      '{}'::tstzmultirange)
+                                           FROM unnest(@InstrumentIds::uuid[]) AS s(instrument_id)
+                                           LEFT JOIN unnest(
+                                               @CoveredInstrumentIds::uuid[], @CoveredFroms::timestamptz[], @CoveredUntils::timestamptz[]
+                                           ) AS r(instrument_id, from_time, until_time) ON r.instrument_id = s.instrument_id
+                                           GROUP BY s.instrument_id
                                            ON CONFLICT (instrument_id) DO UPDATE SET covered = candle_series.covered + EXCLUDED.covered
                                            """;
 
@@ -34,11 +41,12 @@ internal static class CandleSeriesRepositoryQueries
     // a source that tells the sides of the trades and one that does not write the same minute, in either order.
     private const string UpsertCandlesSql = """
                                             INSERT INTO candles (instrument_id, open_time, open, high, low, close, volume, turnover, buy_volume)
-                                            SELECT @InstrumentId, c.open_time, c.open, c.high, c.low, c.close, c.volume, c.turnover, c.buy_volume
+                                            SELECT c.instrument_id, c.open_time, c.open, c.high, c.low, c.close, c.volume, c.turnover, c.buy_volume
                                             FROM unnest(
-                                                @OpenTimes::timestamptz[], @Opens::numeric[], @Highs::numeric[], @Lows::numeric[],
-                                                @Closes::numeric[], @Volumes::numeric[], @Turnovers::numeric[], @BuyVolumes::numeric[]
-                                            ) AS c(open_time, open, high, low, close, volume, turnover, buy_volume)
+                                                @InstrumentIds::uuid[], @OpenTimes::timestamptz[], @Opens::numeric[], @Highs::numeric[],
+                                                @Lows::numeric[], @Closes::numeric[], @Volumes::numeric[], @Turnovers::numeric[],
+                                                @BuyVolumes::numeric[]
+                                            ) AS c(instrument_id, open_time, open, high, low, close, volume, turnover, buy_volume)
                                             ON CONFLICT (instrument_id, open_time) DO UPDATE SET
                                                 open = EXCLUDED.open,
                                                 high = EXCLUDED.high,
@@ -49,9 +57,9 @@ internal static class CandleSeriesRepositoryQueries
                                                 buy_volume = coalesce(EXCLUDED.buy_volume, candles.buy_volume)
                                             """;
 
-    public static CommandDefinition Covered(Guid instrumentId, IDbTransaction? transaction, CancellationToken cancellationToken)
+    public static CommandDefinition Covered(IReadOnlyCollection<Guid> instrumentIds, IDbTransaction? transaction, CancellationToken cancellationToken)
     {
-        return new CommandDefinition(CoveredSql, new { InstrumentId = instrumentId }, transaction, cancellationToken: cancellationToken);
+        return new CommandDefinition(CoveredSql, new { InstrumentIds = instrumentIds.ToArray() }, transaction, cancellationToken: cancellationToken);
     }
 
     public static CommandDefinition UpsertSeries(CandleSeriesDb row, IDbTransaction? transaction, CancellationToken cancellationToken)
