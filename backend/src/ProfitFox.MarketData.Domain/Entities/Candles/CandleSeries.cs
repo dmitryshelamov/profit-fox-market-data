@@ -45,6 +45,18 @@ public sealed class CandleSeries : AggregateRoot
     }
 
     /// <summary>
+    ///     The series as storage holds it, with no new candles: <paramref name="covered" /> apart from one another and oldest first, as
+    ///     they were saved.
+    /// </summary>
+    public static CandleSeries Restore(Guid instrumentId, IEnumerable<MinuteRange> covered)
+    {
+        var series = new CandleSeries(instrumentId);
+        series._covered.AddRange(covered);
+
+        return series;
+    }
+
+    /// <summary>
     ///     Takes a loaded range with the candles the exchange gave for it, an empty list for a range without trades.
     /// </summary>
     /// <exception cref="ArgumentException">A candle opens outside the range.</exception>

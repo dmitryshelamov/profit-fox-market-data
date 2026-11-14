@@ -1,0 +1,49 @@
+using Dapper;
+
+using Npgsql;
+
+using ProfitFox.MarketData.Domain.Entities.Candles;
+using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Contracts;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Converters;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Queries;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Transactions;
+
+namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles;
+
+/// <summary>
+///     Works on the connection of the scope, in the transaction of the command if one runs. A series is stored in <c>candle_series</c>,
+///     its candles in the hypertable <c>candles</c>.
+/// </summary>
+internal sealed class CandleSeriesRepository(
+    NpgsqlConnection connection,
+    PostgresTransactionAccessor transactions,
+    PostgresTransactionExecutor transactionExecutor) : ICandleSeriesRepository
+{
+    public async Task<CandleSeries?> GetAsync(Guid instrumentId, CancellationToken cancellationToken)
+    {
+        List<CoveredRangeDb> rows =
+            [.. await connection.QueryAsync<CoveredRangeDb>(CandleSeriesRepositoryQueries.Covered(instrumentId, transactions.Current, cancellationToken))];
+
+        return rows.Count == 0 ? null : CandleSeriesDbConverter.ToDomain(instrumentId, rows);
+    }
+
+    // The candles and the coverage go together even outside a command, so the coverage never claims a minute storage does not hold.
+    public async Task SaveAsync(CandleSeries series, CancellationToken cancellationToken)
+    {
+        CandleSeriesDb row = CandleSeriesDbConverter.FromDomain(series);
+        CandlesDb candles = CandleSeriesDbConverter.CandlesFromDomain(series);
+
+        await transactionExecutor.ExecuteAsync(
+            async () =>
+            {
+                if (candles.OpenTimes.Length > 0)
+                {
+                    await connection.ExecuteAsync(CandleSeriesRepositoryQueries.UpsertCandles(candles, transactions.Current, cancellationToken));
+                }
+
+                await connection.ExecuteAsync(CandleSeriesRepositoryQueries.UpsertSeries(row, transactions.Current, cancellationToken));
+            },
+            cancellationToken);
+    }
+}
