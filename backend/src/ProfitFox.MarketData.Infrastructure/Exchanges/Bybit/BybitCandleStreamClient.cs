@@ -15,14 +15,14 @@ using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 
 /// <summary>
-///     The closed minute candles of Bybit from its public streams. A candle is the one of the topic <c>kline.1</c>, taken when Bybit
+///     The minute candles of Bybit from its public streams. A closed candle is the one of the topic <c>kline.1</c>, taken when Bybit
 ///     confirms it; its buy volume is summed from the topic <c>publicTrade</c>. The two agree: the trades of a minute add up to the
 ///     volume of its candle exactly, so a sum that does not is a minute whose trades were not all seen, and its buy volume is not told.
 ///     A trade of the last closed minute that comes after its candle is still counted, and the candle is told again once they add up.
 ///     The closed candle is not built from the trades: its open is the close of the minute before, not the first trade. The candle of
-///     the minute that goes on is: Bybit pushes one too, but never at the moment the trades were summed, so its volume and the bought
-///     part would not agree. It is told once a second for the symbols that traded in that second. CryptoExchange.Net reconnects and
-///     subscribes again.
+///     the minute that goes on is built from them. Bybit pushes one too, but never at the moment the trades were summed, so its volume
+///     and the bought part would not agree. The built one is told once a second for the symbols that traded in that second.
+///     CryptoExchange.Net reconnects and subscribes again.
 /// </summary>
 internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, TimeProvider time, ILogger<BybitCandleStreamClient> logger)
     : IBybitCandleStreamClient
@@ -193,7 +193,7 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, TimeProv
         return new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc));
     }
 
-    private sealed class Subscription(ITimer forming) : IAsyncDisposable
+    private sealed class Subscription(ITimer formingTimer) : IAsyncDisposable
     {
         private readonly List<UpdateSubscription> _subscriptions = [];
 
@@ -204,7 +204,7 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, TimeProv
 
         public async ValueTask DisposeAsync()
         {
-            await forming.DisposeAsync();
+            await formingTimer.DisposeAsync();
             await Task.WhenAll(_subscriptions.Select(subscription => subscription.CloseAsync()));
         }
     }

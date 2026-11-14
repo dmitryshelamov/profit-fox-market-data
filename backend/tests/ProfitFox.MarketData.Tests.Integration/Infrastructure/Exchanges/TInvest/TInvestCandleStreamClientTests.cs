@@ -1,11 +1,11 @@
 using Grpc.Core;
 
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 using ProfitFox.MarketData.Tests.Integration.Grpc;
 using ProfitFox.MarketData.Tests.Integration.Settings;
+using ProfitFox.MarketData.Tests.Integration.Time;
 
 using Tinkoff.InvestApi.V1;
 
@@ -20,7 +20,7 @@ public class TInvestCandleStreamClientTests
     public void SetUp()
     {
         _api = new StubGrpcInvoker();
-        _time = new FakeTimeProvider(Minute.AddSeconds(30));
+        _time = new WatchedTimeProvider(Minute.AddSeconds(30));
         _client = Client(Token);
         _subscription = null;
         _closed = [];
@@ -50,7 +50,7 @@ public class TInvestCandleStreamClientTests
     private static readonly Dictionary<string, decimal> Lots = new Dictionary<string, decimal> { [Sber] = 10m, [Gazp] = 100m };
 
     private StubGrpcInvoker _api = null!;
-    private FakeTimeProvider _time = null!;
+    private WatchedTimeProvider _time = null!;
     private TInvestCandleStreamClient _client = null!;
     private IAsyncDisposable? _subscription;
     private List<(string Uid, Candle Candle)> _closed = null!;
@@ -110,9 +110,41 @@ public class TInvestCandleStreamClientTests
         return await OpenedAsync();
     }
 
+    // The pause the client starts before it opens a stream again: its next wait that is not one for the silence of a stream.
+    private async Task<TimeSpan> NextPauseAsync()
+    {
+        TimeSpan wait;
+
+        do
+        {
+            wait = await _time.NextWaitAsync();
+        }
+        while (wait == TInvestCandleStreamClient.Silence);
+
+        return wait;
+    }
+
     private static SubscribeCandlesRequest Asked(IStubGrpcStream stream)
     {
         return ((MarketDataRequest)stream.Sent[1]).SubscribeCandlesRequest;
+    }
+
+    [Test]
+    public async Task A_candle_T_Invest_told_wrong_is_dropped_and_the_stream_goes_on()
+    {
+        await SubscribeAsync();
+        (IStubGrpcStream closed, _) = await StreamsAsync();
+
+        // A high below the low.
+        closed.Tell(TInvestAnswers.StreamCandle(Sber, Minute, open: 300m, high: 299m, low: 300m, close: 300m, lots: 1, lotsBought: 1));
+        closed.Tell(TInvestAnswers.StreamCandle(Gazp, Minute, open: 120m, high: 120m, low: 120m, close: 120m, lots: 3, lotsBought: 0));
+        await closed.ReadAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_closed.Select(told => told.Uid), Is.EqualTo(new[] { Gazp }));
+            Assert.That(_api.HasNextStream(), Is.False);
+        });
     }
 
     [Test]
@@ -207,6 +239,40 @@ public class TInvestCandleStreamClientTests
         {
             Assert.That(Asked(again).WaitingClose, Is.False);
             Assert.That(Asked(again).Instruments.Select(instrument => instrument.InstrumentId), Is.EquivalentTo(new[] { Sber, Gazp }));
+        });
+    }
+
+    [Test]
+    public async Task A_stream_that_keeps_breaking_is_opened_again_after_longer_pauses_until_it_tells_something()
+    {
+        await SubscribeAsync();
+        (IStubGrpcStream closed, _) = await StreamsAsync();
+
+        // The timer of the forming candles, started with the subscription, is not a pause.
+        while (await _time.NextWaitAsync() != TimeSpan.FromSeconds(1))
+        {
+        }
+
+        var pauses = new List<double>();
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            closed.Break(StatusCode.Unavailable);
+            TimeSpan pause = await NextPauseAsync();
+            pauses.Add(pause.TotalSeconds);
+            _time.Advance(pause);
+            closed = await OpenedAsync();
+        }
+
+        closed.Tell(TInvestAnswers.StreamCandle(Sber, Minute, open: 300m, high: 300m, low: 300m, close: 300m, lots: 1, lotsBought: 1));
+        await closed.ReadAsync();
+        closed.Break(StatusCode.Unavailable);
+        TimeSpan afterAnAnswer = await NextPauseAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pauses, Is.EqualTo(new[] { 1d, 2d, 5d, 10d, 30d, 30d }));
+            Assert.That(afterAnAnswer, Is.EqualTo(TimeSpan.FromSeconds(1)));
         });
     }
 

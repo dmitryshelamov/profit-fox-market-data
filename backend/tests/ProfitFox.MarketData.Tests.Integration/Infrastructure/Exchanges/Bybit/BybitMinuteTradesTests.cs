@@ -70,7 +70,7 @@ public class BybitMinuteTradesTests
         _trades.TakeForming();
 
         // The candle of the minute before closes at 5: the forming one is told anew, opening there.
-        _trades.Close("BTCUSDT", CandleOf(Minute.AddMinutes(-1), volume: 0m));
+        _trades.Close("BTCUSDT", CandleGenerator.Generate(Minute.AddMinutes(-1), close: 5m, volume: 0m));
 
         Assert.That(
             _trades.TakeForming().Single().Candle,

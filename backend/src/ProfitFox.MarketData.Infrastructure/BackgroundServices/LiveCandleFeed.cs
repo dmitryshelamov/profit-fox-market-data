@@ -9,7 +9,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 /// <summary>
 ///     Tells the live candles to the subscribers of the app, in memory only. Each subscriber has a place of its own where the candles
 ///     of the exchanges it asked for wait for it, at most <see cref="Capacity" />; publishing never waits for a subscriber. One that
-///     reads too slowly first stops getting forming candles, once more than <see cref="FormingLimit" /> wait for it, and is cut off
+///     reads too slowly first stops getting forming candles, once <see cref="FormingLimit" /> candles wait for it, and is cut off
 ///     when a closed candle no longer fits, instead of holding back the saving of candles or the other subscribers.
 /// </summary>
 internal sealed class LiveCandleFeed : ILiveCandleFeed

@@ -228,7 +228,7 @@ internal sealed class TInvestCandleStreamClient(
         {
             lock (_lock)
             {
-                if (!_closedMinutes.TryGetValue(uid, out DateTimeOffset closedMinute) || candle.OpenTime > closedMinute)
+                if (!_closedMinutes.TryGetValue(uid, out DateTimeOffset lastClosed) || candle.OpenTime > lastClosed)
                 {
                     _forming[uid] = candle;
                 }

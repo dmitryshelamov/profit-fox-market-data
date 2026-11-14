@@ -19,12 +19,14 @@ service CandleFeed {
   // subscribes again with `since`.
   //
   // With `forming`, the candle of the minute that goes on comes too, with `closed` false: at most once a second for an
-  // instrument and only when it traded. The closed candle of that minute follows and replaces it, except for an
-  // instrument whose candles are not stored yet, as in the first minutes after it is listed or the service first
-  // starts: its minutes get no closed candle until then. A forming candle is not stored and is not part of the
-  // catch-up; a caller that falls behind stops getting them until it caught up.
+  // instrument and only when it traded; on Bybit it comes once more when the minute before closes, which tells where
+  // it opens. The closed candle of that minute follows and replaces it, except for an instrument whose candles are
+  // not stored yet, as in the first minutes after it is listed or the service first starts: its minutes get no closed
+  // candle until then. A forming candle is not stored and is not part of the catch-up; a caller that falls behind
+  // stops getting them until it caught up.
   //
-  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // INVALID_ARGUMENT: `since` is further back than the service catches up, or an exchange asked for is not one of
+  // `Exchange` or is EXCHANGE_UNSPECIFIED.
   // RESOURCE_EXHAUSTED: the caller read slower than the closed candles came and is cut off; it subscribes again with
   // `since`.
   // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.

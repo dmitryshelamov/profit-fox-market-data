@@ -45,13 +45,31 @@ public sealed class CandleFeedService(
             throw new RpcException(new Status(StatusCode.InvalidArgument, $"The feed catches up on at most {maxCatchUpHours} hours; since is {since:O}."));
         }
 
+        // Subscribed before storage is read: a candle saved meanwhile waits in the subscription, so none is left out between the two.
+        // It may come twice, from storage and live, which the caller takes as one: it replaces a candle by instrument and open time.
+        using ILiveCandleSubscription live = feed.Subscribe(exchanges, request.Forming);
+
+        // The headers tell the caller that the subscription is in place: what is saved from now on reaches it.
+        await context.WriteResponseHeadersAsync([]);
+
         // The call ends with the app as well as with its caller: the server waits for the open calls when it stops, and one only its
         // caller ends would hold the stop back until the server gives up.
         using var ended = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, lifetime.ApplicationStopping);
 
         try
         {
-            await TellAsync(exchanges, since, request.Forming, responseStream, context, ended.Token);
+            if (since is not null)
+            {
+                await foreach (ClosedCandleInternal stored in sender.CreateStream(new GetClosedCandlesQuery(since.Value, exchanges), ended.Token))
+                {
+                    await responseStream.WriteAsync(ToUpdate(stored), ended.Token);
+                }
+            }
+
+            await foreach (LiveCandle candle in live.ReadAllAsync(ended.Token))
+            {
+                await responseStream.WriteAsync(ToUpdate(candle), ended.Token);
+            }
         }
         catch (SubscriberFellBehindException exception)
         {
@@ -60,33 +78,6 @@ public sealed class CandleFeedService(
         catch (OperationCanceledException) when (lifetime.ApplicationStopping.IsCancellationRequested)
         {
             throw new RpcException(new Status(StatusCode.Unavailable, "The service is stopping."));
-        }
-    }
-
-    private async Task TellAsync(
-        Exchange[] exchanges,
-        DateTimeOffset? since,
-        bool forming,
-        IServerStreamWriter<CandleUpdate> responseStream,
-        ServerCallContext context,
-        CancellationToken cancellationToken)
-    {
-        // Subscribed before storage is read: a candle saved meanwhile waits in the subscription, so none is left out between the two.
-        // It may come twice, from storage and live, which the caller takes as one: it replaces a candle by instrument and open time.
-        using ILiveCandleSubscription live = feed.Subscribe(exchanges, forming);
-        await context.WriteResponseHeadersAsync([]);
-
-        if (since is not null)
-        {
-            await foreach (ClosedCandleInternal stored in sender.CreateStream(new GetClosedCandlesQuery(since.Value, exchanges), cancellationToken))
-            {
-                await responseStream.WriteAsync(ToUpdate(stored), cancellationToken);
-            }
-        }
-
-        await foreach (LiveCandle candle in live.ReadAllAsync(cancellationToken))
-        {
-            await responseStream.WriteAsync(ToUpdate(candle), cancellationToken);
         }
     }
 

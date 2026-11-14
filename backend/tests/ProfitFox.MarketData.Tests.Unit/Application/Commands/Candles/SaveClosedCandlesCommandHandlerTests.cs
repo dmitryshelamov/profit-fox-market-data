@@ -44,11 +44,15 @@ public class SaveClosedCandlesCommandHandlerTests
 
     private static readonly Guid Eth = Guid.Parse("0193a1f0-0000-7000-8000-000000000002");
 
+    private static readonly Guid Sber = Guid.Parse("0193a1f0-0000-7000-8000-000000000003");
+
     private ICandleSeriesRepository _series = null!;
     private ILiveCandleFeed _feed = null!;
     private List<(IReadOnlyCollection<LiveCandle> Candles, bool SavedBefore)> _published = null!;
     private List<CandleSeries> _stored = null!;
     private IReadOnlyCollection<CandleSeries>? _saved;
+
+    // The buy volumes storage already holds for minutes: it keeps one when the candle saved for its minute knows none.
     private Dictionary<(Guid InstrumentId, DateTimeOffset OpenTime), decimal> _keptBuyVolumes = null!;
     private SaveClosedCandlesCommandHandler _handler = null!;
 
@@ -127,6 +131,20 @@ public class SaveClosedCandlesCommandHandlerTests
             Assert.That(result, Is.EqualTo(new SaveClosedCandlesResult(Saved: 1)));
             Assert.That(SavedOf(Btc).NewCandles, Is.EqualTo(new[] { complete }));
         });
+    }
+
+    [Test]
+    public async Task A_candle_is_published_as_one_of_the_exchange_it_was_told_of()
+    {
+        Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute));
+        Stored(Sber, new MinuteRange(Minute.AddMinutes(-10), Minute));
+        Candle candle = CandleGenerator.Generate(Minute);
+
+        await Save(new ClosedCandle(Exchange.Bybit, Btc, candle), new ClosedCandle(Exchange.TInvest, Sber, candle));
+
+        Assert.That(
+            _published.Single().Candles,
+            Is.EquivalentTo(new[] { new LiveCandle(Exchange.Bybit, Btc, candle, Closed: true), new LiveCandle(Exchange.TInvest, Sber, candle, Closed: true) }));
     }
 
     [Test]

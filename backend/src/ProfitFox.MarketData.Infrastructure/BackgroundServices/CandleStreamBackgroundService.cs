@@ -65,8 +65,8 @@ internal sealed class CandleStreamBackgroundService(
             {
                 // Each exchange on its own: the hundreds of requests of Bybit do not hold back T-Invest.
                 await Task.WhenAll(
-                    stream.Bybit.Enabled ? SubscribeToBybitAsync(stoppingToken) : UnsubscribeAsync(_bybitSubscriptions, _bybitSymbols.Clear),
-                    stream.TInvest.Enabled ? SubscribeToTInvestAsync(stoppingToken) : UnsubscribeAsync(_tinvestSubscriptions, _tinvestShares.Clear));
+                    stream.Bybit.Enabled ? SubscribeToBybitAsync(stoppingToken) : UnsubscribeAsync(_bybitSubscriptions, _bybitSymbols),
+                    stream.TInvest.Enabled ? SubscribeToTInvestAsync(stoppingToken) : UnsubscribeAsync(_tinvestSubscriptions, _tinvestShares));
 
                 await Task.Delay(TimeSpan.FromSeconds(stream.RefreshSeconds), time, stoppingToken);
 
@@ -75,8 +75,8 @@ internal sealed class CandleStreamBackgroundService(
         }
         finally
         {
-            await UnsubscribeAsync(_bybitSubscriptions, _bybitSymbols.Clear);
-            await UnsubscribeAsync(_tinvestSubscriptions, _tinvestShares.Clear);
+            await UnsubscribeAsync(_bybitSubscriptions, _bybitSymbols);
+            await UnsubscribeAsync(_tinvestSubscriptions, _tinvestShares);
         }
     }
 
@@ -169,7 +169,8 @@ internal sealed class CandleStreamBackgroundService(
         }
     }
 
-    private static async Task UnsubscribeAsync(List<IAsyncDisposable> subscriptions, Action forget)
+    // Ends the subscriptions and forgets what they were to, so it is subscribed to anew when its exchange is on again.
+    private static async Task UnsubscribeAsync<TSubscribed>(List<IAsyncDisposable> subscriptions, HashSet<TSubscribed> subscribed)
     {
         foreach (IAsyncDisposable subscription in subscriptions)
         {
@@ -177,7 +178,7 @@ internal sealed class CandleStreamBackgroundService(
         }
 
         subscriptions.Clear();
-        forget();
+        subscribed.Clear();
     }
 
     // Called on the threads of the stream: the candle only joins the ones waiting to be saved.

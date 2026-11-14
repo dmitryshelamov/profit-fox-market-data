@@ -19,6 +19,8 @@ internal static class GetClosedCandlesQueries
                                      ORDER BY c.open_time, c.instrument_id
                                      """;
 
+    // The parameters alone, with the statement beside them: Dapper reads row by row only from a statement and its parameters, not from
+    // a command definition.
     internal static object Since(DateTimeOffset since, IReadOnlyCollection<Exchange> exchanges)
     {
         return new { Since = since.ToUniversalTime(), Exchanges = exchanges.Select(exchange => exchange.ToString()).ToArray() };

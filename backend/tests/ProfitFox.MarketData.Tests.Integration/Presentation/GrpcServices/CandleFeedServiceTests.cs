@@ -230,6 +230,15 @@ public class CandleFeedServiceTests
     }
 
     [Test]
+    public void A_subscription_to_an_exchange_not_in_the_contract_is_refused()
+    {
+        using AsyncServerStreamingCall<CandleUpdate> call = _client.Subscribe(new SubscribeRequest { Exchanges = { ProtoExchange.Unspecified } });
+
+        RpcException? failure = Assert.ThrowsAsync<RpcException>(async () => await call.ResponseStream.MoveNext(CancellationToken.None));
+        Assert.That(failure!.StatusCode, Is.EqualTo(StatusCode.InvalidArgument));
+    }
+
+    [Test]
     public async Task A_subscription_ends_with_unavailable_when_the_app_stops()
     {
         // An app of its own: the one of the other tests goes on.
@@ -240,10 +249,20 @@ public class CandleFeedServiceTests
 
         app.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
 
-        // Awaited: Assert.ThrowsAsync, which blocks on the call, did not see it end here.
+        // Awaited, not blocked on: this code goes on where the client told the headers, and the client reads the end of the call only
+        // once it has that thread back.
         await Assert.ThatAsync(
             () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
             Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.Unavailable));
+    }
+
+    [Test]
+    public async Task An_app_whose_feed_catches_up_on_no_time_does_not_start()
+    {
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("CandleFeed:MaxCatchUpHours", "0"));
+
+        // Program logs the failed check of the settings and ends, so the test host finds the app gone, whatever it throws then.
+        Assert.That(() => _ = app.Server, Throws.Exception);
     }
 
     [Test]
@@ -254,15 +273,15 @@ public class CandleFeedServiceTests
 
         using AsyncServerStreamingCall<CandleUpdate> call = await SubscribeAsync(
             new SubscribeRequest { Since = Timestamp.FromDateTimeOffset(HourAgo), Exchanges = { ProtoExchange.Bybit } });
-        IReadOnlyList<CandleUpdate> stored = await TakeAsync(call, count: 2);
+
+        // Saved before any stored candle is read by the caller: it waits in the subscription and is not left out.
         Publish(Closed(Exchange.Bybit, Linear, CandleAt(HourAgo.AddMinutes(2), close: 8m)));
-        IReadOnlyList<CandleUpdate> live = await TakeAsync(call, count: 1);
+        IReadOnlyList<CandleUpdate> updates = await TakeAsync(call, count: 3);
 
         Assert.Multiple(() =>
         {
-            Assert.That(stored.Select(update => update.Close), Is.EqualTo(new[] { "6", "7" }));
-            Assert.That(stored.Select(update => update.InstrumentId), Is.All.EqualTo(Linear.Id.ToString()));
-            Assert.That(live.Single().Close, Is.EqualTo("8"));
+            Assert.That(updates.Select(update => update.Close), Is.EqualTo(new[] { "6", "7", "8" }));
+            Assert.That(updates.Select(update => update.InstrumentId), Is.All.EqualTo(Linear.Id.ToString()));
         });
     }
 

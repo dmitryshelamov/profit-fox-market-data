@@ -28,8 +28,8 @@ internal static class CandleSeriesRepositoryQueries
                                      """;
 
     private const string CandlesWithoutBuyVolumeSql = """
-                                                      SELECT instrument_id AS "InstrumentId", open_time AS "OpenTime", open, high, low, close,
-                                                             volume, turnover, buy_volume AS "BuyVolume"
+                                                      SELECT open_time AS "OpenTime", open, high, low, close, volume, turnover,
+                                                             buy_volume AS "BuyVolume"
                                                       FROM candles
                                                       WHERE instrument_id = @InstrumentId AND open_time >= @From AND open_time < @Until
                                                         AND buy_volume IS NULL

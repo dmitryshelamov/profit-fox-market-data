@@ -98,13 +98,14 @@ public class CandleStreamBackgroundServiceTests
     private Channel<LiveCandle> _told = null!;
     private WatchedTimeProvider _time = null!;
     private ISender _sender = null!;
+    private IConfigurationRoot _configuration = null!;
     private ServiceProvider? _services;
     private CandleStreamBackgroundService? _service;
 
     // The settings as the app binds them; the sender is the last ISender registered, so it wins over the one of MediatR.
     private async Task StartAsync(bool bybit = true, bool tinvest = false)
     {
-        IConfigurationRoot configuration = new ConfigurationBuilder()
+        _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
@@ -115,7 +116,7 @@ public class CandleStreamBackgroundServiceTests
                     ["TInvestApi:Token"] = "test-token"
                 })
             .Build();
-        _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
+        _services = new ServiceCollection().AddLogging().AddInfrastructure(_configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new CandleStreamBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _stream,
@@ -126,6 +127,13 @@ public class CandleStreamBackgroundServiceTests
             NullLogger<CandleStreamBackgroundService>.Instance);
 
         await _service.StartAsync(CancellationToken.None);
+    }
+
+    // Like a save of appsettings.json: the value changes and the configuration tells its readers.
+    private void Save(string key, string value)
+    {
+        _configuration[key] = value;
+        _configuration.Reload();
     }
 
     private void BybitHas(params Instrument[] instruments)
@@ -490,7 +498,7 @@ public class CandleStreamBackgroundServiceTests
     }
 
     [Test]
-    public async Task The_shares_are_subscribed_to_once_and_only_while_T_Invest_is_on()
+    public async Task The_shares_are_subscribed_to_once_and_their_subscription_ends_with_the_service()
     {
         await StartAsync(tinvest: true);
         ShareSubscription shares = await _shares.NextAsync();
@@ -502,6 +510,29 @@ public class CandleStreamBackgroundServiceTests
         {
             Assert.That(_shares.HasNext(), Is.False);
             Assert.That(shares.Ended, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task The_shares_are_unsubscribed_from_while_T_Invest_is_off_and_subscribed_to_anew_once_it_is_on()
+    {
+        await StartAsync(tinvest: true);
+        ShareSubscription first = await _shares.NextAsync();
+
+        Save("CandleStream:TInvest:Enabled", "false");
+        await _time.PassNextWaitAsync();
+        await _time.NextWaitAsync();
+        bool endedWhileOff = first.Ended;
+        bool subscribedWhileOff = _shares.HasNext();
+        Save("CandleStream:TInvest:Enabled", "true");
+        _time.Advance(Refresh);
+        ShareSubscription second = await _shares.NextAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(endedWhileOff, Is.True);
+            Assert.That(subscribedWhileOff, Is.False);
+            Assert.That(second.Lots.Keys, Is.EqualTo(new[] { SberUid }));
         });
     }
 
