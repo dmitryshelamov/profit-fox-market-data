@@ -46,6 +46,26 @@ public class GetCandlesQueryHandlerTests
     }
 
     [Test]
+    public async Task A_candle_with_a_minute_whose_buy_volume_is_not_known_has_none()
+    {
+        // Both hours have two minutes; a minute of the second one came from a source that tells no sides of the trades.
+        var series = CandleSeries.Create(Linear.Id);
+        series.Cover(
+            new MinuteRange(Hour, Hour.AddHours(2)),
+            [
+                new Candle(Hour, open: 5m, high: 6m, low: 4m, close: 5m, volume: 4m, turnover: 20m, buyVolume: 3m),
+                new Candle(Hour.AddMinutes(1), open: 5m, high: 6m, low: 4m, close: 5m, volume: 2m, turnover: 10m, buyVolume: 0m),
+                new Candle(Hour.AddMinutes(60), open: 5m, high: 6m, low: 4m, close: 5m, volume: 4m, turnover: 20m, buyVolume: 3m),
+                new Candle(Hour.AddMinutes(61), open: 5m, high: 6m, low: 4m, close: 5m, volume: 2m, turnover: 10m)
+            ]);
+        await _scope.ServiceProvider.GetRequiredService<ICandleSeriesRepository>().SaveAsync(series, CancellationToken.None);
+
+        CandlesInternal candles = await TwoHoursAsync();
+
+        Assert.That(candles.Candles.Select(candle => candle.BuyVolume), Is.EqualTo(new decimal?[] { 3m, null }));
+    }
+
+    [Test]
     public async Task A_candle_with_minutes_storage_does_not_hold_is_left_out()
     {
         // The second hour is covered only up to its 30th minute, though it has a stored minute.

@@ -179,7 +179,7 @@ public class LoadCandlesCommandHandlerTests
         {
             Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
             await _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, default!, cancellationToken: default);
-            await _series.DidNotReceiveWithAnyArgs().SaveAsync(default!, cancellationToken: default);
+            await _series.DidNotReceiveWithAnyArgs().SaveAsync(default(CandleSeries)!, cancellationToken: default);
         });
     }
 

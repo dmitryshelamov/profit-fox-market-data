@@ -44,9 +44,18 @@ internal static class TInvestAnswers
     }
 
     /// <summary>
-    ///     A minute candle of the exchange, its volume in lots.
+    ///     A minute candle of the exchange, its volume in lots. With <paramref name="lotsBought" /> it tells the sides of its trades, the
+    ///     rest of the volume sold; without, it tells none, as the candles before T-Invest began to.
     /// </summary>
-    public static HistoricCandle Candle(DateTimeOffset time, decimal open, decimal high, decimal low, decimal close, long lots, bool complete = true)
+    public static HistoricCandle Candle(
+        DateTimeOffset time,
+        decimal open,
+        decimal high,
+        decimal low,
+        decimal close,
+        long lots,
+        bool complete = true,
+        long? lotsBought = null)
     {
         return new HistoricCandle
         {
@@ -56,6 +65,8 @@ internal static class TInvestAnswers
             Low = Quotation(low),
             Close = Quotation(close),
             Volume = lots,
+            VolumeBuy = lotsBought ?? 0,
+            VolumeSell = lotsBought is null ? 0 : lots - lotsBought.Value,
             IsComplete = complete,
             CandleSource = CandleSource.Exchange
         };

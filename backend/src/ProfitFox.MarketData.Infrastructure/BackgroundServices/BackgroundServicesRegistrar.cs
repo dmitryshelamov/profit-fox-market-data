@@ -10,8 +10,8 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal static class BackgroundServicesRegistrar
 {
     /// <summary>
-    ///     The background sync of the catalog and the background loading of candles with their settings; an app with a broken section
-    ///     stops at start rather than never working.
+    ///     The background sync of the catalog, the background loading of candles, the stream of closed candles and the filling of buy
+    ///     volumes with their settings; an app with a broken section stops at start rather than never working.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -44,5 +44,20 @@ internal static class BackgroundServicesRegistrar
         services.AddSingleton<CandleLoadQueue>();
         services.AddSingleton<ICandleLoadQueue>(provider => provider.GetRequiredService<CandleLoadQueue>());
         services.AddHostedService<CandleSyncBackgroundService>();
+
+        services.AddOptions<CandleStreamSettings>()
+            .Bind(configuration.GetSection(CandleStreamSettings.Section))
+            .Validate(stream => stream.RefreshSeconds > 0, "CandleStream:RefreshSeconds must be above zero.")
+            .Validate(stream => stream.BatchSeconds > 0, "CandleStream:BatchSeconds must be above zero.")
+            .ValidateOnStart();
+        services.AddHostedService<CandleStreamBackgroundService>();
+
+        services.AddOptions<BuyVolumeSyncSettings>()
+            .Bind(configuration.GetSection(BuyVolumeSyncSettings.Section))
+            .Validate(sync => sync.HistoryDays > 0, "BuyVolumeSync:HistoryDays must be above zero.")
+            .Validate(sync => sync.IdleSeconds > 0, "BuyVolumeSync:IdleSeconds must be above zero.")
+            .Validate(sync => sync.Parallelism > 0, "BuyVolumeSync:Parallelism must be above zero.")
+            .ValidateOnStart();
+        services.AddHostedService<BuyVolumeSyncBackgroundService>();
     }
 }

@@ -1,11 +1,11 @@
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Contracts;
 
 /// <summary>
-///     Rows of <c>candles</c> of one instrument to write, one array per column, so a page of candles goes in one statement.
+///     Rows of <c>candles</c> to write, one array per column, so the candles of a page or of many instruments go in one statement.
 /// </summary>
 internal sealed record CandlesDb
 {
-    public Guid InstrumentId { get; init; }
+    public Guid[] InstrumentIds { get; init; } = [];
 
     public DateTimeOffset[] OpenTimes { get; init; } = [];
 
@@ -20,4 +20,6 @@ internal sealed record CandlesDb
     public decimal[] Volumes { get; init; } = [];
 
     public decimal?[] Turnovers { get; init; } = [];
+
+    public decimal?[] BuyVolumes { get; init; } = [];
 }

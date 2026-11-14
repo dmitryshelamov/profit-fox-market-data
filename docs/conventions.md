@@ -50,7 +50,8 @@ and this file is silent, ask which to follow.
   A port every exchange implements the same way is one interface, `IExchange<What>Client` (`IExchangeCandlesClient`), with an
   adapter per exchange (`BybitCandlesClient`, `TInvestCandlesClient`); its `Exchange` tells whose listings are its, so a handler
   picks the client by `listing.Exchange` and has no `switch`. Ports whose shapes differ stay apart (Bybit lists a category,
-  T-Invest has none).
+  T-Invest has none). A port to a stream of an exchange is named the same way (`IBybitCandleStreamClient`) and is held by a
+  hosted service, not asked by a handler: a subscription outlives any request.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
   `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
 - No request runs in a transaction of the MediatR pipeline: a handler asks an exchange, which no open transaction should wait
@@ -103,7 +104,7 @@ and this file is silent, ask which to follow.
 
 - `Tests.Unit` tests Domain and Application only and references nothing above Application; ports are NSubstitute substitutes.
 - Infrastructure and Presentation are tested in `Tests.Integration`, against a real TimescaleDB (Testcontainers) and with HTTP to
-  an exchange answered by `StubHttpHandler`.
+  an exchange answered by `StubHttpHandler`; a stream of Bybit is answered by `FakeBybitSocketServer`, its sockets on a local port.
 - `Tests.Shared` holds what both test projects use: generators of domain objects in `Generators/Domain/<Entities|ValueObjects>/<Area>`,
   static `<Type>Generator` classes with `Generate…` methods whose parameters default to a valid object
   (`InstrumentGenerator.Generate(listing, firstSeenAt, id)`, `BybitListedInstrumentGenerator.GenerateLinear("ETH")`). A test passes

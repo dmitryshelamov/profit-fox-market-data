@@ -4,11 +4,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Contracts.Instruments;
+using ProfitFox.MarketData.Application.Queries.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
+
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     What every background service does the same way: it sends each request in a scope of its own and reads its settings again before
-///     each run.
+///     What every background service does the same way: it sends each request in a scope of its own, reads the catalog and reads its
+///     settings again before each run.
 /// </summary>
 internal static class BackgroundServiceExtensions
 {
@@ -31,6 +35,28 @@ internal static class BackgroundServiceExtensions
         await using AsyncServiceScope scope = scopes.CreateAsyncScope();
 
         await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, cancellationToken);
+    }
+
+    /// <summary>
+    ///     The instruments of the exchange in the catalog, listed or delisted; none when the catalog cannot be read, which is logged, so
+    ///     the service goes on and reads it again in its next run.
+    /// </summary>
+    public static async Task<IReadOnlyCollection<InstrumentInternal>> InstrumentsOrNoneAsync(
+        this IServiceScopeFactory scopes,
+        Exchange exchange,
+        ILogger logger,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await scopes.SendAsync(new GetInstrumentsQuery(exchange), stoppingToken);
+        }
+        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "Reading the instruments of {Exchange} failed.", exchange);
+
+            return [];
+        }
     }
 
     /// <summary>

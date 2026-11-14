@@ -61,6 +61,6 @@ internal sealed class GetCandlesQueryHandler(ICandleSeriesRepository series, Npg
 
     private static CandleInternal ToInternal(CandleBucketDb bucket)
     {
-        return new CandleInternal(bucket.OpenTime, bucket.Open, bucket.High, bucket.Low, bucket.Close, bucket.Volume, bucket.Turnover);
+        return new CandleInternal(bucket.OpenTime, bucket.Open, bucket.High, bucket.Low, bucket.Close, bucket.Volume, bucket.Turnover, bucket.BuyVolume);
     }
 }

@@ -12,15 +12,15 @@
 Система SHALL отдавать по `GET api/instruments/{id}/candles?interval=&from=&to=` свечи интервала `1m`, `5m`, `15m`, `1h`,
 `4h` или `1d` за окно `[from, to)`, упорядоченные по времени открытия, вместе с покрытыми частями окна (`covered`). Свечи
 интервала собираются из минутных по UTC: open первой минуты, наибольший high, наименьший low, close последней минуты,
-сумма volume и turnover.
+сумма volume, turnover и buy volume.
 
 #### Scenario: Часовые свечи из минут
 
 - **WHEN** покрыто `[10:00, 12:00)`, и сохранены минуты `10:00` (open `5`, high `6`, low `4`, close `5.5`, volume `1`,
-  turnover `5`), `10:01` (open `5.5`, high `8`, low `5`, close `7`, volume `2`, turnover `14`) и `11:00`
-  (всё `7`, volume `3`, turnover `21`), и запрошен `1h` за это окно
-- **THEN** приходят свечи `10:00` (open `5`, high `8`, low `4`, close `7`, volume `3`, turnover `19`) и `11:00`
-  (всё `7`, volume `3`, turnover `21`), `covered` — `[10:00, 12:00)`
+  turnover `5`, buy volume `0.25`), `10:01` (open `5.5`, high `8`, low `5`, close `7`, volume `2`, turnover `14`,
+  buy volume `1.5`) и `11:00` (всё `7`, volume `3`, turnover `21`, buy volume неизвестен), и запрошен `1h` за это окно
+- **THEN** приходят свечи `10:00` (open `5`, high `8`, low `4`, close `7`, volume `3`, turnover `19`, `buyVolume` `1.75`)
+  и `11:00` (всё `7`, volume `3`, turnover `21`, `buyVolume` `null`), `covered` — `[10:00, 12:00)`
 - **AND** запросов к бирже нет
 
 ### Requirement: Свеча только из покрытых минут
@@ -42,6 +42,16 @@ close) / 3 и складывать в оборот свечи интервала
 
 - **WHEN** у акции минуты с volume `10`, high `3`, low `1`, close `2` и с volume `5` и ценами `2`
 - **THEN** оборот часовой свечи — `30`
+
+### Requirement: Объём покупок интервала
+
+Система SHALL отдавать в свече интервала `buyVolume` — сумму buy volume её минут. Если buy volume неизвестен хотя бы у
+одной сохранённой минуты свечи, `buyVolume` свечи MUST быть `null`: сумма по части минут читалась бы как перевес продаж.
+
+#### Scenario: Одна минута часа без сторон
+
+- **WHEN** у часа две минуты: volume `4` с buy volume `3` и volume `2` без buy volume
+- **THEN** `buyVolume` часовой свечи — `null`
 
 ### Requirement: Допустимое окно
 

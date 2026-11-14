@@ -8,11 +8,15 @@ namespace ProfitFox.MarketData.Domain.Entities.Candles;
 ///     every candle the exchange gave is stored, so a minute without a candle there had no trades (a quiet minute, a night, a weekend,
 ///     the time before the instrument started to trade) and is never asked for again. The coverage only grows, and only together with
 ///     the candles of the range it takes. Storage writes <see cref="NewCandles" /> with the coverage in one transaction, so the coverage
-///     never claims a minute storage does not hold.
+///     never claims a minute storage does not hold. Apart from that the series tells where the buy volumes of its candles are
+///     <see cref="Settled" />: looked for in the trades of the exchange once, and not again. A range is settled together with its
+///     candles that got a buy volume, so it is never settled without them.
 /// </summary>
 public sealed class CandleSeries : AggregateRoot
 {
     private readonly List<MinuteRange> _covered = [];
+
+    private readonly List<MinuteRange> _settled = [];
 
     private readonly List<Candle> _newCandles = [];
 
@@ -27,7 +31,14 @@ public sealed class CandleSeries : AggregateRoot
     public IReadOnlyList<MinuteRange> Covered => _covered.AsReadOnly();
 
     /// <summary>
-    ///     The candles of the ranges taken since the series was read from storage, which storage writes together with the coverage.
+    ///     The covered ranges whose candles have every buy volume the trades of the exchange could tell, oldest first and apart from one
+    ///     another: a candle without a buy volume there stays without one, and the trades of the range are not asked for again.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> Settled => _settled.AsReadOnly();
+
+    /// <summary>
+    ///     The candles of the ranges covered or settled since the series was read from storage, which storage writes together with the
+    ///     ranges.
     /// </summary>
     public IReadOnlyCollection<Candle> NewCandles => _newCandles.AsReadOnly();
 
@@ -45,13 +56,14 @@ public sealed class CandleSeries : AggregateRoot
     }
 
     /// <summary>
-    ///     The series as storage holds it, with no new candles: <paramref name="covered" /> apart from one another and oldest first, as
-    ///     they were saved.
+    ///     The series as storage holds it, with no new candles: <paramref name="covered" /> and <paramref name="settled" /> each apart
+    ///     from one another and oldest first, as they were saved.
     /// </summary>
-    public static CandleSeries Restore(Guid instrumentId, IEnumerable<MinuteRange> covered)
+    public static CandleSeries Restore(Guid instrumentId, IEnumerable<MinuteRange> covered, IEnumerable<MinuteRange> settled)
     {
         var series = new CandleSeries(instrumentId);
         series._covered.AddRange(covered);
+        series._settled.AddRange(settled);
 
         return series;
     }
@@ -62,7 +74,51 @@ public sealed class CandleSeries : AggregateRoot
     /// <exception cref="ArgumentException">A candle opens outside the range.</exception>
     public void Cover(MinuteRange range, IReadOnlyCollection<Candle> candles)
     {
-        // A candle outside the range would be stored without a coverage over it, or would stand for a minute the range was not asked for.
+        EnsureInside(range, candles);
+
+        Take(_covered, range);
+        _newCandles.AddRange(candles);
+    }
+
+    /// <summary>
+    ///     Takes a covered range as one whose buy volumes are looked for, with its <paramref name="candles" /> that got one; the others
+    ///     of the range stay without.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    ///     A part of the range is not covered: candles loaded there later would never get a buy volume. Or a candle opens outside the range.
+    /// </exception>
+    public void Settle(MinuteRange range, IReadOnlyCollection<Candle> candles)
+    {
+        if (Uncovered(range).Count > 0)
+        {
+            throw new ArgumentException($"The range [{range.From:O}, {range.Until:O}) is not all covered, so its buy volumes cannot be settled.", nameof(range));
+        }
+
+        EnsureInside(range, candles);
+
+        Take(_settled, range);
+        _newCandles.AddRange(candles);
+    }
+
+    /// <summary>
+    ///     The parts of <paramref name="range" /> no covered range holds, oldest first; none when all of it is covered.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> Uncovered(MinuteRange range)
+    {
+        return Outside(_covered, range);
+    }
+
+    /// <summary>
+    ///     The parts of <paramref name="range" /> no settled range holds, oldest first; none when all of it is settled.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> Unsettled(MinuteRange range)
+    {
+        return Outside(_settled, range);
+    }
+
+    // A candle outside the range would be stored without the range over it, or would stand for a minute the range was not asked for.
+    private static void EnsureInside(MinuteRange range, IReadOnlyCollection<Candle> candles)
+    {
         foreach (Candle candle in candles)
         {
             if (candle.OpenTime < range.From || candle.OpenTime >= range.Until)
@@ -72,28 +128,27 @@ public sealed class CandleSeries : AggregateRoot
                     nameof(candles));
             }
         }
-
-        // The covered ranges the new one touches become one range with it; the others stay as they are, oldest first.
-        MinuteRange joined = _covered.Where(range.Touches).Aggregate(range, (whole, covered) => whole.Join(covered));
-
-        _covered.RemoveAll(range.Touches);
-        _covered.Add(joined);
-        _covered.Sort((left, right) => left.From.CompareTo(right.From));
-        _newCandles.AddRange(candles);
     }
 
-    /// <summary>
-    ///     The parts of <paramref name="range" /> no covered range holds, oldest first; none when all of it is covered.
-    /// </summary>
-    public IReadOnlyList<MinuteRange> Uncovered(MinuteRange range)
+    // The ranges the new one touches become one range with it; the others stay as they are, oldest first.
+    private static void Take(List<MinuteRange> ranges, MinuteRange range)
     {
-        IReadOnlyList<MinuteRange> uncovered = [range];
+        MinuteRange joined = ranges.Where(range.Touches).Aggregate(range, (whole, taken) => whole.Join(taken));
 
-        foreach (MinuteRange covered in _covered)
+        ranges.RemoveAll(range.Touches);
+        ranges.Add(joined);
+        ranges.Sort((left, right) => left.From.CompareTo(right.From));
+    }
+
+    private static IReadOnlyList<MinuteRange> Outside(List<MinuteRange> ranges, MinuteRange range)
+    {
+        IReadOnlyList<MinuteRange> outside = [range];
+
+        foreach (MinuteRange taken in ranges)
         {
-            uncovered = [.. uncovered.SelectMany(part => part.Except(covered))];
+            outside = [.. outside.SelectMany(part => part.Except(taken))];
         }
 
-        return uncovered;
+        return outside;
     }
 }
