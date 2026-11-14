@@ -10,7 +10,7 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 /// <summary>
 ///     Adds the minutes of the candles to the series the loading of candles started and saves those series together. It starts no series
 ///     itself: the loading starts one with the time before the instrument began to trade covered, and a series started here would have
-///     that time asked for page by page. The feed hears of a candle only after it is saved.
+///     that time asked for page by page. The feed hears of a candle only after it is saved, and as storage holds it.
 /// </summary>
 internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository series, ILiveCandleFeed feed)
     : IRequestHandler<SaveClosedCandlesCommand, SaveClosedCandlesResult>
@@ -25,7 +25,9 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
             .GroupBy(closed => (closed.InstrumentId, closed.Candle.OpenTime))
             .Select(minute => minute.LastOrDefault(closed => closed.Candle.BuyVolume is not null) ?? minute.Last())
             .GroupBy(closed => closed.InstrumentId)
-            .ToDictionary(instrument => instrument.Key, instrument => instrument.ToArray());
+            .ToDictionary(
+                instrument => instrument.Key,
+                instrument => (instrument.First().Exchange, Candles: instrument.Select(closed => closed.Candle).ToArray()));
 
         if (told.Count == 0)
         {
@@ -41,16 +43,21 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
 
         foreach (CandleSeries one in started)
         {
-            foreach (ClosedCandle closed in told[one.InstrumentId])
+            foreach (Candle candle in told[one.InstrumentId].Candles)
             {
-                one.Cover(new MinuteRange(closed.Candle.OpenTime, closed.Candle.OpenTime + Minute), [closed.Candle]);
+                one.Cover(new MinuteRange(candle.OpenTime, candle.OpenTime + Minute), [candle]);
             }
         }
 
-        await series.SaveAsync(started, cancellationToken);
+        ILookup<Guid, Candle> stored = await series.SaveAsync(started, cancellationToken);
 
-        ClosedCandle[] saved = [.. started.SelectMany(one => told[one.InstrumentId])];
-        feed.Publish([.. saved.Select(closed => new LiveCandle(closed.Exchange, closed.InstrumentId, closed.Candle, Closed: true))]);
+        // What storage holds, not what was told: a candle told again without its buy volume has the one saved before.
+        LiveCandle[] saved =
+        [
+            .. started.SelectMany(
+                one => stored[one.InstrumentId].Select(candle => new LiveCandle(told[one.InstrumentId].Exchange, one.InstrumentId, candle, Closed: true)))
+        ];
+        feed.Publish(saved);
 
         return new SaveClosedCandlesResult(saved.Length);
     }

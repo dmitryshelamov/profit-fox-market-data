@@ -21,6 +21,8 @@ public class LiveCandleFeedTests
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
 
+    private static readonly Exchange[] Bybit = [Exchange.Bybit];
+
     private LiveCandleFeed _feed = null!;
 
     private static LiveCandle CandleAt(int minute)
@@ -55,7 +57,7 @@ public class LiveCandleFeedTests
     [Test]
     public async Task A_disposed_subscription_ends_and_takes_nothing_more()
     {
-        ILiveCandleSubscription subscription = _feed.Subscribe(forming: false);
+        ILiveCandleSubscription subscription = _feed.Subscribe(Bybit, forming: false);
         _feed.Publish([CandleAt(minute: 0)]);
 
         subscription.Dispose();
@@ -74,8 +76,8 @@ public class LiveCandleFeedTests
     [Test]
     public async Task A_forming_candle_goes_only_to_the_subscribers_that_asked_for_them()
     {
-        using ILiveCandleSubscription withForming = _feed.Subscribe(forming: true);
-        using ILiveCandleSubscription closedOnly = _feed.Subscribe(forming: false);
+        using ILiveCandleSubscription withForming = _feed.Subscribe(Bybit, forming: true);
+        using ILiveCandleSubscription closedOnly = _feed.Subscribe(Bybit, forming: false);
 
         _feed.Publish([FormingAt(minute: 0), CandleAt(minute: 0)]);
 
@@ -89,7 +91,7 @@ public class LiveCandleFeedTests
     [Test]
     public async Task A_subscriber_far_behind_gets_no_forming_candles_until_it_caught_up_and_every_closed_one()
     {
-        using ILiveCandleSubscription subscription = _feed.Subscribe(forming: true);
+        using ILiveCandleSubscription subscription = _feed.Subscribe(Bybit, forming: true);
         LiveCandle[] backlog = [.. Enumerable.Range(start: 0, LiveCandleFeed.FormingLimit).Select(CandleAt)];
         _feed.Publish(backlog);
 
@@ -110,7 +112,7 @@ public class LiveCandleFeedTests
     public async Task A_subscriber_gets_what_is_published_after_it_subscribed_in_order()
     {
         _feed.Publish([CandleAt(minute: 0)]);
-        using ILiveCandleSubscription subscription = _feed.Subscribe(forming: false);
+        using ILiveCandleSubscription subscription = _feed.Subscribe(Bybit, forming: false);
 
         _feed.Publish([CandleAt(minute: 1), CandleAt(minute: 2)]);
         _feed.Publish([CandleAt(minute: 3)]);
@@ -121,8 +123,8 @@ public class LiveCandleFeedTests
     [Test]
     public async Task A_subscriber_that_falls_behind_is_cut_off_after_what_fitted_and_the_others_go_on()
     {
-        using ILiveCandleSubscription slow = _feed.Subscribe(forming: false);
-        using ILiveCandleSubscription other = _feed.Subscribe(forming: false);
+        using ILiveCandleSubscription slow = _feed.Subscribe(Bybit, forming: false);
+        using ILiveCandleSubscription other = _feed.Subscribe(Bybit, forming: false);
         LiveCandle[] flood = [.. Enumerable.Range(start: 0, LiveCandleFeed.Capacity).Select(CandleAt)];
 
         _feed.Publish(flood);
@@ -148,10 +150,23 @@ public class LiveCandleFeedTests
     }
 
     [Test]
+    public async Task Candles_of_exchanges_not_asked_for_never_wait_for_a_subscriber()
+    {
+        using ILiveCandleSubscription shares = _feed.Subscribe([Exchange.TInvest], forming: false);
+        LiveCandle ofShare = CandleAt(minute: 0) with { Exchange = Exchange.TInvest };
+
+        // More candles of Bybit than a subscription holds: one that asked for them would be cut off.
+        _feed.Publish([.. Enumerable.Range(start: 0, LiveCandleFeed.Capacity + 1).Select(CandleAt)]);
+        _feed.Publish([ofShare]);
+
+        Assert.That(await TakeAsync(shares, count: 1), Is.EqualTo(new[] { ofShare }));
+    }
+
+    [Test]
     public async Task Every_subscriber_gets_every_candle()
     {
-        using ILiveCandleSubscription first = _feed.Subscribe(forming: false);
-        using ILiveCandleSubscription second = _feed.Subscribe(forming: false);
+        using ILiveCandleSubscription first = _feed.Subscribe(Bybit, forming: false);
+        using ILiveCandleSubscription second = _feed.Subscribe(Bybit, forming: false);
 
         _feed.Publish([CandleAt(minute: 0)]);
 

@@ -5,6 +5,8 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Reposi
 /// </summary>
 internal sealed record CandleDb
 {
+    public Guid InstrumentId { get; init; }
+
     public DateTimeOffset OpenTime { get; init; }
 
     public decimal Open { get; init; }

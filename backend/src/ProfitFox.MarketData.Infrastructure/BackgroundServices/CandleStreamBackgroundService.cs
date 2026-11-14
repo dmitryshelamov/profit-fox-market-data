@@ -38,14 +38,15 @@ internal sealed class CandleStreamBackgroundService(
     private readonly Channel<ClosedCandle> _closed = Channel.CreateBounded<ClosedCandle>(
         new BoundedChannelOptions(WaitingCapacity) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
 
-    private readonly HashSet<(BybitCategory Category, string Symbol)> _subscribed = [];
+    // The instruments of Bybit subscribed to, and their subscriptions.
+    private readonly HashSet<(BybitCategory Category, string Symbol)> _bybitSymbols = [];
 
-    private readonly List<IAsyncDisposable> _subscriptions = [];
+    private readonly List<IAsyncDisposable> _bybitSubscriptions = [];
 
     // The uids of the shares of T-Invest subscribed to, and their subscriptions.
-    private readonly HashSet<string> _shares = [];
+    private readonly HashSet<string> _tinvestShares = [];
 
-    private readonly List<IAsyncDisposable> _shareSubscriptions = [];
+    private readonly List<IAsyncDisposable> _tinvestSubscriptions = [];
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -64,8 +65,8 @@ internal sealed class CandleStreamBackgroundService(
             {
                 // Each exchange on its own: the hundreds of requests of Bybit do not hold back T-Invest.
                 await Task.WhenAll(
-                    stream.Bybit.Enabled ? SubscribeToListedAsync(stoppingToken) : UnsubscribeAsync(_subscriptions, _subscribed.Clear),
-                    stream.TInvest.Enabled ? SubscribeToListedSharesAsync(stoppingToken) : UnsubscribeAsync(_shareSubscriptions, _shares.Clear));
+                    stream.Bybit.Enabled ? SubscribeToBybitAsync(stoppingToken) : UnsubscribeAsync(_bybitSubscriptions, _bybitSymbols.Clear),
+                    stream.TInvest.Enabled ? SubscribeToTInvestAsync(stoppingToken) : UnsubscribeAsync(_tinvestSubscriptions, _tinvestShares.Clear));
 
                 await Task.Delay(TimeSpan.FromSeconds(stream.RefreshSeconds), time, stoppingToken);
 
@@ -74,14 +75,14 @@ internal sealed class CandleStreamBackgroundService(
         }
         finally
         {
-            await UnsubscribeAsync(_subscriptions, _subscribed.Clear);
-            await UnsubscribeAsync(_shareSubscriptions, _shares.Clear);
+            await UnsubscribeAsync(_bybitSubscriptions, _bybitSymbols.Clear);
+            await UnsubscribeAsync(_tinvestSubscriptions, _tinvestShares.Clear);
         }
     }
 
     // One subscription a category for its listed instruments not subscribed to yet. The categories subscribe at the same time: each has
     // a stream of its own at Bybit, and the hundreds of requests of one would hold back the other.
-    private async Task SubscribeToListedAsync(CancellationToken stoppingToken)
+    private async Task SubscribeToBybitAsync(CancellationToken stoppingToken)
     {
         IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.Bybit, logger, stoppingToken);
 
@@ -89,22 +90,22 @@ internal sealed class CandleStreamBackgroundService(
         IEnumerable<IGrouping<BybitCategory, KeyValuePair<string, Guid>>> categories = instruments
             .Where(instrument => instrument.DelistedAt is null)
             .Select(instrument => (instrument.Id, Listing: (BybitListedInstrumentInternal)instrument.Listing))
-            .Where(instrument => !_subscribed.Contains((instrument.Listing.Category, instrument.Listing.Symbol)))
+            .Where(instrument => !_bybitSymbols.Contains((instrument.Listing.Category, instrument.Listing.Symbol)))
             .GroupBy(instrument => instrument.Listing.Category, instrument => KeyValuePair.Create(instrument.Listing.Symbol, instrument.Id));
 
         CategorySubscription?[] taken = await Task.WhenAll(
-            categories.Select(category => SubscribeToCategoryAsync(category.Key, new Dictionary<string, Guid>(category), stoppingToken)));
+            categories.Select(category => SubscribeToBybitCategoryAsync(category.Key, new Dictionary<string, Guid>(category), stoppingToken)));
 
         foreach (CategorySubscription subscription in taken.OfType<CategorySubscription>())
         {
-            _subscriptions.Add(subscription.Subscription);
-            _subscribed.UnionWith(subscription.Symbols.Select(symbol => (subscription.Category, symbol)));
+            _bybitSubscriptions.Add(subscription.Subscription);
+            _bybitSymbols.UnionWith(subscription.Symbols.Select(symbol => (subscription.Category, symbol)));
         }
     }
 
     // The subscription to the instruments of a category; null when Bybit did not take it, which is logged: it is tried again after the
     // wait.
-    private async Task<CategorySubscription?> SubscribeToCategoryAsync(BybitCategory category, Dictionary<string, Guid> ids, CancellationToken stoppingToken)
+    private async Task<CategorySubscription?> SubscribeToBybitCategoryAsync(BybitCategory category, Dictionary<string, Guid> ids, CancellationToken stoppingToken)
     {
         try
         {
@@ -114,7 +115,7 @@ internal sealed class CandleStreamBackgroundService(
                 (symbol, candle) => Closed(Exchange.Bybit, ids[symbol], candle),
                 (symbol, candle) => feed.Publish([new LiveCandle(Exchange.Bybit, ids[symbol], candle, Closed: false)]),
                 stoppingToken);
-            logger.LogInformation("Subscribed to the closed candles of {Count} {Category} instruments of Bybit.", ids.Count, category);
+            logger.LogInformation("Subscribed to the candles of {Count} {Category} instruments of Bybit.", ids.Count, category);
 
             return new CategorySubscription(category, ids.Keys, subscription);
         }
@@ -122,7 +123,7 @@ internal sealed class CandleStreamBackgroundService(
         {
             logger.LogError(
                 exception,
-                "Subscribing to the closed candles of {Count} {Category} instruments of Bybit failed; it is tried again later.",
+                "Subscribing to the candles of {Count} {Category} instruments of Bybit failed; it is tried again later.",
                 ids.Count,
                 category);
 
@@ -132,7 +133,7 @@ internal sealed class CandleStreamBackgroundService(
 
     // One subscription for the listed shares of T-Invest not subscribed to yet: all of them at the first pass, later only the ones
     // listed since. The stream of T-Invest opens and reopens by itself, so only a missing token fails here.
-    private async Task SubscribeToListedSharesAsync(CancellationToken stoppingToken)
+    private async Task SubscribeToTInvestAsync(CancellationToken stoppingToken)
     {
         IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.TInvest, logger, stoppingToken);
 
@@ -141,7 +142,7 @@ internal sealed class CandleStreamBackgroundService(
             .. instruments
                 .Where(instrument => instrument.DelistedAt is null)
                 .Select(instrument => (instrument.Id, Listing: (TInvestListedShareInternal)instrument.Listing))
-                .Where(share => !_shares.Contains(share.Listing.Uid))
+                .Where(share => !_tinvestShares.Contains(share.Listing.Uid))
         ];
 
         if (listed.Length == 0)
@@ -153,18 +154,18 @@ internal sealed class CandleStreamBackgroundService(
 
         try
         {
-            _shareSubscriptions.Add(
+            _tinvestSubscriptions.Add(
                 await tinvest.SubscribeAsync(
                     listed.ToDictionary(share => share.Listing.Uid, share => share.Listing.Rules.QuantityStep),
                     (uid, candle) => Closed(Exchange.TInvest, ids[uid], candle),
                     (uid, candle) => feed.Publish([new LiveCandle(Exchange.TInvest, ids[uid], candle, Closed: false)]),
                     stoppingToken));
-            _shares.UnionWith(ids.Keys);
-            logger.LogInformation("Subscribed to the closed candles of {Count} shares of T-Invest.", ids.Count);
+            _tinvestShares.UnionWith(ids.Keys);
+            logger.LogInformation("Subscribed to the candles of {Count} shares of T-Invest.", ids.Count);
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
-            logger.LogError(exception, "Subscribing to the closed candles of {Count} shares of T-Invest failed; it is tried again later.", ids.Count);
+            logger.LogError(exception, "Subscribing to the candles of {Count} shares of T-Invest failed; it is tried again later.", ids.Count);
         }
     }
 
@@ -223,6 +224,6 @@ internal sealed class CandleStreamBackgroundService(
         }
     }
 
-    // A subscription Bybit took: the symbols of a category it tells the closed candles of.
+    // A subscription Bybit took: the symbols of a category it tells the candles of.
     private sealed record CategorySubscription(BybitCategory Category, IReadOnlyCollection<string> Symbols, IAsyncDisposable Subscription);
 }

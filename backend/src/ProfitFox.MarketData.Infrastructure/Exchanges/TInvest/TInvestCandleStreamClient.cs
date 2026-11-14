@@ -196,7 +196,7 @@ internal sealed class TInvestCandleStreamClient(
                     Keep(told.InstrumentUid, candle);
                 }
             }
-            catch (Exception exception) when (exception is ArgumentException)
+            catch (ArgumentException exception)
             {
                 // A candle T-Invest told wrong: its minute is left to the loading of candles, the stream goes on.
                 logger.LogError(exception, "A candle of {Uid} of the stream of T-Invest is dropped.", told.InstrumentUid);
@@ -209,7 +209,11 @@ internal sealed class TInvestCandleStreamClient(
         {
             lock (_lock)
             {
-                _closedMinutes[uid] = candle.OpenTime;
+                // A candle older than the last closed one, as T-Invest may tell again once a stream is back, does not bring its minute back.
+                if (!_closedMinutes.TryGetValue(uid, out DateTimeOffset lastClosed) || candle.OpenTime > lastClosed)
+                {
+                    _closedMinutes[uid] = candle.OpenTime;
+                }
 
                 if (_forming.TryGetValue(uid, out Candle? waiting) && waiting.OpenTime <= candle.OpenTime)
                 {

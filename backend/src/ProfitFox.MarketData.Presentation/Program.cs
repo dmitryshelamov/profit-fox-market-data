@@ -41,7 +41,7 @@ public class Program
                 .Validate(feed => feed.MaxCatchUpHours > 0, "CandleFeed:MaxCatchUpHours must be above zero.")
                 .ValidateOnStart();
 
-            // The feed of closed candles; it needs HTTP/2, which has an endpoint of its own in the Kestrel section of the settings.
+            // The feed of live candles; it needs HTTP/2, which has an endpoint of its own in the Kestrel section of the settings.
             builder.Services.AddGrpc();
 
             // The failures the application tells by an exception are answered in one place.

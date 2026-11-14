@@ -6,6 +6,7 @@ using Grpc.Net.Client;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 using NSubstitute;
 
@@ -208,7 +209,7 @@ public class CandleFeedServiceTests
         ILiveCandleSubscription cutOff = Substitute.For<ILiveCandleSubscription>();
         cutOff.ReadAllAsync(Arg.Any<CancellationToken>()).Returns(_ => FallBehind());
         ILiveCandleFeed feed = Substitute.For<ILiveCandleFeed>();
-        feed.Subscribe(Arg.Any<bool>()).Returns(cutOff);
+        feed.Subscribe(Arg.Any<IReadOnlyCollection<Exchange>>(), Arg.Any<bool>()).Returns(cutOff);
         await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton(feed)));
         using GrpcChannel channel = Channel(app);
 
@@ -226,6 +227,23 @@ public class CandleFeedServiceTests
 
         RpcException? failure = Assert.ThrowsAsync<RpcException>(async () => await call.ResponseStream.MoveNext(CancellationToken.None));
         Assert.That(failure!.StatusCode, Is.EqualTo(StatusCode.InvalidArgument));
+    }
+
+    [Test]
+    public async Task A_subscription_ends_with_unavailable_when_the_app_stops()
+    {
+        // An app of its own: the one of the other tests goes on.
+        await using var app = new MarketDataTestApplication();
+        using GrpcChannel channel = Channel(app);
+        using AsyncServerStreamingCall<CandleUpdate> call = new CandleFeed.CandleFeedClient(channel).Subscribe(new SubscribeRequest());
+        await call.ResponseHeadersAsync.WaitAsync(Patience);
+
+        app.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+
+        // Awaited: Assert.ThrowsAsync, which blocks on the call, did not see it end here.
+        await Assert.ThatAsync(
+            () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
+            Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.Unavailable));
     }
 
     [Test]

@@ -2,14 +2,15 @@ using System.Threading.Channels;
 
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Candles;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     Tells the live candles to the subscribers of the app, in memory only. Each subscriber has a place of its own where candles wait
-///     for it, at most <see cref="Capacity" />; publishing never waits for a subscriber. One that reads too slowly first stops getting
-///     forming candles, once more than <see cref="FormingLimit" /> wait for it, and is cut off when a closed candle no longer fits,
-///     instead of holding back the saving of candles or the other subscribers.
+///     Tells the live candles to the subscribers of the app, in memory only. Each subscriber has a place of its own where the candles
+///     of the exchanges it asked for wait for it, at most <see cref="Capacity" />; publishing never waits for a subscriber. One that
+///     reads too slowly first stops getting forming candles, once more than <see cref="FormingLimit" /> wait for it, and is cut off
+///     when a closed candle no longer fits, instead of holding back the saving of candles or the other subscribers.
 /// </summary>
 internal sealed class LiveCandleFeed : ILiveCandleFeed
 {
@@ -38,9 +39,9 @@ internal sealed class LiveCandleFeed : ILiveCandleFeed
         }
     }
 
-    public ILiveCandleSubscription Subscribe(bool forming)
+    public ILiveCandleSubscription Subscribe(IReadOnlyCollection<Exchange> exchanges, bool forming)
     {
-        var subscription = new Subscription(this, forming);
+        var subscription = new Subscription(this, [.. exchanges], forming);
 
         lock (_lock)
         {
@@ -58,14 +59,14 @@ internal sealed class LiveCandleFeed : ILiveCandleFeed
         }
     }
 
-    private sealed class Subscription(LiveCandleFeed feed, bool forming) : ILiveCandleSubscription
+    private sealed class Subscription(LiveCandleFeed feed, HashSet<Exchange> exchanges, bool forming) : ILiveCandleSubscription
     {
         private readonly Channel<LiveCandle> _waiting = Channel.CreateBounded<LiveCandle>(
             new BoundedChannelOptions(Capacity) { SingleReader = true, SingleWriter = false });
 
         public void Take(IReadOnlyCollection<LiveCandle> candles)
         {
-            foreach (LiveCandle candle in candles)
+            foreach (LiveCandle candle in candles.Where(candle => exchanges.Contains(candle.Exchange)))
             {
                 if (!candle.Closed)
                 {

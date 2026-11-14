@@ -156,6 +156,24 @@ public class TInvestCandleStreamClientTests
     }
 
     [Test]
+    public async Task A_forming_candle_of_the_last_closed_minute_is_not_told_after_an_older_candle_closed_again()
+    {
+        await SubscribeAsync();
+        (IStubGrpcStream closed, IStubGrpcStream forming) = await StreamsAsync();
+
+        // The minute closed, then the one before it is told again, as after the stream of closed candles is back.
+        closed.Tell(TInvestAnswers.StreamCandle(Sber, Minute, open: 300m, high: 301m, low: 300m, close: 301m, lots: 2, lotsBought: 1));
+        closed.Tell(TInvestAnswers.StreamCandle(Sber, Minute.AddMinutes(-1), open: 300m, high: 300m, low: 300m, close: 300m, lots: 1, lotsBought: 1));
+        await closed.ReadAsync();
+        forming.Tell(TInvestAnswers.StreamCandle(Sber, Minute, open: 300m, high: 301m, low: 300m, close: 301m, lots: 2, lotsBought: 1));
+        await forming.ReadAsync();
+
+        _time.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.That(_forming, Is.Empty);
+    }
+
+    [Test]
     public async Task A_stream_that_breaks_is_opened_again_after_a_pause_and_subscribes_anew()
     {
         await SubscribeAsync();
@@ -173,6 +191,22 @@ public class TInvestCandleStreamClientTests
             Assert.That(Asked(again).WaitingClose, Is.True);
             Assert.That(Asked(again).Instruments.Select(instrument => instrument.InstrumentId), Is.EquivalentTo(new[] { Sber, Gazp }));
             Assert.That(_closed.Single().Uid, Is.EqualTo(Sber));
+        });
+    }
+
+    [Test]
+    public async Task A_stream_that_ends_is_opened_again_and_subscribes_anew()
+    {
+        await SubscribeAsync();
+        (_, IStubGrpcStream forming) = await StreamsAsync();
+
+        forming.End();
+        IStubGrpcStream again = await ReopenedAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Asked(again).WaitingClose, Is.False);
+            Assert.That(Asked(again).Instruments.Select(instrument => instrument.InstrumentId), Is.EquivalentTo(new[] { Sber, Gazp }));
         });
     }
 

@@ -23,7 +23,14 @@ public class SaveClosedCandlesCommandHandlerTests
         _published = [];
         _series.GetAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(call => call[0] is IReadOnlyCollection<Guid> asked ? _stored.Where(series => asked.Contains(series.InstrumentId)).ToArray() : []);
-        _series.SaveAsync(Arg.Do<IReadOnlyCollection<CandleSeries>>(series => _saved = series), Arg.Any<CancellationToken>());
+        _keptBuyVolumes = [];
+
+        // Storage gives the new candles back as it holds them: with the buy volume a minute already had when its candle knows none.
+        _series.SaveAsync(Arg.Do<IReadOnlyCollection<CandleSeries>>(series => _saved = series), Arg.Any<CancellationToken>())
+            .Returns(
+                call => call.Arg<IReadOnlyCollection<CandleSeries>>()
+                    .SelectMany(series => series.NewCandles.Select(candle => (series.InstrumentId, Candle: AsStored(series.InstrumentId, candle))))
+                    .ToLookup(candle => candle.InstrumentId, candle => candle.Candle));
 
         // What is told to the feed, with whether storage held it by then.
         _feed.Publish(Arg.Do<IReadOnlyCollection<LiveCandle>>(candles => _published.Add((candles, SavedBefore: _saved is not null))));
@@ -42,6 +49,7 @@ public class SaveClosedCandlesCommandHandlerTests
     private List<(IReadOnlyCollection<LiveCandle> Candles, bool SavedBefore)> _published = null!;
     private List<CandleSeries> _stored = null!;
     private IReadOnlyCollection<CandleSeries>? _saved;
+    private Dictionary<(Guid InstrumentId, DateTimeOffset OpenTime), decimal> _keptBuyVolumes = null!;
     private SaveClosedCandlesCommandHandler _handler = null!;
 
     private void Stored(Guid instrumentId, MinuteRange covered)
@@ -49,6 +57,13 @@ public class SaveClosedCandlesCommandHandlerTests
         var series = CandleSeries.Create(instrumentId);
         series.Cover(covered, []);
         _stored.Add(series);
+    }
+
+    private Candle AsStored(Guid instrumentId, Candle candle)
+    {
+        return candle.BuyVolume is null && _keptBuyVolumes.TryGetValue((instrumentId, candle.OpenTime), out decimal kept)
+            ? new Candle(candle.OpenTime, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume, candle.Turnover, kept)
+            : candle;
     }
 
     private static ClosedCandle Closed(Guid instrumentId, Candle candle)
@@ -112,6 +127,17 @@ public class SaveClosedCandlesCommandHandlerTests
             Assert.That(result, Is.EqualTo(new SaveClosedCandlesResult(Saved: 1)));
             Assert.That(SavedOf(Btc).NewCandles, Is.EqualTo(new[] { complete }));
         });
+    }
+
+    [Test]
+    public async Task A_minute_told_without_a_buy_volume_is_published_with_the_one_storage_kept()
+    {
+        Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute.AddMinutes(1)));
+        _keptBuyVolumes[(Btc, Minute)] = 2m;
+
+        await Save(Closed(Btc, CandleGenerator.Generate(Minute, volume: 3m)));
+
+        Assert.That(_published.Single().Candles, Is.EqualTo(new[] { Live(Btc, CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m)) }));
     }
 
     [Test]

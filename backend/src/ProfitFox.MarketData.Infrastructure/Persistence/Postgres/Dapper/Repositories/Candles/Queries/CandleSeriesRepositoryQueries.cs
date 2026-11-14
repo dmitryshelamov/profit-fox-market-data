@@ -28,8 +28,8 @@ internal static class CandleSeriesRepositoryQueries
                                      """;
 
     private const string CandlesWithoutBuyVolumeSql = """
-                                                      SELECT open_time AS "OpenTime", open, high, low, close, volume, turnover,
-                                                             buy_volume AS "BuyVolume"
+                                                      SELECT instrument_id AS "InstrumentId", open_time AS "OpenTime", open, high, low, close,
+                                                             volume, turnover, buy_volume AS "BuyVolume"
                                                       FROM candles
                                                       WHERE instrument_id = @InstrumentId AND open_time >= @From AND open_time < @Until
                                                         AND buy_volume IS NULL
@@ -65,7 +65,8 @@ internal static class CandleSeriesRepositoryQueries
                                            """;
 
     // A candle of a minute already stored takes the values the exchange gives now. Its buy volume stays when the new candle knows none:
-    // a source that tells the sides of the trades and one that does not write the same minute, in either order.
+    // a source that tells the sides of the trades and one that does not write the same minute, in either order. The rows come back as
+    // they are stored now, so the caller sees the buy volume that stayed.
     private const string UpsertCandlesSql = """
                                             INSERT INTO candles (instrument_id, open_time, open, high, low, close, volume, turnover, buy_volume)
                                             SELECT c.instrument_id, c.open_time, c.open, c.high, c.low, c.close, c.volume, c.turnover, c.buy_volume
@@ -82,6 +83,8 @@ internal static class CandleSeriesRepositoryQueries
                                                 volume = EXCLUDED.volume,
                                                 turnover = EXCLUDED.turnover,
                                                 buy_volume = coalesce(EXCLUDED.buy_volume, candles.buy_volume)
+                                            RETURNING instrument_id AS "InstrumentId", open_time AS "OpenTime", open, high, low, close, volume,
+                                                      turnover, buy_volume AS "BuyVolume"
                                             """;
 
     public static CommandDefinition Ranges(IReadOnlyCollection<Guid> instrumentIds, IDbTransaction? transaction, CancellationToken cancellationToken)

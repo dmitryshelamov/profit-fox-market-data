@@ -1,3 +1,5 @@
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
+
 namespace ProfitFox.MarketData.Application.Ports.Candles;
 
 /// <summary>
@@ -14,8 +16,9 @@ public interface ILiveCandleFeed
     void Publish(IReadOnlyCollection<LiveCandle> candles);
 
     /// <summary>
-    ///     Starts to gather what is published from now on for a new subscriber, until the subscription is disposed: the closed candles,
-    ///     and with <paramref name="forming" /> the forming ones too.
+    ///     Starts to gather what is published from now on for a new subscriber, until the subscription is disposed: the closed candles
+    ///     of <paramref name="exchanges" />, and with <paramref name="forming" /> their forming ones too. Candles of other exchanges
+    ///     never wait for the subscriber.
     /// </summary>
-    ILiveCandleSubscription Subscribe(bool forming);
+    ILiveCandleSubscription Subscribe(IReadOnlyCollection<Exchange> exchanges, bool forming);
 }

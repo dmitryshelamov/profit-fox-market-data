@@ -25,26 +25,55 @@ namespace ProfitFox.MarketData.Presentation.GrpcServices;
 ///     The gRPC feed of minute candles, <c>Protos/candle_feed.proto</c>: a caller subscribes once and gets every candle as it is
 ///     saved, after the stored ones it asked to catch up on, and the forming candle of the minute that goes on when it asked for it.
 /// </summary>
-public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOptionsMonitor<CandleFeedSettings> settings, TimeProvider time)
-    : CandleFeed.CandleFeedBase
+public sealed class CandleFeedService(
+    ISender sender,
+    ILiveCandleFeed feed,
+    IOptionsMonitor<CandleFeedSettings> settings,
+    IHostApplicationLifetime lifetime,
+    TimeProvider time) : CandleFeed.CandleFeedBase
 {
     private static readonly Exchange[] All = System.Enum.GetValues<Exchange>();
 
     public override async Task Subscribe(SubscribeRequest request, IServerStreamWriter<CandleUpdate> responseStream, ServerCallContext context)
     {
-        CancellationToken cancellationToken = context.CancellationToken;
         Exchange[] exchanges = Asked(request);
         var since = request.Since?.ToDateTimeOffset();
         int maxCatchUpHours = settings.CurrentValue.MaxCatchUpHours;
 
-        if (since < time.GetUtcNow().AddHours(-maxCatchUpHours))
+        if (since is not null && since < time.GetUtcNow().AddHours(-maxCatchUpHours))
         {
             throw new RpcException(new Status(StatusCode.InvalidArgument, $"The feed catches up on at most {maxCatchUpHours} hours; since is {since:O}."));
         }
 
+        // The call ends with the app as well as with its caller: the server waits for the open calls when it stops, and one only its
+        // caller ends would hold the stop back until the server gives up.
+        using var ended = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, lifetime.ApplicationStopping);
+
+        try
+        {
+            await TellAsync(exchanges, since, request.Forming, responseStream, context, ended.Token);
+        }
+        catch (SubscriberFellBehindException exception)
+        {
+            throw new RpcException(new Status(StatusCode.ResourceExhausted, exception.Message));
+        }
+        catch (OperationCanceledException) when (lifetime.ApplicationStopping.IsCancellationRequested)
+        {
+            throw new RpcException(new Status(StatusCode.Unavailable, "The service is stopping."));
+        }
+    }
+
+    private async Task TellAsync(
+        Exchange[] exchanges,
+        DateTimeOffset? since,
+        bool forming,
+        IServerStreamWriter<CandleUpdate> responseStream,
+        ServerCallContext context,
+        CancellationToken cancellationToken)
+    {
         // Subscribed before storage is read: a candle saved meanwhile waits in the subscription, so none is left out between the two.
         // It may come twice, from storage and live, which the caller takes as one: it replaces a candle by instrument and open time.
-        using ILiveCandleSubscription live = feed.Subscribe(request.Forming);
+        using ILiveCandleSubscription live = feed.Subscribe(exchanges, forming);
         await context.WriteResponseHeadersAsync([]);
 
         if (since is not null)
@@ -55,19 +84,9 @@ public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOpt
             }
         }
 
-        try
+        await foreach (LiveCandle candle in live.ReadAllAsync(cancellationToken))
         {
-            await foreach (LiveCandle candle in live.ReadAllAsync(cancellationToken))
-            {
-                if (exchanges.Contains(candle.Exchange))
-                {
-                    await responseStream.WriteAsync(ToUpdate(candle), cancellationToken);
-                }
-            }
-        }
-        catch (SubscriberFellBehindException exception)
-        {
-            throw new RpcException(new Status(StatusCode.ResourceExhausted, exception.Message));
+            await responseStream.WriteAsync(ToUpdate(candle), cancellationToken);
         }
     }
 
@@ -93,7 +112,7 @@ public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOpt
         {
             Exchange.Bybit => ProtoExchange.Bybit,
             Exchange.TInvest => ProtoExchange.Tinvest,
-            _ => ProtoExchange.Unspecified
+            _ => throw new NotSupportedException($"The exchange {exchange} has no code in the contract of the feed.")
         };
     }
 
