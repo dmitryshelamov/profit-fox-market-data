@@ -23,7 +23,8 @@ and this file is silent, ask which to follow.
 
 ## Domain (`ProfitFox.MarketData.Domain`)
 
-- Areas: `Instruments` (the catalog of exchange instruments), `Candles` (the minute candles of the instruments and how far storage holds them).
+- Areas: `Instruments` (the catalog of exchange instruments), `Candles` (the minute candles of the instruments and how far storage holds them),
+  `OpenInterest` (the open interest of the instruments, point by point), `Funding` (the funding rates of the instruments, point by point).
 - `Entities/<Area>` holds entities, `Entities/<Area>/Enums` the enums and their pure extensions (`BybitContractTypeExtensions`).
   `Entities/Base` holds `AggregateRoot`; `Events` holds `IDomainEvent`. Both are the shared base copied from profit-fox and stay
   even while no aggregate raises an event.
@@ -51,14 +52,18 @@ and this file is silent, ask which to follow.
   adapter per exchange (`BybitCandlesClient`, `TInvestCandlesClient`); its `Exchange` tells whose listings are its, so a handler
   picks the client by `listing.Exchange` and has no `switch`. Ports whose shapes differ stay apart (Bybit lists a category,
   T-Invest has none). A port to a stream of an exchange is named the same way (`IBybitCandleStreamClient`) and is held by a
-  hosted service, not asked by a handler: a subscription outlives any request.
+  hosted service, not asked by a handler: a subscription outlives any request. What an exchange gives for several areas of the
+  domain at once has an area of its own in Application, named after it: `Tickers` (`Ports/Tickers`, `Commands/Tickers`), as one ticker
+  of Bybit tells both the open interest and the funding rate. What a port gives that the domain does not keep is a record next to the
+  port (`BybitLinearTicker`, `LiveCandle`).
 - A query whose answer is too large to hold is an `IStreamRequest` (`GetClosedCandlesQuery`), read with `ISender.CreateStream`;
   its handler reads storage row by row.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
   `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
 - No request runs in a transaction of the MediatR pipeline: a handler asks an exchange, which no open transaction should wait
   for. A handler saves through one call of a repository, and the repository makes that call whole in a transaction of its own
-  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it.
+  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it through
+  `ITransactionExecutor` of `Ports/Transactions`, around the saves only (`CollectBybitTickersCommandHandler`).
 - A command gives a named result (`LoadCandlesResult.MoreLeft`), not a bare `bool`.
 - `Queries/<Area>` holds a query with what it asks by (`CandleWindow`, `CandleInterval`); a rule of the input is checked there, not
   in the controller. A query only reads. Its handler lives next to it when the repositories of the domain answer it
