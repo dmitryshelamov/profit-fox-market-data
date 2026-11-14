@@ -28,6 +28,29 @@ internal static class BybitAnswers
                   """;
     }
 
+    /// <summary>
+    ///     A ticker of a linear contract as Bybit writes it: the open interest in the base coin and the funding rate of the coming
+    ///     payment, which is empty for a dated futures contract.
+    /// </summary>
+    public static string LinearTicker(string symbol, string openInterest, string fundingRate)
+    {
+        return $$$"""
+                  {"symbol":"{{{symbol}}}","lastPrice":"67000.10","indexPrice":"67010.55","markPrice":"67001.20","prevPrice24h":"66000.00","price24hPcnt":"0.0151",
+                   "highPrice24h":"67500.00","lowPrice24h":"65800.00","prevPrice1h":"66950.00","openInterest":"{{{openInterest}}}","openInterestValue":"3507133763.03",
+                   "turnover24h":"5000000000.00","volume24h":"75000.000","fundingRate":"{{{fundingRate}}}","nextFundingTime":"1794672000000",
+                   "predictedDeliveryPrice":"","basisRate":"","deliveryFeeRate":"","deliveryTime":"0","ask1Size":"1.500","bid1Price":"67000.00",
+                   "ask1Price":"67000.10","bid1Size":"2.300","basis":"","preOpenPrice":"","preQty":"","curPreListingPhase":"","fundingIntervalHour":"8",
+                   "fundingCap":"0.005","basisRateYear":""}
+                  """;
+    }
+
+    public static string Tickers(string category, params string[] tickers)
+    {
+        return $$"""
+                 {"retCode":0,"retMsg":"OK","result":{"category":"{{category}}","list":[{{string.Join(",", tickers)}}]},"retExtInfo":{},"time":0}
+                 """;
+    }
+
     public static string List(string category, string nextPageCursor = "", params string[] items)
     {
         return $$"""

@@ -19,6 +19,18 @@ public class InfrastructureRegistrarTests
         return services.GetRequiredService<IOptions<InstrumentSyncSettings>>().Value;
     }
 
+    [TestCase("0")]
+    [TestCase("60")]
+    public void A_deadline_of_the_tickers_outside_their_minute_is_refused(string seconds)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TickerCollection:DeadlineSeconds"] = seconds })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<TickerCollectionSettings>>().Value);
+    }
+
     [Test]
     public void A_stream_of_shares_without_a_token_is_refused()
     {

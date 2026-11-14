@@ -10,8 +10,9 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal static class BackgroundServicesRegistrar
 {
     /// <summary>
-    ///     The background sync of the catalog, the background loading of candles, the stream of closed candles and the filling of buy
-    ///     volumes with their settings; an app with a broken section stops at start rather than never working.
+    ///     The background sync of the catalog, the background loading of candles, the stream of closed candles, the filling of buy
+    ///     volumes and the collection of tickers with their settings; an app with a broken section stops at start rather than never
+    ///     working.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -63,5 +64,13 @@ internal static class BackgroundServicesRegistrar
             .Validate(sync => sync.Parallelism > 0, "BuyVolumeSync:Parallelism must be above zero.")
             .ValidateOnStart();
         services.AddHostedService<BuyVolumeSyncBackgroundService>();
+
+        services.AddOptions<TickerCollectionSettings>()
+            .Bind(configuration.GetSection(TickerCollectionSettings.Section))
+            .Validate(
+                collection => collection.DeadlineSeconds is > 0 and < 60,
+                "TickerCollection:DeadlineSeconds must be above zero and below 60.")
+            .ValidateOnStart();
+        services.AddHostedService<TickerCollectionBackgroundService>();
     }
 }
