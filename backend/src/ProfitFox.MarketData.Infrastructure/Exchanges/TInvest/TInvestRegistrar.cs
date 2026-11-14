@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Application.Ports.Instruments;
 
 using Tinkoff.InvestApi.V1;
@@ -16,8 +17,8 @@ internal static class TInvestRegistrar
 {
     /// <summary>
     ///     One gRPC channel to T-Invest for the process, opened on the first call and trusting the server by
-    ///     <see cref="TInvestCertificates" />, and the client of its instruments over it; a test host
-    ///     replaces the client to answer the calls itself.
+    ///     <see cref="TInvestCertificates" />, and the clients of its instruments and market data over it; a test host
+    ///     replaces the clients to answer the calls itself.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -41,6 +42,8 @@ internal static class TInvestRegistrar
                 ThrowOperationCanceledOnCancellation = true
             }));
         services.AddSingleton(provider => new InstrumentsService.InstrumentsServiceClient(provider.GetRequiredService<GrpcChannel>()));
+        services.AddSingleton(provider => new MarketDataService.MarketDataServiceClient(provider.GetRequiredService<GrpcChannel>()));
         services.AddScoped<ITInvestSharesClient, TInvestSharesClient>();
+        services.AddScoped<ITInvestCandlesClient, TInvestCandlesClient>();
     }
 }

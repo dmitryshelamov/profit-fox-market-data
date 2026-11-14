@@ -26,14 +26,7 @@ internal sealed class TInvestSharesClient(
     /// <exception cref="NotSupportedException">TInvestApi:Token is not set; no call goes.</exception>
     public async Task<IReadOnlyList<TInvestListedShare>> ListAsync(CancellationToken cancellationToken)
     {
-        TInvestApiSettings tinvest = settings.CurrentValue;
-
-        if (!tinvest.HasToken)
-        {
-            throw new NotSupportedException("The catalog does not sync the shares of T-Invest: TInvestApi:Token is not set.");
-        }
-
-        var headers = new Metadata { { "authorization", $"Bearer {tinvest.Token}" }, { "x-app-name", tinvest.AppName } };
+        Metadata headers = TInvestMetadata.Of(settings.CurrentValue, "The catalog does not sync the shares of T-Invest");
         var request = new InstrumentsRequest { InstrumentStatus = InstrumentStatus.Base };
 
         SharesResponse response = await instruments.SharesAsync(request, headers, time.GetUtcNow().UtcDateTime + Timeout, cancellationToken);

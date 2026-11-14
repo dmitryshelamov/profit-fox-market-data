@@ -1,3 +1,5 @@
+using Google.Protobuf.WellKnownTypes;
+
 using Tinkoff.InvestApi.V1;
 
 namespace ProfitFox.MarketData.Tests.Integration.Grpc;
@@ -24,8 +26,6 @@ internal static class TInvestAnswers
         string currency = "rub",
         bool apiTrade = true)
     {
-        var units = decimal.Truncate(priceStep);
-
         return new Share
         {
             Ticker = ticker,
@@ -34,7 +34,49 @@ internal static class TInvestAnswers
             ClassCode = classCode,
             Currency = currency,
             ApiTradeAvailableFlag = apiTrade,
-            MinPriceIncrement = new Quotation { Units = (long)units, Nano = (int)((priceStep - units) * NanosInUnit) }
+            MinPriceIncrement = Quotation(priceStep)
         };
+    }
+
+    public static GetCandlesResponse Candles(params HistoricCandle[] candles)
+    {
+        return new GetCandlesResponse { Candles = { candles } };
+    }
+
+    /// <summary>
+    ///     A minute candle of the exchange, its volume in lots.
+    /// </summary>
+    public static HistoricCandle Candle(DateTimeOffset time, decimal open, decimal high, decimal low, decimal close, long lots, bool complete = true)
+    {
+        return new HistoricCandle
+        {
+            Time = Timestamp.FromDateTimeOffset(time),
+            Open = Quotation(open),
+            High = Quotation(high),
+            Low = Quotation(low),
+            Close = Quotation(close),
+            Volume = lots,
+            IsComplete = complete,
+            CandleSource = CandleSource.Exchange
+        };
+    }
+
+    public static ShareResponse ShareBy(string uid, DateTimeOffset? firstMinuteCandle)
+    {
+        var share = new Share { Uid = uid };
+
+        if (firstMinuteCandle is { } first)
+        {
+            share.First1MinCandleDate = Timestamp.FromDateTimeOffset(first);
+        }
+
+        return new ShareResponse { Instrument = share };
+    }
+
+    private static Quotation Quotation(decimal value)
+    {
+        var units = decimal.Truncate(value);
+
+        return new Quotation { Units = (long)units, Nano = (int)((value - units) * NanosInUnit) };
     }
 }

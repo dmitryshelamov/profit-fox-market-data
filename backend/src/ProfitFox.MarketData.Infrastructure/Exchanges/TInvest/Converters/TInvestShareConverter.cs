@@ -14,9 +14,6 @@ internal static class TInvestShareConverter
 
     private const string Currency = "rub";
 
-    // A Quotation is units + nano / 1e9.
-    private const decimal NanosInUnit = 1_000_000_000m;
-
     /// <summary>
     ///     Whether the catalog takes the share: one of TQBR in roubles that trades through the API, with a positive lot and price step.
     ///     T-Invest lists the shares of other boards and currencies too.
@@ -37,6 +34,6 @@ internal static class TInvestShareConverter
 
     private static decimal PriceStep(Share share)
     {
-        return share.MinPriceIncrement is { } step ? step.Units + step.Nano / NanosInUnit : 0m;
+        return share.MinPriceIncrement?.ToDecimal() ?? 0m;
     }
 }
