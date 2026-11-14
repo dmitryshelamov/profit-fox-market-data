@@ -24,6 +24,6 @@ internal static class BybitRegistrar
         services.AddBybit();
         services.AddSingleton<BybitRequestGate>();
         services.AddScoped<IBybitInstrumentsClient, BybitInstrumentsClient>();
-        services.AddScoped<IBybitCandlesClient, BybitCandlesClient>();
+        services.AddScoped<IExchangeCandlesClient, BybitCandlesClient>();
     }
 }

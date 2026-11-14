@@ -5,11 +5,10 @@ using Bybit.Net.Objects.Options;
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Time.Testing;
 
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
-using ProfitFox.MarketData.Infrastructure.Exchanges;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Tests.Integration.Http;
@@ -23,12 +22,12 @@ namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
 public class BybitCandlesClientTests
 {
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         _bybit = new StubHttpHandler();
 
         // The rate limiter of the SDK is off: it would wait in real time.
-        _time = new FakeTimeProvider(Now);
+        _time = new WatchedTimeProvider(Now);
         _gate = new BybitRequestGate(
             new FixedOptionsMonitor<BybitApiSettings>(new BybitApiSettings()),
             new ExchangeRetryExecutor(_time),
@@ -40,6 +39,9 @@ public class BybitCandlesClientTests
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
             _gate,
             _time);
+
+        // The timer of the gate that refills its bucket every second.
+        await _time.NextWaitAsync();
     }
 
     [TearDown]
@@ -60,7 +62,7 @@ public class BybitCandlesClientTests
 
     private static readonly BybitListedInstrument Spot = BybitListedInstrumentGenerator.GenerateSpot();
 
-    private FakeTimeProvider _time = null!;
+    private WatchedTimeProvider _time = null!;
     private BybitRequestGate _gate = null!;
     private StubHttpHandler _bybit = null!;
     private BybitCandlesClient _candles = null!;
@@ -137,7 +139,9 @@ public class BybitCandlesClientTests
             .RespondJson(BybitAnswers.Klines("linear", Linear.Symbol, BybitAnswers.Kline(Start, "1", "1", "1", "1", "1", "1")));
 
         Task<IReadOnlyList<Candle>> loading = _candles.GetAsync(Linear, Minutes(from: 0, until: 60), CancellationToken.None);
-        await _time.AdvanceUntilDoneAsync(loading, TimeSpan.FromSeconds(1));
+
+        // The retry waits a second on the clock.
+        await _time.PassNextWaitAsync();
 
         Assert.Multiple(async () =>
         {

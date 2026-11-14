@@ -6,6 +6,7 @@ using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 
@@ -13,13 +14,22 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 ///     Reads the minute candles of spot and linear from the public API of Bybit, one request a call. Bybit gives the volume in the base
 ///     asset and the turnover in the quote asset.
 /// </summary>
-internal sealed class BybitCandlesClient(IBybitRestClient bybit, BybitRequestGate gate, TimeProvider time) : IBybitCandlesClient
+internal sealed class BybitCandlesClient(IBybitRestClient bybit, BybitRequestGate gate, TimeProvider time) : IExchangeCandlesClient
 {
     // The largest page of candles Bybit gives.
     private const int PageSize = 1000;
 
-    public async Task<IReadOnlyList<Candle>> GetAsync(BybitListedInstrument listing, MinuteRange range, CancellationToken cancellationToken)
+    public TimeSpan PageLength => TimeSpan.FromMinutes(PageSize);
+
+    public bool Serves(ListedInstrument listing)
     {
+        return listing is BybitListedInstrument;
+    }
+
+    public async Task<IReadOnlyList<Candle>> GetAsync(ListedInstrument listed, MinuteRange range, CancellationToken cancellationToken)
+    {
+        var listing = (BybitListedInstrument)listed;
+
         // Bybit takes both ends as included: the last millisecond before the end keeps the minute that starts there out.
         BybitResponse<BybitKline> response = await gate.SendAsync(
             async token => BybitResponses.DataOf(
@@ -45,8 +55,10 @@ internal sealed class BybitCandlesClient(IBybitRestClient bybit, BybitRequestGat
     }
 
     // A linear contract tells its launch time; a spot pair tells none, so its first daily candle since then gives the day it started.
-    public async Task<DateTimeOffset?> GetTradingStartAsync(BybitListedInstrument listing, DateTimeOffset since, CancellationToken cancellationToken)
+    public async Task<DateTimeOffset?> GetTradingStartAsync(ListedInstrument listed, DateTimeOffset since, CancellationToken cancellationToken)
     {
+        var listing = (BybitListedInstrument)listed;
+
         if (listing.LaunchTime is { } launchTime)
         {
             return launchTime;

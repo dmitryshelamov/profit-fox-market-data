@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest.Converters;
 
 using Tinkoff.InvestApi.V1;
@@ -23,15 +24,24 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 internal sealed class TInvestCandlesClient(
     MarketDataService.MarketDataServiceClient marketData,
     InstrumentsService.InstrumentsServiceClient instruments,
-    TInvestRequestLimiter limiter,
+    TInvestRequestGate gate,
     IOptionsMonitor<TInvestApiSettings> settings,
-    TimeProvider time) : ITInvestCandlesClient
+    TimeProvider time) : IExchangeCandlesClient
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
-    /// <exception cref="NotSupportedException">TInvestApi:Token is not set; no call goes.</exception>
-    public async Task<IReadOnlyList<Candle>> GetAsync(TInvestListedShare share, MinuteRange range, CancellationToken cancellationToken)
+    // T-Invest gives the minute candles of at most one day in a request.
+    public TimeSpan PageLength => TimeSpan.FromDays(1);
+
+    public bool Serves(ListedInstrument listing)
     {
+        return listing is TInvestListedShare;
+    }
+
+    /// <exception cref="NotSupportedException">TInvestApi:Token is not set; no call goes.</exception>
+    public async Task<IReadOnlyList<Candle>> GetAsync(ListedInstrument listing, MinuteRange range, CancellationToken cancellationToken)
+    {
+        var share = (TInvestListedShare)listing;
         var request = new GetCandlesRequest
         {
             InstrumentId = share.Uid,
@@ -42,7 +52,7 @@ internal sealed class TInvestCandlesClient(
         };
 
         Metadata headers = TInvestMetadata.Of(settings.CurrentValue, $"No candles of {share.Ticker} are read");
-        GetCandlesResponse response = await limiter.SendAsync(
+        GetCandlesResponse response = await gate.SendAsync(
             async token => await marketData.GetCandlesAsync(request, headers, Deadline(), token),
             cancellationToken);
 
@@ -59,8 +69,10 @@ internal sealed class TInvestCandlesClient(
 
     // T-Invest tells when the first minute candle of a share is, whatever the time asked from.
     /// <exception cref="NotSupportedException">TInvestApi:Token is not set; no call goes.</exception>
-    public async Task<DateTimeOffset?> GetTradingStartAsync(TInvestListedShare share, DateTimeOffset since, CancellationToken cancellationToken)
+    public async Task<DateTimeOffset?> GetTradingStartAsync(ListedInstrument listing, DateTimeOffset since, CancellationToken cancellationToken)
     {
+        var share = (TInvestListedShare)listing;
+
         ShareResponse response = await instruments.ShareByAsync(
             new InstrumentRequest { IdType = InstrumentIdType.Uid, Id = share.Uid },
             TInvestMetadata.Of(settings.CurrentValue, $"The trading start of {share.Ticker} is not read"),

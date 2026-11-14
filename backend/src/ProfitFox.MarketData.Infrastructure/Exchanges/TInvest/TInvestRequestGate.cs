@@ -2,6 +2,7 @@ using Grpc.Core;
 
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
@@ -10,21 +11,22 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 ///     The one way of the requests of market data to T-Invest with the one token of the app: at most
 ///     <see cref="TInvestApiSettings.MarketDataRequestsPerMinute" /> in any minute, a sliding window, and the retries of a transient failure.
 ///     After the server said the limit was hit (<c>RESOURCE_EXHAUSTED</c>) none goes until the reset it named; a request then fails at once
-///     with <see cref="ExchangePausedException" />, so it does not wait inside the transaction of a command.
+///     with <see cref="ExchangePausedException" />, so it does not wait inside a command. gRPC tells a failure by an exception, so what
+///     it means is told here, where Bybit tells it on unwrapping its answer (<c>BybitResponses</c>).
 /// </summary>
-internal sealed class TInvestRequestLimiter(IOptionsMonitor<TInvestApiSettings> settings, ExchangeRetryExecutor retries, TimeProvider time)
+internal sealed class TInvestRequestGate(IOptionsMonitor<TInvestApiSettings> settings, ExchangeRetryExecutor retries, TimeProvider time)
 {
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
 
     private readonly Lock _lock = new Lock();
     private readonly Queue<DateTimeOffset> _sent = new Queue<DateTimeOffset>();
-    private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
+    private readonly ExchangePause _pause = new ExchangePause("T-Invest", time);
 
     /// <exception cref="ExchangePausedException">T-Invest limited the requests, now or before the reset.</exception>
     /// <exception cref="TransientExchangeException">The retries of a transient failure ran out.</exception>
     public async Task<T> SendAsync<T>(Func<CancellationToken, Task<T>> request, CancellationToken cancellationToken)
     {
-        ThrowIfPaused();
+        _pause.ThrowIfActive();
 
         return await retries.ExecuteAsync(
             async token =>
@@ -39,7 +41,7 @@ internal sealed class TInvestRequestLimiter(IOptionsMonitor<TInvestApiSettings> 
                 {
                     throw new ExchangePausedException(
                         $"T-Invest limited the requests of market data: {exception.Status.Detail}",
-                        Pause(ResetOf(exception)),
+                        _pause.Extend(ResetOf(exception)),
                         exception);
                 }
                 catch (RpcException exception) when (exception.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.Internal)
@@ -56,7 +58,7 @@ internal sealed class TInvestRequestLimiter(IOptionsMonitor<TInvestApiSettings> 
     {
         while (true)
         {
-            ThrowIfPaused();
+            _pause.ThrowIfActive();
 
             TimeSpan wait;
             DateTimeOffset now = time.GetUtcNow();
@@ -79,34 +81,6 @@ internal sealed class TInvestRequestLimiter(IOptionsMonitor<TInvestApiSettings> 
             }
 
             await Task.Delay(wait, time, cancellationToken);
-        }
-    }
-
-    private void ThrowIfPaused()
-    {
-        DateTimeOffset pausedUntil;
-
-        lock (_lock)
-        {
-            pausedUntil = _pausedUntil;
-        }
-
-        if (time.GetUtcNow() < pausedUntil)
-        {
-            throw new ExchangePausedException($"T-Invest limited the requests of market data; they wait until {pausedUntil:O}.", pausedUntil);
-        }
-    }
-
-    // A pause only ever ends later.
-    private DateTimeOffset Pause(TimeSpan reset)
-    {
-        DateTimeOffset until = time.GetUtcNow() + reset;
-
-        lock (_lock)
-        {
-            _pausedUntil = until > _pausedUntil ? until : _pausedUntil;
-
-            return _pausedUntil;
         }
     }
 

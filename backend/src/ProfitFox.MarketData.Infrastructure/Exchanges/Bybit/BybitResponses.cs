@@ -3,6 +3,8 @@ using System.Net;
 using CryptoExchange.Net.Objects;
 using CryptoExchange.Net.Objects.Errors;
 
+using ProfitFox.MarketData.Application.Exceptions;
+
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 
 internal static class BybitResponses

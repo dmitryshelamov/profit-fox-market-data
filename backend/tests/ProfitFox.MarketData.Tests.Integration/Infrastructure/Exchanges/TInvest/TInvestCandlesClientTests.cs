@@ -4,9 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
-using ProfitFox.MarketData.Infrastructure.Exchanges;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 using ProfitFox.MarketData.Tests.Integration.Grpc;
@@ -59,7 +59,7 @@ public class TInvestCandlesClientTests
         return new TInvestCandlesClient(
             new MarketDataService.MarketDataServiceClient(_api),
             new InstrumentsService.InstrumentsServiceClient(_api),
-            new TInvestRequestLimiter(settings, new ExchangeRetryExecutor(TimeProvider.System), TimeProvider.System),
+            new TInvestRequestGate(settings, new ExchangeRetryExecutor(TimeProvider.System), TimeProvider.System),
             settings,
             TimeProvider.System);
     }

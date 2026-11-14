@@ -171,6 +171,22 @@ public class CandleSeriesRepositoryTests
     }
 
     [Test]
+    public async Task Two_loaders_that_read_the_same_series_both_keep_what_they_covered()
+    {
+        await SaveAsync(Range(Start, minutes: 10));
+        CandleSeries background = (await _repository.GetAsync(Linear.Id, CancellationToken.None))!;
+        CandleSeries read = (await _repository.GetAsync(Linear.Id, CancellationToken.None))!;
+
+        background.Cover(Range(Start.AddMinutes(10), minutes: 10), []);
+        read.Cover(Range(Start.AddMinutes(-10), minutes: 10), []);
+        await _repository.SaveAsync(background, CancellationToken.None);
+        await _repository.SaveAsync(read, CancellationToken.None);
+
+        CandleSeries? stored = await _repository.GetAsync(Linear.Id, CancellationToken.None);
+        Assert.That(stored?.Covered, Is.EqualTo(new[] { Range(Start.AddMinutes(-10), minutes: 30) }));
+    }
+
+    [Test]
     public async Task Candles_are_stored_exactly_as_the_exchange_gave_them()
     {
         var bybit = new Candle(Start, open: 0.00001234m, high: 0.00001240m, low: 0.00001230m, close: 0.00001238m, volume: 1234567.89m, turnover: 15.2771m);

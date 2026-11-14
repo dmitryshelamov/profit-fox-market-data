@@ -42,9 +42,19 @@ and this file is silent, ask which to follow.
 
 ## Application (`ProfitFox.MarketData.Application`)
 
-- `Ports/<Area>` holds the ports to exchanges, named `I<Exchange><What>Client` (`IBybitCandlesClient`, `ITInvestSharesClient`), as
+- `Ports/<Area>` holds the ports to exchanges, named `I<Exchange><What>Client` (`IBybitInstrumentsClient`, `ITInvestSharesClient`), as
   profit-fox-old names them (`IMarketHistoryClient`); the adapter in `Infrastructure/Exchanges/<Exchange>` drops the `I`
-  (`BybitCandlesClient`). Not `Service`: the SDK of T-Invest names its gRPC clients so (`MarketDataService.MarketDataServiceClient`).
+  (`BybitInstrumentsClient`). Not `Service`: the SDK of T-Invest names its gRPC clients so (`MarketDataService.MarketDataServiceClient`).
+  A port every exchange implements the same way is one interface, `IExchange<What>Client` (`IExchangeCandlesClient`), with an
+  adapter per exchange (`BybitCandlesClient`, `TInvestCandlesClient`); its `Serves(listing)` tells which listings are its, so a
+  handler picks the client and has no `switch` on the exchange.
+- `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
+  `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
+- A command that asks an exchange implements `ICommandWithoutTransaction<TResponse>`: it runs outside the transaction of the
+  pipeline, so no transaction stays open while the exchange answers, and saves through one call of a repository, whole by itself.
+- A command gives a named result (`LoadCandlesResult.MoreLeft`), not a bare `bool`.
+- `Queries/<Area>` holds a query with what it asks by (`CandleWindow`, `CandleInterval`); a rule of the input is checked there, not
+  in the controller. A query only reads.
 
 ## Infrastructure (`ProfitFox.MarketData.Infrastructure`)
 

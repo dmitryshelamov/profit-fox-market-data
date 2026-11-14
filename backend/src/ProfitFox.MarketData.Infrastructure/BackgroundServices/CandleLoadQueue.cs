@@ -1,19 +1,27 @@
+using ProfitFox.MarketData.Application.Ports.Candles;
+using ProfitFox.MarketData.Domain.ValueObjects.Candles;
+
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     The windows reads asked for and could not load in time, which <see cref="CandleSyncBackgroundService" /> loads before the history;
-///     the same window is queued once. The queue is kept in memory only: after a restart a read asks again.
+///     The ranges reads asked for and could not wait for, which <see cref="CandleSyncBackgroundService" /> loads before the history. The
+///     same range is queued once, and at most <see cref="Capacity" /> wait: one more is not taken, and its reader asks again later. The
+///     queue is kept in memory only, so after a restart a read asks again too.
 /// </summary>
-internal sealed class CandleLoadQueue
+internal sealed class CandleLoadQueue : ICandleLoadQueue
 {
+    private const int Capacity = 1000;
+
     private readonly Lock _lock = new Lock();
     private readonly List<CandleLoadRequest> _requests = [];
 
-    public void Enqueue(CandleLoadRequest request)
+    public void Enqueue(Guid instrumentId, MinuteRange range)
     {
+        var request = new CandleLoadRequest(instrumentId, range);
+
         lock (_lock)
         {
-            if (!_requests.Contains(request))
+            if (_requests.Count < Capacity && !_requests.Contains(request))
             {
                 _requests.Add(request);
             }
@@ -21,7 +29,7 @@ internal sealed class CandleLoadQueue
     }
 
     /// <summary>
-    ///     The queued windows, oldest first.
+    ///     The queued ranges, oldest first.
     /// </summary>
     public IReadOnlyList<CandleLoadRequest> Pending()
     {
@@ -32,9 +40,9 @@ internal sealed class CandleLoadQueue
     }
 
     /// <summary>
-    ///     Takes a window out once nothing of it is left to load.
+    ///     Takes a range out: nothing of it is left to load, or it failed and its reader asks again.
     /// </summary>
-    public void Complete(CandleLoadRequest request)
+    public void Remove(CandleLoadRequest request)
     {
         lock (_lock)
         {

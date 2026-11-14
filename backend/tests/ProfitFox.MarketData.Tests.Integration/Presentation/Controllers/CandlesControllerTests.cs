@@ -75,6 +75,25 @@ public class CandlesControllerTests
     }
 
     [Test]
+    public async Task A_window_of_an_exchange_that_holds_the_requests_is_loading()
+    {
+        // An app of its own: the pause of Bybit stays in its gate.
+        await using var app = new MarketDataTestApplication();
+        using HttpClient client = app.CreateClient();
+        app.Bybit.RespondJson("", HttpStatusCode.Forbidden);
+
+        HttpResponseMessage response = await client.GetAsync(Url(Linear.Id, "1h", Hour, Hour.AddHours(1)));
+        CandlesInternal? candles = await response.Content.ReadFromJsonAsync<CandlesInternal>(Json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
+            Assert.That(candles!.Loading, Is.True);
+            Assert.That(candles.Covered, Is.Empty);
+        });
+    }
+
+    [Test]
     public async Task An_instrument_the_catalog_does_not_have_is_not_found()
     {
         HttpResponseMessage response = await _client.GetAsync(Url(Guid.NewGuid(), "1h", Hour, Hour.AddHours(1)));

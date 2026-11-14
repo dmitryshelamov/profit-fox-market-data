@@ -25,6 +25,30 @@ public sealed record MinuteRange
     }
 
     /// <summary>
+    ///     The start of the minute <paramref name="time" /> is in.
+    /// </summary>
+    public static DateTimeOffset StartOfMinute(DateTimeOffset time)
+    {
+        return new DateTimeOffset(time.UtcTicks - time.UtcTicks % TimeSpan.TicksPerMinute, TimeSpan.Zero);
+    }
+
+    /// <summary>
+    ///     Whether the two ranges overlap or one starts where the other ends, so together they are one range without a gap.
+    /// </summary>
+    public bool Touches(MinuteRange other)
+    {
+        return other.From <= Until && other.Until >= From;
+    }
+
+    /// <summary>
+    ///     The one range from the earlier start of the two to the later end; for ranges that touch, all their minutes and no other.
+    /// </summary>
+    public MinuteRange Join(MinuteRange other)
+    {
+        return new MinuteRange(other.From < From ? other.From : From, other.Until > Until ? other.Until : Until);
+    }
+
+    /// <summary>
     ///     The parts of this range outside <paramref name="other" />, oldest first: the whole range when the two are apart, none when
     ///     <paramref name="other" /> holds all of it, else the part before it, the part after it or both.
     /// </summary>
@@ -52,7 +76,7 @@ public sealed record MinuteRange
 
     private static void EnsureStartOfMinute(DateTimeOffset time, string name)
     {
-        if (time.UtcTicks % TimeSpan.TicksPerMinute != 0)
+        if (time != StartOfMinute(time))
         {
             throw new ArgumentException($"A range of minutes ends on the start of a minute, not at {time:O}.", name);
         }

@@ -1,6 +1,8 @@
 using Polly;
 using Polly.Retry;
 
+using ProfitFox.MarketData.Application.Exceptions;
+
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 
 /// <summary>

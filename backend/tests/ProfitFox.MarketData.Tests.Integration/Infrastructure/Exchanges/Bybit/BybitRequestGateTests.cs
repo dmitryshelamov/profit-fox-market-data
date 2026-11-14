@@ -1,5 +1,4 @@
-using Microsoft.Extensions.Time.Testing;
-
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Infrastructure.Exchanges;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
@@ -12,13 +11,16 @@ namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
 public class BybitRequestGateTests
 {
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
-        _time = new FakeTimeProvider(Now);
+        _time = new WatchedTimeProvider(Now);
         _gate = new BybitRequestGate(
             new FixedOptionsMonitor<BybitApiSettings>(new BybitApiSettings { RequestsPerSecond = 2, LimitPauseSeconds = 30, BanPauseMinutes = 2 }),
             new ExchangeRetryExecutor(_time),
             _time);
+
+        // The timer that refills the bucket every second.
+        await _time.NextWaitAsync();
     }
 
     [TearDown]
@@ -29,10 +31,10 @@ public class BybitRequestGateTests
 
     private static readonly DateTimeOffset Now = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 0, TimeSpan.Zero);
 
-    private FakeTimeProvider _time = null!;
+    private WatchedTimeProvider _time = null!;
     private BybitRequestGate _gate = null!;
 
-    // A request Bybit limits; the next second, so the bucket has a token for it.
+    // A request Bybit limits, in the next second, so the bucket has a token for it.
     private async Task<ExchangePausedException?> PausedAsync(bool ipBanned)
     {
         _time.Advance(TimeSpan.FromSeconds(1));
@@ -95,14 +97,15 @@ public class BybitRequestGateTests
             },
             CancellationToken.None);
 
-        await _time.AdvanceUntilDoneAsync(sending, TimeSpan.FromSeconds(1));
+        for (var retry = 0; retry < 5; retry++)
+        {
+            await _time.PassNextWaitAsync();
+        }
 
         Assert.Multiple(() =>
         {
             Assert.That(() => sending, Throws.InstanceOf<TransientExchangeException>());
-            Assert.That(
-                attempts.Select(attempt => (attempt - Now).TotalSeconds),
-                Is.EqualTo(new double[] { 0, 1, 3, 7, 15, 31 }));
+            Assert.That(attempts.Select(attempt => (attempt - Now).TotalSeconds), Is.EqualTo(new double[] { 0, 1, 3, 7, 15, 31 }));
         });
     }
 
@@ -118,22 +121,24 @@ public class BybitRequestGateTests
             _time.Advance(paused.Until - _time.GetUtcNow());
         }
 
-        Assert.That(pauses, Is.EqualTo(new[] { TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(120) }));
+        Assert.That(
+            pauses,
+            Is.EqualTo(new[] { TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(120) }));
     }
 
     [Test]
     public async Task No_more_requests_go_in_a_second_than_the_settings_let()
     {
-        Task<int>[] sending = [.. Enumerable.Range(start: 0, count: 3).Select(request => _gate.SendAsync(_ => Task.FromResult(request), CancellationToken.None))];
-        await Task.Delay(TimeSpan.FromMilliseconds(50));
-        bool thirdWaited = !sending[2].IsCompleted;
+        Task<int>[] sending = [.. Enumerable.Range(0, 3).Select(request => _gate.SendAsync(_ => Task.FromResult(request), CancellationToken.None))];
+        await Task.WhenAll(sending[0], sending[1]).WaitAsync(TimeSpan.FromSeconds(5));
 
+        // The bucket is empty, so the third can only go once the clock fills it again.
+        bool thirdWaits = !sending[2].IsCompleted;
         _time.Advance(TimeSpan.FromSeconds(1));
 
         Assert.Multiple(async () =>
         {
-            Assert.That(sending[0].IsCompleted && sending[1].IsCompleted, Is.True);
-            Assert.That(thirdWaited, Is.True);
+            Assert.That(thirdWaits, Is.True);
             Assert.That(await sending[2].WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo(2));
         });
     }

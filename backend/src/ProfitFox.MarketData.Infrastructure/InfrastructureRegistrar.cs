@@ -2,13 +2,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 using ProfitFox.MarketData.Infrastructure.Mediatr;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres;
-using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Candles;
 
 namespace ProfitFox.MarketData.Infrastructure;
 
@@ -59,12 +59,8 @@ public static class InfrastructureRegistrar
                 "CandleSync:TInvest needs TInvestApi:Token while it is enabled.")
             .ValidateOnStart();
         services.AddSingleton<CandleLoadQueue>();
+        services.AddSingleton<ICandleLoadQueue>(provider => provider.GetRequiredService<CandleLoadQueue>());
         services.AddHostedService<CandleSyncBackgroundService>();
-
-        services.AddOptions<CandleReadSettings>()
-            .Bind(configuration.GetSection(CandleReadSettings.Section))
-            .Validate(read => read.MaxExchangeRequests > 0, "CandleRead:MaxExchangeRequests must be above zero.")
-            .ValidateOnStart();
 
         return services;
     }

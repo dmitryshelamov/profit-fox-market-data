@@ -73,25 +73,12 @@ public sealed class CandleSeries : AggregateRoot
             }
         }
 
-        DateTimeOffset from = range.From;
-        DateTimeOffset until = range.Until;
+        // The covered ranges the new one touches become one range with it; the others stay as they are, oldest first.
+        MinuteRange joined = _covered.Where(range.Touches).Aggregate(range, (whole, covered) => whole.Join(covered));
 
-        // The ranges that touch or overlap the new one are joined into it.
-        _covered.RemoveAll(covered =>
-        {
-            if (covered.Until < from || covered.From > until)
-            {
-                return false;
-            }
-
-            from = covered.From < from ? covered.From : from;
-            until = covered.Until > until ? covered.Until : until;
-
-            return true;
-        });
-
-        int index = _covered.FindIndex(covered => covered.From > until);
-        _covered.Insert(index < 0 ? _covered.Count : index, new MinuteRange(from, until));
+        _covered.RemoveAll(range.Touches);
+        _covered.Add(joined);
+        _covered.Sort((left, right) => left.From.CompareTo(right.From));
         _newCandles.AddRange(candles);
     }
 

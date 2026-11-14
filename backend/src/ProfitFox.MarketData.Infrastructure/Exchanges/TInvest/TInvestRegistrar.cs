@@ -45,7 +45,7 @@ internal static class TInvestRegistrar
         services.AddSingleton(provider => new InstrumentsService.InstrumentsServiceClient(provider.GetRequiredService<GrpcChannel>()));
         services.AddSingleton(provider => new MarketDataService.MarketDataServiceClient(provider.GetRequiredService<GrpcChannel>()));
         services.AddScoped<ITInvestSharesClient, TInvestSharesClient>();
-        services.AddSingleton<TInvestRequestLimiter>();
-        services.AddScoped<ITInvestCandlesClient, TInvestCandlesClient>();
+        services.AddSingleton<TInvestRequestGate>();
+        services.AddScoped<IExchangeCandlesClient, TInvestCandlesClient>();
     }
 }

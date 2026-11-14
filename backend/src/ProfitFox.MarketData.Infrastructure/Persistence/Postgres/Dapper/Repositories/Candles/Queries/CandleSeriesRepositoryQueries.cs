@@ -21,12 +21,13 @@ internal static class CandleSeriesRepositoryQueries
                                       ORDER BY 1
                                       """;
 
-    // The saved ranges replace the stored ones: the series read them before it took more.
+    // The saved ranges are added to the stored ones: two loaders of one instrument (the background and a read) each keep what the other
+    // covered since they read the series.
     private const string UpsertSeriesSql = """
                                            INSERT INTO candle_series (instrument_id, covered)
                                            SELECT @InstrumentId, coalesce(range_agg(tstzrange(r.from_time, r.until_time, '[)')), '{}'::tstzmultirange)
                                            FROM unnest(@CoveredFroms::timestamptz[], @CoveredUntils::timestamptz[]) AS r(from_time, until_time)
-                                           ON CONFLICT (instrument_id) DO UPDATE SET covered = EXCLUDED.covered
+                                           ON CONFLICT (instrument_id) DO UPDATE SET covered = candle_series.covered + EXCLUDED.covered
                                            """;
 
     // A candle of a minute already stored takes the values the exchange gives now.

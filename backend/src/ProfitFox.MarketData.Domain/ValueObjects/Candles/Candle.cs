@@ -35,7 +35,7 @@ public sealed record Candle
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(close);
         ArgumentOutOfRangeException.ThrowIfNegative(volume);
 
-        if (openTime.UtcTicks % TimeSpan.TicksPerMinute != 0)
+        if (openTime != MinuteRange.StartOfMinute(openTime))
         {
             throw new ArgumentException($"A minute candle opens at the start of a minute, not at {openTime:O}.", nameof(openTime));
         }

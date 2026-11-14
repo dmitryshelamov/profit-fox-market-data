@@ -1,4 +1,4 @@
-namespace ProfitFox.MarketData.Application.Contracts.Candles;
+namespace ProfitFox.MarketData.Application.Queries.Candles;
 
 public static class CandleIntervalExtensions
 {

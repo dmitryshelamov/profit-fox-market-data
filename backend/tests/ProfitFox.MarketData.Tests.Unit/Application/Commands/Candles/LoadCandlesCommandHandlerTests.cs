@@ -1,12 +1,14 @@
 using NSubstitute;
 
 using ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Domain.Entities.Candles;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
@@ -20,17 +22,15 @@ public class LoadCandlesCommandHandlerTests
     {
         _instruments = Substitute.For<IInstrumentRepository>();
         _series = Substitute.For<ICandleSeriesRepository>();
-        _bybit = Substitute.For<IBybitCandlesClient>();
-        _tinvest = Substitute.For<ITInvestCandlesClient>();
+        _bybit = Exchange<BybitListedInstrument>(TimeSpan.FromMinutes(1000));
+        _tinvest = Exchange<TInvestListedShare>(TimeSpan.FromDays(1));
         _saved = null;
 
         _instruments.GetAsync(Linear.Id, Arg.Any<CancellationToken>()).Returns(Linear);
         _instruments.GetAsync(Share.Id, Arg.Any<CancellationToken>()).Returns(Share);
-        _bybit.GetAsync(Arg.Any<BybitListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>()).Returns([]);
-        _tinvest.GetAsync(Arg.Any<TInvestListedShare>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>()).Returns([]);
         _series.SaveAsync(Arg.Do<CandleSeries>(series => _saved = series), Arg.Any<CancellationToken>());
 
-        _handler = new LoadCandlesCommandHandler(_instruments, _series, _bybit, _tinvest);
+        _handler = new LoadCandlesCommandHandler(_instruments, _series, [_bybit, _tinvest]);
     }
 
     private static readonly DateTimeOffset Now = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 0, TimeSpan.Zero);
@@ -39,18 +39,30 @@ public class LoadCandlesCommandHandlerTests
 
     private static readonly Instrument Share = InstrumentGenerator.Generate(TInvestListedShareGenerator.Generate());
 
-    private static readonly BybitListedInstrument LinearListing = (BybitListedInstrument)Linear.Listing;
+    private static readonly ListedInstrument LinearListing = Linear.Listing;
 
-    private static readonly TInvestListedShare ShareListing = (TInvestListedShare)Share.Listing;
+    private static readonly ListedInstrument ShareListing = Share.Listing;
 
     private IInstrumentRepository _instruments = null!;
     private ICandleSeriesRepository _series = null!;
-    private IBybitCandlesClient _bybit = null!;
-    private ITInvestCandlesClient _tinvest = null!;
+    private IExchangeCandlesClient _bybit = null!;
+    private IExchangeCandlesClient _tinvest = null!;
     private CandleSeries? _saved;
     private LoadCandlesCommandHandler _handler = null!;
 
-    private Task<bool> Load(Instrument instrument, MinuteRange range, DateTimeOffset? requestedAt = null)
+    // The client of an exchange: it serves the listings of its type, gives pages of its length and has no candles unless a test says so.
+    private static IExchangeCandlesClient Exchange<TListing>(TimeSpan pageLength)
+        where TListing : ListedInstrument
+    {
+        IExchangeCandlesClient exchange = Substitute.For<IExchangeCandlesClient>();
+        exchange.Serves(Arg.Any<ListedInstrument>()).Returns(call => call.Arg<ListedInstrument>() is TListing);
+        exchange.PageLength.Returns(pageLength);
+        exchange.GetAsync(Arg.Any<ListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        return exchange;
+    }
+
+    private Task<LoadCandlesResult> Load(Instrument instrument, MinuteRange range, DateTimeOffset? requestedAt = null)
     {
         return _handler.Handle(new LoadCandlesCommand(instrument.Id, range, requestedAt ?? Now.AddSeconds(30)), CancellationToken.None);
     }
@@ -93,14 +105,14 @@ public class LoadCandlesCommandHandlerTests
     {
         Stored(Linear, Minutes(from: -100, until: -1));
 
-        bool early = await Load(Linear, Minutes(from: -100, until: 0), Now.AddSeconds(4));
-        bool settled = await Load(Linear, Minutes(from: -100, until: 0), Now.AddSeconds(5));
+        LoadCandlesResult early = await Load(Linear, Minutes(from: -100, until: 0), Now.AddSeconds(4));
+        LoadCandlesResult settled = await Load(Linear, Minutes(from: -100, until: 0), Now.AddSeconds(5));
 
         Assert.Multiple(async () =>
         {
-            Assert.That(early, Is.False);
-            Assert.That(settled, Is.False);
-            await _bybit.Received(1).GetAsync(Arg.Any<BybitListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>());
+            Assert.That(early, Is.EqualTo(LoadCandlesResult.NothingLeft));
+            Assert.That(settled, Is.EqualTo(LoadCandlesResult.NothingLeft));
+            await _bybit.Received(1).GetAsync(Arg.Any<ListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>());
             await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -1, until: 0), Arg.Any<CancellationToken>());
         });
     }
@@ -110,11 +122,11 @@ public class LoadCandlesCommandHandlerTests
     {
         _bybit.GetTradingStartAsync(LinearListing, Now.AddMinutes(-3000), Arg.Any<CancellationToken>()).Returns(Now.AddMinutes(-100).AddSeconds(30));
 
-        bool left = await Load(Linear, Minutes(from: -3000, until: 0));
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -3000, until: 0));
 
         Assert.Multiple(async () =>
         {
-            Assert.That(left, Is.False);
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
             Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -3000, until: 0) }));
             await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -100, until: 0), Arg.Any<CancellationToken>());
         });
@@ -125,11 +137,11 @@ public class LoadCandlesCommandHandlerTests
     {
         _bybit.GetTradingStartAsync(LinearListing, Now.AddMinutes(-3000), Arg.Any<CancellationToken>()).Returns(Now.AddDays(1));
 
-        bool left = await Load(Linear, Minutes(from: -3000, until: 0));
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -3000, until: 0));
 
         Assert.Multiple(async () =>
         {
-            Assert.That(left, Is.False);
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
             Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -3000, until: 0) }));
             await _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, default!, cancellationToken: default);
         });
@@ -138,11 +150,11 @@ public class LoadCandlesCommandHandlerTests
     [Test]
     public async Task A_new_series_without_a_known_start_loads_the_newest_page()
     {
-        bool left = await Load(Share, Minutes(from: -3000, until: 0));
+        LoadCandlesResult left = await Load(Share, Minutes(from: -3000, until: 0));
 
         Assert.Multiple(async () =>
         {
-            Assert.That(left, Is.True);
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
             Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -1440, until: 0) }));
             await _tinvest.Received(1).GetAsync(ShareListing, Minutes(from: -1440, until: 0), Arg.Any<CancellationToken>());
         });
@@ -151,21 +163,21 @@ public class LoadCandlesCommandHandlerTests
     [Test]
     public void An_instrument_the_catalog_does_not_have_is_rejected()
     {
-        Assert.ThrowsAsync<InvalidOperationException>(() => _handler.Handle(
+        Assert.ThrowsAsync<InstrumentNotFoundException>(() => _handler.Handle(
             new LoadCandlesCommand(Guid.NewGuid(), Minutes(from: -10, until: 0), Now),
             CancellationToken.None));
     }
 
     [Test]
-    public async Task Nothing_left_to_load_gives_false_without_asking_the_exchange_or_saving()
+    public async Task Nothing_left_to_load_asks_no_exchange_and_saves_nothing()
     {
         Stored(Linear, Minutes(from: -100, until: 0));
 
-        bool left = await Load(Linear, Minutes(from: -50, until: 0));
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -50, until: 0));
 
         Assert.Multiple(async () =>
         {
-            Assert.That(left, Is.False);
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
             await _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, default!, cancellationToken: default);
             await _series.DidNotReceiveWithAnyArgs().SaveAsync(default!, cancellationToken: default);
         });
@@ -177,11 +189,11 @@ public class LoadCandlesCommandHandlerTests
         Stored(Linear, Minutes(from: -2000, until: -10));
         _bybit.GetAsync(LinearListing, Minutes(from: -10, until: 0), Arg.Any<CancellationToken>()).Returns([CandleAt(-5)]);
 
-        bool left = await Load(Linear, Minutes(from: -3000, until: 0));
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -3000, until: 0));
 
         Assert.Multiple(() =>
         {
-            Assert.That(left, Is.True);
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
             Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -2000, until: 0) }));
             Assert.That(_saved.NewCandles, Is.EqualTo(new[] { CandleAt(-5) }));
         });

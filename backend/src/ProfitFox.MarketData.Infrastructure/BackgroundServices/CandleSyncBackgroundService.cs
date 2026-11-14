@@ -7,16 +7,16 @@ using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
-using ProfitFox.MarketData.Infrastructure.Exchanges;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the candles of every listed instrument of the exchanges <see cref="CandleSyncSettings" /> enables, back to
-///     <see cref="CandleSyncSettings.HistoryDays" />, and before them the windows reads asked for and could not load in time
-///     (<see cref="CandleLoadQueue" />). A round loads one page of every window and every instrument in turn, the newest it misses first,
+///     <see cref="CandleSyncSettings.HistoryDays" />, and before them the ranges reads asked for and could not wait for
+///     (<see cref="CandleLoadQueue" />). A round loads one page of every such range and every instrument in turn, the newest it misses first,
 ///     so fresh minutes come before old history and every instrument moves on at the same pace. Rounds follow one another while pages
 ///     are left; an exchange with none left waits <see cref="CandleSyncSettings.IdleSeconds" />. The settings are read again before every
 ///     round.
@@ -53,24 +53,35 @@ internal sealed class CandleSyncBackgroundService(
         }
     }
 
-    // A round: first one page of every window reads asked for, then one page of the history of every listed instrument of the exchange;
-    // whether any of them has more to load.
+    // A round: first one page of every range reads asked for, then one page of the history of every listed instrument of the exchange;
+    // whether any of them has more to load. An exchange that is unavailable stops the round: every other instrument would fail the same
+    // way after retries of its own, so the exchange is tried again after the idle wait.
     private async Task<bool> LoadRoundAsync(Exchange exchange, int historyDays, CancellationToken stoppingToken)
     {
         IReadOnlyCollection<InstrumentInternal> instruments = await InstrumentsAsync(exchange, stoppingToken);
-        bool hasMorePages = await LoadRequestedAsync(exchange, instruments, stoppingToken);
-        MinuteRange history = History(historyDays);
 
-        foreach (InstrumentInternal instrument in instruments.Where(instrument => instrument.DelistedAt is null))
+        try
         {
-            hasMorePages |= await LoadPageAsync(exchange, instrument.Id, history, stoppingToken) == Page.MoreLeft;
-        }
+            bool hasMorePages = await LoadRequestedAsync(exchange, instruments, stoppingToken);
+            MinuteRange history = History(historyDays);
 
-        return hasMorePages;
+            foreach (InstrumentInternal instrument in instruments.Where(instrument => instrument.DelistedAt is null))
+            {
+                hasMorePages |= await LoadPageAsync(exchange, instrument.Id, history, stoppingToken) == LoadCandlesResult.MoreLeft;
+            }
+
+            return hasMorePages;
+        }
+        catch (TransientExchangeException exception) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "{Exchange} is unavailable; the loading of its candles goes on after the idle wait.", exchange);
+
+            return false;
+        }
     }
 
-    // One page of every window reads asked for of an instrument of the exchange, listed or not; a window leaves the queue once nothing of
-    // it is left, and one that failed stays for the next round.
+    // One page of every range reads asked for of an instrument of the exchange, listed or not. A range leaves the queue once nothing of it
+    // is left to load now: it is loaded, or its page failed and its reader asks again.
     private async Task<bool> LoadRequestedAsync(Exchange exchange, IReadOnlyCollection<InstrumentInternal> instruments, CancellationToken stoppingToken)
     {
         HashSet<Guid> ofExchange = [.. instruments.Select(instrument => instrument.Id)];
@@ -78,39 +89,39 @@ internal sealed class CandleSyncBackgroundService(
 
         foreach (CandleLoadRequest request in queue.Pending().Where(request => ofExchange.Contains(request.InstrumentId)))
         {
-            Page page = await LoadPageAsync(exchange, request.InstrumentId, request.Range, stoppingToken);
-
-            if (page == Page.NoneLeft)
+            if (await LoadPageAsync(exchange, request.InstrumentId, request.Range, stoppingToken) == LoadCandlesResult.MoreLeft)
             {
-                queue.Complete(request);
+                hasMorePages = true;
             }
-
-            hasMorePages |= page == Page.MoreLeft;
+            else
+            {
+                queue.Remove(request);
+            }
         }
 
         return hasMorePages;
     }
 
-    // One page of one instrument of the range. A pause of the exchange is waited out here, outside the transaction of the command; any
-    // other failure is logged and the page is tried again in the next round.
-    private async Task<Page> LoadPageAsync(Exchange exchange, Guid instrumentId, MinuteRange range, CancellationToken stoppingToken)
+    // One page of one instrument of the range. A pause of the exchange is waited out here. A page that fails for a reason of its own is
+    // logged and counts as nothing left for now: its history is tried again in the next round.
+    private async Task<LoadCandlesResult> LoadPageAsync(Exchange exchange, Guid instrumentId, MinuteRange range, CancellationToken stoppingToken)
     {
         try
         {
-            return await SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow()), stoppingToken) ? Page.MoreLeft : Page.NoneLeft;
+            return await SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow()), stoppingToken);
         }
         catch (ExchangePausedException exception) when (!stoppingToken.IsCancellationRequested)
         {
             logger.LogWarning("{Exchange} paused the loading of candles until {Until:O}: {Reason}", exchange, exception.Until, exception.Message);
             await WaitUntilAsync(exception.Until, stoppingToken);
 
-            return Page.MoreLeft;
+            return LoadCandlesResult.MoreLeft;
         }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        catch (Exception exception) when (exception is not TransientExchangeException && !stoppingToken.IsCancellationRequested)
         {
             logger.LogError(exception, "Loading the candles of instrument {InstrumentId} of {Exchange} failed.", instrumentId, exchange);
 
-            return Page.Failed;
+            return LoadCandlesResult.NothingLeft;
         }
     }
 
@@ -149,7 +160,7 @@ internal sealed class CandleSyncBackgroundService(
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        return new MinuteRange(StartOfMinute(now.AddDays(-historyDays)), StartOfMinute(now));
+        return new MinuteRange(MinuteRange.StartOfMinute(now.AddDays(-historyDays)), MinuteRange.StartOfMinute(now));
     }
 
     private async Task WaitUntilAsync(DateTimeOffset until, CancellationToken stoppingToken)
@@ -185,22 +196,9 @@ internal sealed class CandleSyncBackgroundService(
         return await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, stoppingToken);
     }
 
-    private static DateTimeOffset StartOfMinute(DateTimeOffset time)
-    {
-        return new DateTimeOffset(time.UtcTicks - time.UtcTicks % TimeSpan.TicksPerMinute, TimeSpan.Zero);
-    }
-
     private enum Exchange
     {
         Bybit,
         TInvest
-    }
-
-    // What a page left of its range: more to load, nothing, or a failure that leaves the range as it was.
-    private enum Page
-    {
-        MoreLeft,
-        NoneLeft,
-        Failed
     }
 }

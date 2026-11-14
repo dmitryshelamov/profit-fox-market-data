@@ -7,6 +7,42 @@ public class MinuteRangeTests
 {
     private static readonly DateTimeOffset From = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 0, TimeSpan.Zero);
 
+    [Test]
+    public void Join_gives_the_one_range_from_the_earlier_start_to_the_later_end()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(Minutes(from: 10, until: 20).Join(Minutes(from: 20, until: 30)), Is.EqualTo(Minutes(from: 10, until: 30)));
+            Assert.That(Minutes(from: 10, until: 20).Join(Minutes(from: 5, until: 12)), Is.EqualTo(Minutes(from: 5, until: 20)));
+            Assert.That(Minutes(from: 10, until: 20).Join(Minutes(from: 12, until: 15)), Is.EqualTo(Minutes(from: 10, until: 20)));
+        });
+    }
+
+    [Test]
+    public void Ranges_that_overlap_or_meet_end_to_start_touch_and_ranges_with_a_gap_do_not()
+    {
+        MinuteRange range = Minutes(from: 10, until: 20);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(range.Touches(Minutes(from: 15, until: 30)), Is.True);
+            Assert.That(range.Touches(Minutes(from: 20, until: 30)), Is.True);
+            Assert.That(range.Touches(Minutes(from: 0, until: 10)), Is.True);
+            Assert.That(range.Touches(Minutes(from: 21, until: 30)), Is.False);
+            Assert.That(range.Touches(Minutes(from: 0, until: 9)), Is.False);
+        });
+    }
+
+    [Test]
+    public void The_start_of_a_minute_drops_its_seconds_whatever_the_offset()
+    {
+        var inside = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 14, minute: 30, second: 59, millisecond: 999, TimeSpan.FromHours(5.5));
+
+        Assert.That(
+            MinuteRange.StartOfMinute(inside),
+            Is.EqualTo(new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 0, TimeSpan.Zero)));
+    }
+
     private static MinuteRange Minutes(int from, int until)
     {
         return new MinuteRange(From.AddMinutes(from), From.AddMinutes(until));
