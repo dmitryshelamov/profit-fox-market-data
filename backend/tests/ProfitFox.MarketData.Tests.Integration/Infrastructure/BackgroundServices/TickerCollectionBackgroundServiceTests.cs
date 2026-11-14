@@ -107,7 +107,8 @@ public class TickerCollectionBackgroundServiceTests
     }
 
     // The wait the service is in for its next boundary. The deadline of the snapshot before it was a wait on the clock too; the service
-    // has let go of it by the time it waits for the boundary.
+    // has let go of it by the time it waits for the boundary. The two are told apart by their length: the clock of these tests starts so
+    // that no boundary is as near as the deadline.
     private async Task<TimeSpan> WaitForBoundaryAsync()
     {
         TimeSpan wait = await _time.NextWaitAsync();
@@ -134,6 +135,26 @@ public class TickerCollectionBackgroundServiceTests
         {
             Assert.That(toBoundary, Is.EqualTo(TimeSpan.FromSeconds(30)));
             Assert.That(sent, Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary)));
+        });
+    }
+
+    [Test]
+    public async Task A_boundary_the_service_wakes_up_for_after_its_deadline_is_skipped()
+    {
+        await StartAsync();
+        TimeSpan toBoundary = await WaitForBoundaryAsync();
+
+        // The clock is past the boundary and its deadline at once, as when the process was held for a while.
+        _time.Advance(toBoundary + Deadline + TimeSpan.FromSeconds(5));
+        TimeSpan toNextBoundary = await _time.NextWaitAsync();
+        _time.Advance(toNextBoundary);
+
+        Assert.Multiple(async () =>
+        {
+            // No snapshot of the first boundary was started: the next wait is for the second one.
+            Assert.That(toNextBoundary, Is.EqualTo(Minute - Deadline - TimeSpan.FromSeconds(5)));
+            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+            await _sender.Received(1).Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>());
         });
     }
 
@@ -208,6 +229,33 @@ public class TickerCollectionBackgroundServiceTests
     }
 
     [Test]
+    public async Task A_snapshot_started_late_has_only_the_rest_of_the_deadline()
+    {
+        var givenUp = new TaskCompletionSource();
+        _sender.Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                // Bybit never answers: only the token of the request ends it.
+                await using CancellationTokenRegistration registration = call.Arg<CancellationToken>().Register(givenUp.SetResult);
+                await Task.Delay(Timeout.Infinite, call.Arg<CancellationToken>());
+
+                return new CollectBybitTickersResult(OpenInterestPoints: 0, FundingRatePoints: 0);
+            });
+
+        await StartAsync();
+        TimeSpan toBoundary = await WaitForBoundaryAsync();
+
+        // The service wakes up four seconds after the boundary.
+        _time.Advance(toBoundary + TimeSpan.FromSeconds(4));
+        TimeSpan left = await _time.NextWaitAsync();
+        _time.Advance(left);
+        await givenUp.Task.WaitAsync(Patience);
+
+        // The deadline is counted from the boundary, not from the late start.
+        Assert.That(left, Is.EqualTo(Deadline - TimeSpan.FromSeconds(4)));
+    }
+
+    [Test]
     public async Task A_snapshot_that_fails_skips_the_minute_and_the_next_boundary_still_runs()
     {
         _sender.Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>())
@@ -247,8 +295,11 @@ public class TickerCollectionBackgroundServiceTests
         await StartAsync(bybit: false);
         await PassToBoundaryAsync();
 
+        // The first boundary is behind the service only once it waits for the second: a switch made before that could still be read for
+        // the first.
+        TimeSpan toNextBoundary = await _time.NextWaitAsync();
         Save("TickerCollection:Bybit:Enabled", "true");
-        await PassToBoundaryAsync();
+        _time.Advance(toNextBoundary);
 
         Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
     }

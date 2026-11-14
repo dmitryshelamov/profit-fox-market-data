@@ -62,13 +62,12 @@ and this file is silent, ask which to follow.
   `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
 - No request runs in a transaction of the MediatR pipeline: a handler asks an exchange, which no open transaction should wait
   for. A handler saves through one call of a repository, and the repository makes that call whole in a transaction of its own
-  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it through
-  `ITransactionExecutor` of `Ports/Transactions`, around the saves only (`CollectBybitTickersCommandHandler`).
+  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it.
 - A command gives a named result (`LoadCandlesResult.MoreLeft`), not a bare `bool`.
 - `Queries/<Area>` holds a query with what it asks by (`CandleWindow`, `CandleInterval`); a rule of the input is checked there, not
-  in the controller. A query only reads. Its handler lives next to it when the repositories of the domain answer it
-  (`GetInstrumentsQueryHandler`), and in `Infrastructure/Persistence/Queries/Handlers/<Area>` when it needs SQL of its own
-  (`GetCandlesQueryHandler`).
+  in the controller. What the queries of several areas ask by the same way lives in `Queries` itself (`PointWindow`). A query
+  only reads. Its handler lives next to it when the repositories of the domain answer it (`GetInstrumentsQueryHandler`), and in
+  `Infrastructure/Persistence/Queries/Handlers/<Area>` when it needs SQL of its own (`GetCandlesQueryHandler`).
 - `Contracts/<Area>` holds what a query gives and the API shows, named `<Name>Internal` as in profit-fox-old
   (`InstrumentInternal`), with converters from the domain in `Contracts/<Area>/Converters`.
 

@@ -4,13 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Queries;
 using ProfitFox.MarketData.Application.Queries.Funding;
 
 namespace ProfitFox.MarketData.Presentation.Controllers;
 
 [ApiController]
 [Route("api/instruments/{instrumentId:guid}/funding-rate")]
-public sealed class FundingRateController(ISender sender) : ControllerBase
+public sealed class FundingRatesController(ISender sender) : ControllerBase
 {
     /// <summary>
     ///     The stored points of the funding rate of the coming payment of the instrument in <c>[from, to)</c>, oldest first, each with
@@ -28,18 +29,18 @@ public sealed class FundingRateController(ISender sender) : ControllerBase
         [FromQuery] [BindRequired] DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        FundingRateWindow window;
+        PointWindow window;
 
         try
         {
-            window = new FundingRateWindow(from, to);
+            window = new PointWindow(from, to);
         }
         catch (ArgumentException exception)
         {
             return Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest);
         }
 
-        FundingRatePointsInternal points = await sender.Send(new GetFundingRateQuery(instrumentId, window), cancellationToken);
+        FundingRatePointsInternal points = await sender.Send(new GetFundingRatesQuery(instrumentId, window), cancellationToken);
 
         return Ok(points);
     }

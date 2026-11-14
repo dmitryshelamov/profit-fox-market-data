@@ -7,4 +7,4 @@ namespace ProfitFox.MarketData.Application.Queries.OpenInterest;
 /// <summary>
 ///     The points of open interest storage holds for the instrument in the window, as they were collected; it loads nothing.
 /// </summary>
-public sealed record GetOpenInterestQuery(Guid InstrumentId, OpenInterestWindow Window) : IRequest<OpenInterestPointsInternal>;
+public sealed record GetOpenInterestQuery(Guid InstrumentId, PointWindow Window) : IRequest<OpenInterestPointsInternal>;

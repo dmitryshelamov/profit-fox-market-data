@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Npgsql;
 
-using ProfitFox.MarketData.Application.Ports.Transactions;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.OpenInterest;
@@ -72,23 +71,6 @@ public class OpenInterestRepositoryTests
         Assert.That(
             await StoredAsync(),
             Is.EqualTo(new[] { new OpenInterestPoint(Btc.Id, Minute, value: 7m), new OpenInterestPoint(Btc.Id, Minute.AddMinutes(1), value: 6m) }));
-    }
-
-    [Test]
-    public async Task Points_saved_in_a_transaction_that_fails_are_not_stored()
-    {
-        ITransactionExecutor transactions = _scope.ServiceProvider.GetRequiredService<ITransactionExecutor>();
-
-        Assert.ThrowsAsync<InvalidOperationException>(() => transactions.ExecuteAsync(
-            async () =>
-            {
-                await _repository.SaveAsync([new OpenInterestPoint(Btc.Id, Minute, value: 5m)], CancellationToken.None);
-
-                throw new InvalidOperationException("The other series was not saved.");
-            },
-            CancellationToken.None));
-
-        Assert.That(await StoredAsync(), Is.Empty);
     }
 
     [Test]

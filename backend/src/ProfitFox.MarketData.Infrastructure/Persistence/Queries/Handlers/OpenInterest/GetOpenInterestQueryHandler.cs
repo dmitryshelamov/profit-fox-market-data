@@ -6,6 +6,7 @@ using Npgsql;
 
 using ProfitFox.MarketData.Application.Contracts.OpenInterest;
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Queries;
 using ProfitFox.MarketData.Application.Queries.OpenInterest;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.OpenInterest.Contracts;
@@ -14,7 +15,7 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.OpenInter
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.OpenInterest;
 
 /// <summary>
-///     Reads the stored points of the window as they are, oldest first, and cuts the answer at <see cref="OpenInterestWindow.MaxPoints" />.
+///     Reads the stored points of the window as they are, oldest first, and cuts the answer at <see cref="PointWindow.MaxPoints" />.
 /// </summary>
 internal sealed class GetOpenInterestQueryHandler(IInstrumentRepository instruments, NpgsqlConnection connection)
     : IRequestHandler<GetOpenInterestQuery, OpenInterestPointsInternal>
@@ -26,7 +27,7 @@ internal sealed class GetOpenInterestQueryHandler(IInstrumentRepository instrume
         OpenInterestPointDb[] rows =
         [
             .. await connection.QueryAsync<OpenInterestPointDb>(
-                GetOpenInterestQueries.Points(request.InstrumentId, request.Window, OpenInterestWindow.MaxPoints + 1, cancellationToken))
+                GetOpenInterestQueries.Points(request.InstrumentId, request.Window, PointWindow.MaxPoints + 1, cancellationToken))
         ];
 
         // Only an instrument of the catalog has points, so the catalog is asked only when none came.
@@ -36,7 +37,7 @@ internal sealed class GetOpenInterestQueryHandler(IInstrumentRepository instrume
         }
 
         return new OpenInterestPointsInternal(
-            [.. rows.Take(OpenInterestWindow.MaxPoints).Select(row => new OpenInterestPointInternal(row.Time, row.Value))],
-            rows.Length > OpenInterestWindow.MaxPoints ? rows[^1].Time : null);
+            [.. rows.Take(PointWindow.MaxPoints).Select(row => new OpenInterestPointInternal(row.Time, row.Value))],
+            rows.Length > PointWindow.MaxPoints ? rows[^1].Time : null);
     }
 }

@@ -1,5 +1,3 @@
-using System.Data;
-
 using Dapper;
 
 using ProfitFox.MarketData.Domain.ValueObjects.Funding;
@@ -17,7 +15,7 @@ internal static class FundingRateRepositoryQueries
                                          rate = EXCLUDED.rate
                                      """;
 
-    public static CommandDefinition Upsert(IReadOnlyCollection<FundingRatePoint> points, IDbTransaction? transaction, CancellationToken cancellationToken)
+    public static CommandDefinition Upsert(IReadOnlyCollection<FundingRatePoint> points, CancellationToken cancellationToken)
     {
         var columns = new
         {
@@ -26,6 +24,6 @@ internal static class FundingRateRepositoryQueries
             Rates = points.Select(point => point.Rate).ToArray()
         };
 
-        return new CommandDefinition(UpsertSql, columns, transaction, cancellationToken: cancellationToken);
+        return new CommandDefinition(UpsertSql, columns, cancellationToken: cancellationToken);
     }
 }

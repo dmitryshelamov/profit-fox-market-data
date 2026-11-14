@@ -1,10 +1,10 @@
 using Dapper;
 
-using ProfitFox.MarketData.Application.Queries.Funding;
+using ProfitFox.MarketData.Application.Queries;
 
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Funding.Queries;
 
-internal static class GetFundingRateQueries
+internal static class GetFundingRatesQueries
 {
     private const string PointsSql = """
                                      SELECT time AS "Time", rate AS "Rate"
@@ -14,7 +14,7 @@ internal static class GetFundingRateQueries
                                      LIMIT @Limit
                                      """;
 
-    public static CommandDefinition Points(Guid instrumentId, FundingRateWindow window, int limit, CancellationToken cancellationToken)
+    public static CommandDefinition Points(Guid instrumentId, PointWindow window, int limit, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
             PointsSql,

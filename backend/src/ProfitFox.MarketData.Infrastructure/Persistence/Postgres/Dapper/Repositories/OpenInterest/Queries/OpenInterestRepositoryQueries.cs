@@ -1,5 +1,3 @@
-using System.Data;
-
 using Dapper;
 
 using ProfitFox.MarketData.Domain.ValueObjects.OpenInterest;
@@ -17,7 +15,7 @@ internal static class OpenInterestRepositoryQueries
                                          value = EXCLUDED.value
                                      """;
 
-    public static CommandDefinition Upsert(IReadOnlyCollection<OpenInterestPoint> points, IDbTransaction? transaction, CancellationToken cancellationToken)
+    public static CommandDefinition Upsert(IReadOnlyCollection<OpenInterestPoint> points, CancellationToken cancellationToken)
     {
         var columns = new
         {
@@ -26,6 +24,6 @@ internal static class OpenInterestRepositoryQueries
             Values = points.Select(point => point.Value).ToArray()
         };
 
-        return new CommandDefinition(UpsertSql, columns, transaction, cancellationToken: cancellationToken);
+        return new CommandDefinition(UpsertSql, columns, cancellationToken: cancellationToken);
     }
 }

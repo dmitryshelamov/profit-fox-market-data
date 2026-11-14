@@ -20,13 +20,4 @@ public class OpenInterestPointTests
     {
         Assert.That(() => new OpenInterestPoint(Btc, Minute, value: -0.001m), Throws.InstanceOf<ArgumentOutOfRangeException>());
     }
-
-    [Test]
-    public void Points_of_the_same_instrument_time_and_value_are_equal()
-    {
-        var first = new OpenInterestPoint(Btc, Minute, value: 52345.123m);
-        var second = new OpenInterestPoint(Btc, Minute, value: 52345.123m);
-
-        Assert.That(first, Is.EqualTo(second));
-    }
 }

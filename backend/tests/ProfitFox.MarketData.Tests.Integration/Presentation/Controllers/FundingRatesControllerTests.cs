@@ -14,7 +14,7 @@ using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instrumen
 namespace ProfitFox.MarketData.Tests.Integration.Presentation.Controllers;
 
 [TestFixture]
-public class FundingRateControllerTests
+public class FundingRatesControllerTests
 {
     [SetUp]
     public async Task SetUp()

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Application.Contracts.OpenInterest;
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Queries;
 using ProfitFox.MarketData.Application.Queries.OpenInterest;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
@@ -44,7 +45,7 @@ public class GetOpenInterestQueryHandlerTests
     private Task<OpenInterestPointsInternal> ReadAsync(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
     {
         return _scope.ServiceProvider.GetRequiredService<ISender>()
-            .Send(new GetOpenInterestQuery(instrumentId, new OpenInterestWindow(from, to)), CancellationToken.None);
+            .Send(new GetOpenInterestQuery(instrumentId, new PointWindow(from, to)), CancellationToken.None);
     }
 
     private Task StoreAsync(params OpenInterestPoint[] points)

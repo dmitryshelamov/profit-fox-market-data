@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 using ProfitFox.MarketData.Application.Contracts.OpenInterest;
+using ProfitFox.MarketData.Application.Queries;
 using ProfitFox.MarketData.Application.Queries.OpenInterest;
 
 namespace ProfitFox.MarketData.Presentation.Controllers;
@@ -28,11 +29,11 @@ public sealed class OpenInterestController(ISender sender) : ControllerBase
         [FromQuery] [BindRequired] DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        OpenInterestWindow window;
+        PointWindow window;
 
         try
         {
-            window = new OpenInterestWindow(from, to);
+            window = new PointWindow(from, to);
         }
         catch (ArgumentException exception)
         {

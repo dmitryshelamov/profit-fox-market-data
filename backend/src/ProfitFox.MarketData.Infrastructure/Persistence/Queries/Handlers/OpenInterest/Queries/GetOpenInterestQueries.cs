@@ -1,6 +1,6 @@
 using Dapper;
 
-using ProfitFox.MarketData.Application.Queries.OpenInterest;
+using ProfitFox.MarketData.Application.Queries;
 
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.OpenInterest.Queries;
 
@@ -14,7 +14,7 @@ internal static class GetOpenInterestQueries
                                      LIMIT @Limit
                                      """;
 
-    public static CommandDefinition Points(Guid instrumentId, OpenInterestWindow window, int limit, CancellationToken cancellationToken)
+    public static CommandDefinition Points(Guid instrumentId, PointWindow window, int limit, CancellationToken cancellationToken)
     {
         return new CommandDefinition(
             PointsSql,

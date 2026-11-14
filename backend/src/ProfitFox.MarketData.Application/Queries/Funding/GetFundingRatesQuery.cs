@@ -8,4 +8,4 @@ namespace ProfitFox.MarketData.Application.Queries.Funding;
 ///     The points of the funding rate of the coming payment storage holds for the instrument in the window, as they were collected; it
 ///     loads nothing.
 /// </summary>
-public sealed record GetFundingRateQuery(Guid InstrumentId, FundingRateWindow Window) : IRequest<FundingRatePointsInternal>;
+public sealed record GetFundingRatesQuery(Guid InstrumentId, PointWindow Window) : IRequest<FundingRatePointsInternal>;

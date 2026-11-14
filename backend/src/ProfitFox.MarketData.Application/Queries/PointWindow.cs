@@ -1,10 +1,10 @@
-namespace ProfitFox.MarketData.Application.Queries.Funding;
+namespace ProfitFox.MarketData.Application.Queries;
 
 /// <summary>
-///     What a read of funding rates asks for: the stored points in <c>[From, To)</c>, at most <see cref="MaxPoints" /> of them an
-///     answer.
+///     What a read of a series of points asks for, the open interest or the funding rates alike: the stored points in
+///     <c>[From, To)</c>, at most <see cref="MaxPoints" /> of them an answer.
 /// </summary>
-public sealed record FundingRateWindow
+public sealed record PointWindow
 {
     public const int MaxPoints = 1000;
 
@@ -13,7 +13,7 @@ public sealed record FundingRateWindow
     public DateTimeOffset To { get; }
 
     /// <exception cref="ArgumentException">The window does not end after it starts.</exception>
-    public FundingRateWindow(DateTimeOffset from, DateTimeOffset to)
+    public PointWindow(DateTimeOffset from, DateTimeOffset to)
     {
         if (to <= from)
         {

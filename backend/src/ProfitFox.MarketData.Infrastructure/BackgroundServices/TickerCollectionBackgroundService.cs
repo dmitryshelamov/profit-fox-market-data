@@ -27,6 +27,8 @@ internal sealed class TickerCollectionBackgroundService(
         // Valid here: the app checks the settings when it starts.
         TickerCollectionSettings collection = settings.CurrentValue;
 
+        DateTimeOffset? served = null;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             // The boundary is counted from the clock every time, so the snapshots do not drift and a boundary that passed while a
@@ -34,7 +36,14 @@ internal sealed class TickerCollectionBackgroundService(
             DateTimeOffset now = time.GetUtcNow();
             DateTimeOffset boundary = MinuteRange.StartOfMinute(now).AddMinutes(1);
 
+            // A timer may fire a moment before its boundary by the clock: the boundary just served is not served again.
+            if (boundary <= served)
+            {
+                boundary = served.Value.AddMinutes(1);
+            }
+
             await Task.Delay(boundary - now, time, stoppingToken);
+            served = boundary;
 
             collection = settings.CurrentOrLastValid(collection, logger);
 
@@ -49,8 +58,21 @@ internal sealed class TickerCollectionBackgroundService(
     // escaping exception would stop the host.
     private async Task CollectAsync(DateTimeOffset boundary, TimeSpan deadline, CancellationToken stoppingToken)
     {
-        // The deadline runs on the clock of the app, as every wait of the service does.
-        using var timeout = new CancellationTokenSource(deadline, time);
+        // The deadline is counted from the boundary, not from when the service woke up: a late start leaves less time, or none.
+        TimeSpan left = boundary + deadline - time.GetUtcNow();
+
+        if (left <= TimeSpan.Zero)
+        {
+            logger.LogWarning(
+                "The service woke up more than {Deadline} s after {Boundary:O}; the tickers of Bybit for it are skipped.",
+                deadline.TotalSeconds,
+                boundary);
+
+            return;
+        }
+
+        // The rest of the deadline runs on the clock of the app, as every wait of the service does.
+        using var timeout = new CancellationTokenSource(left, time);
         using var timeoutOrStopping = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, stoppingToken);
 
         try

@@ -33,7 +33,8 @@ public class BybitTickersClientTests
                 new HttpClient(_bybit),
                 NullLoggerFactory.Instance,
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
-            _gate);
+            _gate,
+            NullLogger<BybitTickersClient>.Instance);
     }
 
     [TearDown]
@@ -60,6 +61,27 @@ public class BybitTickersClientTests
     }
 
     [Test]
+    public async Task A_contract_with_an_open_interest_below_zero_has_none_and_the_rest_of_the_market_is_told()
+    {
+        _bybit.RespondJson(
+            BybitAnswers.Tickers(
+                "linear",
+                BybitAnswers.LinearTicker("BTCUSDT", "-1", "0.00000331"),
+                BybitAnswers.LinearTicker("ETHUSDT", "1200000.45", "0.0001")));
+
+        IReadOnlyList<BybitLinearTicker> tickers = await _tickers.GetLinearAsync(CancellationToken.None);
+
+        Assert.That(
+            tickers,
+            Is.EqualTo(
+                new[]
+                {
+                    new BybitLinearTicker("BTCUSDT", OpenInterest: null, FundingRate: 0.00000331m),
+                    new BybitLinearTicker("ETHUSDT", OpenInterest: 1200000.45m, FundingRate: 0.0001m)
+                }));
+    }
+
+    [Test]
     public async Task A_request_its_caller_gives_up_ends_at_once()
     {
         _bybit.NeverRespond();
@@ -70,6 +92,28 @@ public class BybitTickersClientTests
 
         // It fails rather than waits for Bybit: the wait here would run out only if it went on.
         Assert.That(() => tickers.WaitAsync(Patience), Throws.Exception.Not.InstanceOf<TimeoutException>());
+    }
+
+    [Test]
+    public async Task A_symbol_Bybit_tells_twice_is_told_once_as_it_came_first()
+    {
+        _bybit.RespondJson(
+            BybitAnswers.Tickers(
+                "linear",
+                BybitAnswers.LinearTicker("BTCUSDT", "52345.123", "0.00000331"),
+                BybitAnswers.LinearTicker("ETHUSDT", "1200000.45", "0.0001"),
+                BybitAnswers.LinearTicker("BTCUSDT", "7", "0.5")));
+
+        IReadOnlyList<BybitLinearTicker> tickers = await _tickers.GetLinearAsync(CancellationToken.None);
+
+        Assert.That(
+            tickers,
+            Is.EqualTo(
+                new[]
+                {
+                    new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.00000331m),
+                    new BybitLinearTicker("ETHUSDT", OpenInterest: 1200000.45m, FundingRate: 0.0001m)
+                }));
     }
 
     [Test]

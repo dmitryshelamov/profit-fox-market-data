@@ -1,7 +1,6 @@
 using MediatR;
 
 using ProfitFox.MarketData.Application.Ports.Tickers;
-using ProfitFox.MarketData.Application.Ports.Transactions;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
@@ -14,14 +13,14 @@ namespace ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
 /// <summary>
 ///     Asks Bybit first, so the snapshot is as close to its minute boundary as the request allows, then matches the tickers to the listed
 ///     linear contracts of the catalog by symbol. A symbol the catalog does not have is left out: the sync of the catalog brings it, and
-///     its points start from the snapshot after that.
+///     its points start from the snapshot after that. Each series is saved by one call of its own repository: the two are read apart, so
+///     a minute whose funding rates were not saved keeps its open interest.
 /// </summary>
 internal sealed class CollectBybitTickersCommandHandler(
     IBybitTickersClient bybit,
     IInstrumentRepository instruments,
     IOpenInterestRepository openInterest,
-    IFundingRateRepository fundingRates,
-    ITransactionExecutor transactions) : IRequestHandler<CollectBybitTickersCommand, CollectBybitTickersResult>
+    IFundingRateRepository fundingRates) : IRequestHandler<CollectBybitTickersCommand, CollectBybitTickersResult>
 {
     public async Task<CollectBybitTickersResult> Handle(CollectBybitTickersCommand request, CancellationToken cancellationToken)
     {
@@ -53,19 +52,15 @@ internal sealed class CollectBybitTickersCommandHandler(
             }
         }
 
-        if (openInterestPoints.Count == 0 && fundingRatePoints.Count == 0)
+        if (openInterestPoints.Count > 0)
         {
-            return new CollectBybitTickersResult(OpenInterestPoints: 0, FundingRatePoints: 0);
+            await openInterest.SaveAsync(openInterestPoints, cancellationToken);
         }
 
-        // One snapshot, two series: a reader never sees the open interest of a minute without its funding rates.
-        await transactions.ExecuteAsync(
-            async () =>
-            {
-                await openInterest.SaveAsync(openInterestPoints, cancellationToken);
-                await fundingRates.SaveAsync(fundingRatePoints, cancellationToken);
-            },
-            cancellationToken);
+        if (fundingRatePoints.Count > 0)
+        {
+            await fundingRates.SaveAsync(fundingRatePoints, cancellationToken);
+        }
 
         return new CollectBybitTickersResult(openInterestPoints.Count, fundingRatePoints.Count);
     }

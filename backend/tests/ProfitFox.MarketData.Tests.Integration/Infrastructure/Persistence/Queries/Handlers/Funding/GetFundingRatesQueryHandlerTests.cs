@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Application.Contracts.Funding;
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Queries;
 using ProfitFox.MarketData.Application.Queries.Funding;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
@@ -14,7 +15,7 @@ using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instrumen
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Persistence.Queries.Handlers.Funding;
 
 [TestFixture]
-public class GetFundingRateQueryHandlerTests
+public class GetFundingRatesQueryHandlerTests
 {
     [SetUp]
     public async Task SetUp()
@@ -44,7 +45,7 @@ public class GetFundingRateQueryHandlerTests
     private Task<FundingRatePointsInternal> ReadAsync(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
     {
         return _scope.ServiceProvider.GetRequiredService<ISender>()
-            .Send(new GetFundingRateQuery(instrumentId, new FundingRateWindow(from, to)), CancellationToken.None);
+            .Send(new GetFundingRatesQuery(instrumentId, new PointWindow(from, to)), CancellationToken.None);
     }
 
     private Task StoreAsync(params FundingRatePoint[] points)

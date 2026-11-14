@@ -4,7 +4,6 @@ using NSubstitute.ExceptionExtensions;
 using ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Tickers;
-using ProfitFox.MarketData.Application.Ports.Transactions;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
@@ -25,39 +24,13 @@ public class CollectBybitTickersCommandHandlerTests
         _instruments = Substitute.For<IInstrumentRepository>();
         _openInterest = Substitute.For<IOpenInterestRepository>();
         _fundingRates = Substitute.For<IFundingRateRepository>();
-        _transactions = Substitute.For<ITransactionExecutor>();
         _savedOpenInterest = null;
         _savedFundingRates = null;
-        _inTransaction = false;
-        _savedOutsideTransaction = false;
 
-        // As the executor does: the saves of the action are one, and it is over once the action is.
-        _transactions.ExecuteAsync(Arg.Any<Func<Task>>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                if (call[0] is Func<Task> action)
-                {
-                    _inTransaction = true;
-                    await action();
-                    _inTransaction = false;
-                }
-            });
-        _openInterest.SaveAsync(
-            Arg.Do<IReadOnlyCollection<OpenInterestPoint>>(points =>
-            {
-                _savedOpenInterest = points;
-                _savedOutsideTransaction |= !_inTransaction;
-            }),
-            Arg.Any<CancellationToken>());
-        _fundingRates.SaveAsync(
-            Arg.Do<IReadOnlyCollection<FundingRatePoint>>(points =>
-            {
-                _savedFundingRates = points;
-                _savedOutsideTransaction |= !_inTransaction;
-            }),
-            Arg.Any<CancellationToken>());
+        _openInterest.SaveAsync(Arg.Do<IReadOnlyCollection<OpenInterestPoint>>(points => _savedOpenInterest = points), Arg.Any<CancellationToken>());
+        _fundingRates.SaveAsync(Arg.Do<IReadOnlyCollection<FundingRatePoint>>(points => _savedFundingRates = points), Arg.Any<CancellationToken>());
 
-        _handler = new CollectBybitTickersCommandHandler(_bybit, _instruments, _openInterest, _fundingRates, _transactions);
+        _handler = new CollectBybitTickersCommandHandler(_bybit, _instruments, _openInterest, _fundingRates);
     }
 
     private static readonly DateTimeOffset Boundary = new DateTimeOffset(year: 2026, month: 11, day: 14, hour: 12, minute: 5, second: 0, TimeSpan.Zero);
@@ -70,11 +43,8 @@ public class CollectBybitTickersCommandHandlerTests
     private IInstrumentRepository _instruments = null!;
     private IOpenInterestRepository _openInterest = null!;
     private IFundingRateRepository _fundingRates = null!;
-    private ITransactionExecutor _transactions = null!;
     private IReadOnlyCollection<OpenInterestPoint>? _savedOpenInterest;
     private IReadOnlyCollection<FundingRatePoint>? _savedFundingRates;
-    private bool _inTransaction;
-    private bool _savedOutsideTransaction;
     private CollectBybitTickersCommandHandler _handler = null!;
 
     private Task<CollectBybitTickersResult> Collect()
@@ -142,7 +112,7 @@ public class CollectBybitTickersCommandHandlerTests
         Assert.Multiple(() =>
         {
             Assert.That(result, Is.EqualTo(new CollectBybitTickersResult(OpenInterestPoints: 0, FundingRatePoints: 1)));
-            Assert.That(_savedOpenInterest, Is.Empty);
+            Assert.That(_savedOpenInterest, Is.Null);
             Assert.That(_savedFundingRates, Is.EqualTo(new[] { new FundingRatePoint(Btc.Id, Boundary, rate: 0.0001m) }));
         });
     }
@@ -230,34 +200,48 @@ public class CollectBybitTickersCommandHandlerTests
     }
 
     [Test]
-    public async Task The_points_of_the_two_series_are_saved_in_one_transaction()
+    public void Funding_rates_that_fail_to_save_leave_the_open_interest_of_the_minute_saved()
     {
         Stored(Btc);
         Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
+        _fundingRates.SaveAsync(Arg.Any<IReadOnlyCollection<FundingRatePoint>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("The database is away."));
 
-        await Collect();
-
-        Assert.Multiple(async () =>
+        Assert.Multiple(() =>
         {
-            Assert.That(_savedOpenInterest, Is.Not.Null);
-            Assert.That(_savedFundingRates, Is.Not.Null);
-            Assert.That(_savedOutsideTransaction, Is.False);
-            await _transactions.Received(1).ExecuteAsync(Arg.Any<Func<Task>>(), Arg.Any<CancellationToken>());
+            Assert.That(Collect, Throws.InvalidOperationException);
+            Assert.That(_savedOpenInterest, Is.EqualTo(new[] { new OpenInterestPoint(Btc.Id, Boundary, value: 52345.123m) }));
         });
     }
 
     [Test]
-    public async Task When_the_catalog_has_no_contract_of_the_tickers_no_transaction_is_opened()
+    public void Open_interest_that_fails_to_save_leaves_the_funding_rates_of_the_minute_unsaved()
+    {
+        Stored(Btc);
+        Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
+        _openInterest.SaveAsync(Arg.Any<IReadOnlyCollection<OpenInterestPoint>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("The database is away."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Collect, Throws.InvalidOperationException);
+            Assert.That(_savedFundingRates, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task When_the_catalog_has_no_contract_of_the_tickers_nothing_is_saved()
     {
         Stored();
         Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
 
         CollectBybitTickersResult result = await Collect();
 
-        Assert.Multiple(async () =>
+        Assert.Multiple(() =>
         {
             Assert.That(result, Is.EqualTo(new CollectBybitTickersResult(OpenInterestPoints: 0, FundingRatePoints: 0)));
-            await _transactions.DidNotReceive().ExecuteAsync(Arg.Any<Func<Task>>(), Arg.Any<CancellationToken>());
+            Assert.That(_savedOpenInterest, Is.Null);
+            Assert.That(_savedFundingRates, Is.Null);
         });
     }
 }
