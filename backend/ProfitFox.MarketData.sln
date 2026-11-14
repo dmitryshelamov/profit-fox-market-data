@@ -1,0 +1,73 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "common", "common", "{AA2F3D2D-1FE1-42CB-9ED4-043D788A4B52}"
+	ProjectSection(SolutionItems) = preProject
+		..\.gitignore = ..\.gitignore
+		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
+		..\docker-compose.yml = ..\docker-compose.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6C887AAC-45F9-4192-A8B6-603396F917AA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Presentation", "src\ProfitFox.MarketData.Presentation\ProfitFox.MarketData.Presentation.csproj", "{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Infrastructure", "src\ProfitFox.MarketData.Infrastructure\ProfitFox.MarketData.Infrastructure.csproj", "{23FF742B-6555-482E-B44F-96001CA2FBC3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Application", "src\ProfitFox.MarketData.Application\ProfitFox.MarketData.Application.csproj", "{48B9C03F-D2B4-4577-AA30-B0CA1423130A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Domain", "src\ProfitFox.MarketData.Domain\ProfitFox.MarketData.Domain.csproj", "{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AA934942-B273-4184-BFCF-3329383D1B33}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Tests.Unit", "tests\ProfitFox.MarketData.Tests.Unit\ProfitFox.MarketData.Tests.Unit.csproj", "{750A40C7-7D66-42BB-9287-80B1AD195A10}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Tests.Integration", "tests\ProfitFox.MarketData.Tests.Integration\ProfitFox.MarketData.Tests.Integration.csproj", "{787D163A-EC78-4767-A347-A33C1CD92625}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfitFox.MarketData.Tests.Shared", "tests\ProfitFox.MarketData.Tests.Shared\ProfitFox.MarketData.Tests.Shared.csproj", "{9BA9EB1A-1639-460C-9AD8-5DA0BED6247C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{23FF742B-6555-482E-B44F-96001CA2FBC3} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2} = {6C887AAC-45F9-4192-A8B6-603396F917AA}
+		{750A40C7-7D66-42BB-9287-80B1AD195A10} = {AA934942-B273-4184-BFCF-3329383D1B33}
+		{787D163A-EC78-4767-A347-A33C1CD92625} = {AA934942-B273-4184-BFCF-3329383D1B33}
+		{9BA9EB1A-1639-460C-9AD8-5DA0BED6247C} = {AA934942-B273-4184-BFCF-3329383D1B33}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BAE146BF-97D7-4588-BAA2-06A0732BAFF9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{23FF742B-6555-482E-B44F-96001CA2FBC3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48B9C03F-D2B4-4577-AA30-B0CA1423130A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C86F6CEB-DF5D-4F6B-AD2D-D7BBFB7C52C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{750A40C7-7D66-42BB-9287-80B1AD195A10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{750A40C7-7D66-42BB-9287-80B1AD195A10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{750A40C7-7D66-42BB-9287-80B1AD195A10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{750A40C7-7D66-42BB-9287-80B1AD195A10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{787D163A-EC78-4767-A347-A33C1CD92625}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{787D163A-EC78-4767-A347-A33C1CD92625}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{787D163A-EC78-4767-A347-A33C1CD92625}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{787D163A-EC78-4767-A347-A33C1CD92625}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9BA9EB1A-1639-460C-9AD8-5DA0BED6247C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9BA9EB1A-1639-460C-9AD8-5DA0BED6247C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9BA9EB1A-1639-460C-9AD8-5DA0BED6247C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9BA9EB1A-1639-460C-9AD8-5DA0BED6247C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
