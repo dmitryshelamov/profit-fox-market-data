@@ -6,9 +6,11 @@ Market data service of profit-fox: catalog of exchange instruments (Bybit now, M
 
 .NET SDK 10. Solution: `backend/ProfitFox.MarketData.sln`.
 
-- A task is done only when `dotnet build`, `dotnet test` and `dotnet format --verify-no-changes` pass on the solution.
+- A task is done only when `dotnet build`, `dotnet test` and `scripts/verify-format.sh backend/ProfitFox.MarketData.sln` pass. The
+  script is `dotnet format --verify-no-changes` that lets one thing pass: the space between attributes on one line, which the code
+  style keeps and the formatter of Roslyn deletes. Do not run `dotnet format` to fix files: it deletes that space.
 - After cloning, enable the repo's git hooks once: `git config core.hooksPath .githooks`. The pre-commit hook runs build,
-  format and the check of XML doc summaries; CI (`.github/workflows/ci.yml`) also runs the tests.
+  the format check and the check of XML doc summaries; CI (`.github/workflows/ci.yml`) also runs the tests.
 
 ## Domain model
 

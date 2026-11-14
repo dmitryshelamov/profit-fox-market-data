@@ -180,6 +180,12 @@ resharper_csharp_indent_raw_literal_string = align
 # Spaces
 resharper_csharp_space_within_single_line_array_initializer_braces = true
 
+# Attributes: each in brackets of its own, and on one line a space between them: `[FromQuery] [BindRequired] string interval`.
+# The formatter of Roslyn deletes that space and has no option for it, so scripts/verify-format.sh lets exactly that report of
+# `dotnet format` pass.
+resharper_csharp_force_attribute_style = separate
+resharper_csharp_space_between_attribute_sections = true
+
 # XML doc comments: `<see cref="X" />`, text inside a multiline tag indented by one level (Rider defaults)
 resharper_xmldoc_space_before_self_closing = true
 resharper_xmldoc_indent_text = one_indent

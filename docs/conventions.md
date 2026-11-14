@@ -94,6 +94,10 @@ and this file is silent, ask which to follow.
   ```
 
 - `var` only when the type is evident from the right side; explicit `new Foo(...)`, never `new(...)`.
+- Every attribute is in brackets of its own, never `[A, B]`; attributes on one line, as on a parameter, have a space between them:
+  `[FromQuery] [BindRequired] string interval`. Rider keeps this (`.editorconfig`). The formatter of Roslyn deletes that space and
+  has no option for it, so the format is checked by `scripts/verify-format.sh`, which is `dotnet format --verify-no-changes` that
+  lets exactly that report pass; a plain `dotnet format` would rewrite such lines.
 
 ## Tests
 

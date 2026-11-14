@@ -38,9 +38,9 @@ public sealed class CandlesController(ISender sender, IOptionsMonitor<CandleRead
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(
         Guid instrumentId,
-        [FromQuery, BindRequired] string interval,
-        [FromQuery, BindRequired] DateTimeOffset from,
-        [FromQuery, BindRequired] DateTimeOffset to,
+        [FromQuery] [BindRequired] string interval,
+        [FromQuery] [BindRequired] DateTimeOffset from,
+        [FromQuery] [BindRequired] DateTimeOffset to,
         CancellationToken cancellationToken)
     {
         if (!Intervals.TryGetValue(interval, out CandleInterval candleInterval))
