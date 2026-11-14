@@ -35,7 +35,8 @@ internal static class CandleSeriesDbConverter
             Lows = [.. series.NewCandles.Select(candle => candle.Low)],
             Closes = [.. series.NewCandles.Select(candle => candle.Close)],
             Volumes = [.. series.NewCandles.Select(candle => candle.Volume)],
-            Turnovers = [.. series.NewCandles.Select(candle => candle.Turnover)]
+            Turnovers = [.. series.NewCandles.Select(candle => candle.Turnover)],
+            BuyVolumes = [.. series.NewCandles.Select(candle => candle.BuyVolume)]
         };
     }
 }

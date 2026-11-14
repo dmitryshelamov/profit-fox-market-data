@@ -30,21 +30,23 @@ internal static class CandleSeriesRepositoryQueries
                                            ON CONFLICT (instrument_id) DO UPDATE SET covered = candle_series.covered + EXCLUDED.covered
                                            """;
 
-    // A candle of a minute already stored takes the values the exchange gives now.
+    // A candle of a minute already stored takes the values the exchange gives now. Its buy volume stays when the new candle knows none:
+    // a source that tells the sides of the trades and one that does not write the same minute, in either order.
     private const string UpsertCandlesSql = """
-                                            INSERT INTO candles (instrument_id, open_time, open, high, low, close, volume, turnover)
-                                            SELECT @InstrumentId, c.open_time, c.open, c.high, c.low, c.close, c.volume, c.turnover
+                                            INSERT INTO candles (instrument_id, open_time, open, high, low, close, volume, turnover, buy_volume)
+                                            SELECT @InstrumentId, c.open_time, c.open, c.high, c.low, c.close, c.volume, c.turnover, c.buy_volume
                                             FROM unnest(
                                                 @OpenTimes::timestamptz[], @Opens::numeric[], @Highs::numeric[], @Lows::numeric[],
-                                                @Closes::numeric[], @Volumes::numeric[], @Turnovers::numeric[]
-                                            ) AS c(open_time, open, high, low, close, volume, turnover)
+                                                @Closes::numeric[], @Volumes::numeric[], @Turnovers::numeric[], @BuyVolumes::numeric[]
+                                            ) AS c(open_time, open, high, low, close, volume, turnover, buy_volume)
                                             ON CONFLICT (instrument_id, open_time) DO UPDATE SET
                                                 open = EXCLUDED.open,
                                                 high = EXCLUDED.high,
                                                 low = EXCLUDED.low,
                                                 close = EXCLUDED.close,
                                                 volume = EXCLUDED.volume,
-                                                turnover = EXCLUDED.turnover
+                                                turnover = EXCLUDED.turnover,
+                                                buy_volume = coalesce(EXCLUDED.buy_volume, candles.buy_volume)
                                             """;
 
     public static CommandDefinition Covered(Guid instrumentId, IDbTransaction? transaction, CancellationToken cancellationToken)

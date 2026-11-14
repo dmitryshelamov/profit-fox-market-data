@@ -132,6 +132,21 @@ public class TInvestCandlesClientTests
     }
 
     [Test]
+    public async Task The_buy_volume_comes_in_shares_and_is_not_known_where_T_Invest_tells_no_sides()
+    {
+        _api.Respond(
+            "GetCandles",
+            TInvestAnswers.Candles(
+                TInvestAnswers.Candle(Start, open: 300m, high: 300m, low: 300m, close: 300m, lots: 12, lotsBought: 5),
+                TInvestAnswers.Candle(Start.AddMinutes(1), open: 300m, high: 300m, low: 300m, close: 300m, lots: 12, lotsBought: 0),
+                TInvestAnswers.Candle(Start.AddMinutes(2), open: 300m, high: 300m, low: 300m, close: 300m, lots: 12)));
+
+        IReadOnlyList<Candle> candles = await _candles.GetAsync(Sber, Day(), CancellationToken.None);
+
+        Assert.That(candles.Select(candle => candle.BuyVolume), Is.EqualTo(new decimal?[] { 50m, 0m, null }));
+    }
+
+    [Test]
     public async Task The_call_asks_for_exchange_minute_candles_of_the_range_by_uid_with_the_token()
     {
         _api.Respond("GetCandles", TInvestAnswers.Candles());

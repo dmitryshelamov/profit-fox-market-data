@@ -20,4 +20,6 @@ internal sealed record CandlesDb
     public decimal[] Volumes { get; init; } = [];
 
     public decimal?[] Turnovers { get; init; } = [];
+
+    public decimal?[] BuyVolumes { get; init; } = [];
 }

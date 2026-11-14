@@ -63,7 +63,7 @@ public class CandleSeriesRepositoryTests
         [
             .. await connection.QueryAsync<StoredCandle>(
                 sql: """
-                     SELECT open_time AS "OpenTime", open, high, low, close, volume, turnover
+                     SELECT open_time AS "OpenTime", open, high, low, close, volume, turnover, buy_volume AS "BuyVolume"
                      FROM candles
                      WHERE instrument_id = @InstrumentId
                      ORDER BY open_time
@@ -98,6 +98,8 @@ public class CandleSeriesRepositoryTests
 
         public decimal? Turnover { get; init; }
 
+        public decimal? BuyVolume { get; init; }
+
         public static StoredCandle Of(Candle candle)
         {
             return new StoredCandle
@@ -108,9 +110,41 @@ public class CandleSeriesRepositoryTests
                 Low = candle.Low,
                 Close = candle.Close,
                 Volume = candle.Volume,
-                Turnover = candle.Turnover
+                Turnover = candle.Turnover,
+                BuyVolume = candle.BuyVolume
             };
         }
+    }
+
+    [Test]
+    public async Task A_buy_volume_stays_when_the_minute_is_saved_again_without_one()
+    {
+        await SaveAsync(Range(Start, minutes: 1), CandleGenerator.Generate(Start, close: 5m, volume: 3m, buyVolume: 2m));
+
+        await SaveAsync(Range(Start, minutes: 1), CandleGenerator.Generate(Start, close: 6m, volume: 3m));
+
+        StoredCandle stored = (await StoredCandlesAsync()).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.Close, Is.EqualTo(6m));
+            Assert.That(stored.BuyVolume, Is.EqualTo(2m));
+        });
+    }
+
+    [Test]
+    public async Task A_buy_volume_takes_the_value_a_later_save_knows()
+    {
+        await SaveAsync(
+            Range(Start, minutes: 2),
+            CandleGenerator.Generate(Start, volume: 3m),
+            CandleGenerator.Generate(Start.AddMinutes(1), volume: 3m, buyVolume: 2m));
+
+        await SaveAsync(
+            Range(Start, minutes: 2),
+            CandleGenerator.Generate(Start, volume: 3m, buyVolume: 1m),
+            CandleGenerator.Generate(Start.AddMinutes(1), volume: 3m, buyVolume: 0m));
+
+        Assert.That((await StoredCandlesAsync()).Select(candle => candle.BuyVolume), Is.EqualTo(new decimal?[] { 1m, 0m }));
     }
 
     [Test]
@@ -175,7 +209,7 @@ public class CandleSeriesRepositoryTests
     public async Task Candles_are_stored_exactly_as_the_exchange_gave_them()
     {
         var bybit = new Candle(Start, open: 0.00001234m, high: 0.00001240m, low: 0.00001230m, close: 0.00001238m, volume: 1234567.89m, turnover: 15.2771m);
-        var tinvest = new Candle(Start.AddMinutes(1), open: 300.5m, high: 301m, low: 300m, close: 300.75m, volume: 1000m);
+        var tinvest = new Candle(Start.AddMinutes(1), open: 300.5m, high: 301m, low: 300m, close: 300.75m, volume: 1000m, buyVolume: 612.5m);
 
         await SaveAsync(Range(Start, minutes: 2), bybit, tinvest);
 

@@ -107,8 +107,8 @@ public class CandlesControllerTests
         await StoreAsync(
             Linear,
             new MinuteRange(Hour, Hour.AddHours(2)),
-            new Candle(Hour, open: 5m, high: 6m, low: 4m, close: 5.5m, volume: 1m, turnover: 5m),
-            new Candle(Hour.AddMinutes(1), open: 5.5m, high: 8m, low: 5m, close: 7m, volume: 2m, turnover: 14m),
+            new Candle(Hour, open: 5m, high: 6m, low: 4m, close: 5.5m, volume: 1m, turnover: 5m, buyVolume: 0.25m),
+            new Candle(Hour.AddMinutes(1), open: 5.5m, high: 8m, low: 5m, close: 7m, volume: 2m, turnover: 14m, buyVolume: 1.5m),
             new Candle(Hour.AddHours(1), open: 7m, high: 7m, low: 7m, close: 7m, volume: 3m, turnover: 21m));
 
         CandlesInternal? candles = await _client.GetFromJsonAsync<CandlesInternal>(Url(Linear.Id, "1h", Hour, Hour.AddHours(2)), Json);
@@ -118,8 +118,8 @@ public class CandlesControllerTests
             Assert.That(candles!.Loading, Is.False);
             Assert.That(candles.Candles, Is.EqualTo(new[]
             {
-                new CandleInternal(Hour, Open: 5m, High: 8m, Low: 4m, Close: 7m, Volume: 3m, Turnover: 19m),
-                new CandleInternal(Hour.AddHours(1), Open: 7m, High: 7m, Low: 7m, Close: 7m, Volume: 3m, Turnover: 21m)
+                new CandleInternal(Hour, Open: 5m, High: 8m, Low: 4m, Close: 7m, Volume: 3m, Turnover: 19m, BuyVolume: 1.75m),
+                new CandleInternal(Hour.AddHours(1), Open: 7m, High: 7m, Low: 7m, Close: 7m, Volume: 3m, Turnover: 21m, BuyVolume: null)
             }));
             Assert.That(candles.Covered, Is.EqualTo(new[] { new MinuteRangeInternal(Hour, Hour.AddHours(2)) }));
             Assert.That(_app.Bybit.Requests, Is.Empty);
@@ -174,7 +174,9 @@ public class CandlesControllerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(candles!.Candles, Is.EqualTo(new[] { new CandleInternal(Hour, Open: 100m, High: 102m, Low: 99m, Close: 101.5m, Volume: 3m, Turnover: 303m) }));
+            Assert.That(
+                candles!.Candles,
+                Is.EqualTo(new[] { new CandleInternal(Hour, Open: 100m, High: 102m, Low: 99m, Close: 101.5m, Volume: 3m, Turnover: 303m, BuyVolume: null) }));
             Assert.That(candles.Covered, Is.EqualTo(new[] { new MinuteRangeInternal(Hour, Hour.AddHours(1)) }));
             Assert.That(_app.Bybit.Requests, Has.Count.EqualTo(1));
         });

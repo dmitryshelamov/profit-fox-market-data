@@ -6,8 +6,8 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.FluentMigrato
 public sealed class CreateCandlesTableMigration : Migration
 {
     // The minute candles of every instrument as its exchange gave them: unconstrained numeric keeps every value exactly, a turnover is
-    // null where the exchange does not tell it (T-Invest). Daily chunks, each compressed once it is 7 days old; a segment per instrument,
-    // so a read of one instrument unpacks only its own.
+    // null where the exchange does not tell it (T-Invest), a buy volume where the sides of the trades are not known. Daily chunks, each
+    // compressed once it is 7 days old; a segment per instrument, so a read of one instrument unpacks only its own.
     public override void Up()
     {
         Execute.Sql(
@@ -23,6 +23,7 @@ public sealed class CreateCandlesTableMigration : Migration
                 close numeric NOT NULL,
                 volume numeric NOT NULL,
                 turnover numeric NULL,
+                buy_volume numeric NULL,
                 CONSTRAINT candles_pk PRIMARY KEY (instrument_id, open_time),
                 CONSTRAINT candles_instrument_id_fk FOREIGN KEY (instrument_id) REFERENCES instruments (id)
             );

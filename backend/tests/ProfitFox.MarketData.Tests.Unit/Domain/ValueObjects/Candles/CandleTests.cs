@@ -65,4 +65,22 @@ public class CandleTests
                 Throws.InstanceOf<ArgumentOutOfRangeException>());
         });
     }
+
+    [Test]
+    public void A_buy_volume_is_any_part_of_the_volume()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: 0m).BuyVolume, Is.Zero);
+            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: 3m).BuyVolume, Is.EqualTo(3m));
+            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m).BuyVolume, Is.Null);
+        });
+    }
+
+    [TestCase(-1)]
+    [TestCase(arg: 3.01)]
+    public void A_buy_volume_below_zero_or_above_the_volume_is_rejected(decimal buyVolume)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: buyVolume));
+    }
 }

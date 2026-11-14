@@ -2,7 +2,7 @@ namespace ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
 /// <summary>
 ///     The trades of an instrument over one closed minute that opens at <see cref="OpenTime" />, as its exchange told them: the prices of
-///     the first, highest, lowest and last trades, what was traded and for how much. Candles of an instrument belong to its
+///     the first, highest, lowest and last trades, what was traded, for how much and how much of it the buyers took. Candles of an instrument belong to its
 ///     <see cref="Entities.Candles.CandleSeries" />.
 /// </summary>
 public sealed record Candle
@@ -27,7 +27,21 @@ public sealed record Candle
     /// </summary>
     public decimal? Turnover { get; }
 
-    public Candle(DateTimeOffset openTime, decimal open, decimal high, decimal low, decimal close, decimal volume, decimal? turnover = null)
+    /// <summary>
+    ///     The part of <see cref="Volume" /> traded in trades the buyer started, in the same units; the rest was sold into. Null where it is
+    ///     not known: a candle of Bybit tells no sides, and T-Invest tells none before it began to.
+    /// </summary>
+    public decimal? BuyVolume { get; }
+
+    public Candle(
+        DateTimeOffset openTime,
+        decimal open,
+        decimal high,
+        decimal low,
+        decimal close,
+        decimal volume,
+        decimal? turnover = null,
+        decimal? buyVolume = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(open);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(high);
@@ -45,6 +59,12 @@ public sealed record Candle
             ArgumentOutOfRangeException.ThrowIfNegative(turnover.Value, nameof(turnover));
         }
 
+        if (buyVolume is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(buyVolume.Value, nameof(buyVolume));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(buyVolume.Value, volume, nameof(buyVolume));
+        }
+
         EnsurePricesWithinRange(open, high, low, close);
 
         OpenTime = openTime;
@@ -54,6 +74,7 @@ public sealed record Candle
         Close = close;
         Volume = volume;
         Turnover = turnover;
+        BuyVolume = buyVolume;
     }
 
     // Every trade of the minute is between its lowest and highest: a candle that says otherwise was broken on the way.

@@ -18,4 +18,6 @@ internal sealed record CandleBucketDb
     public decimal Volume { get; init; }
 
     public decimal Turnover { get; init; }
+
+    public decimal? BuyVolume { get; init; }
 }
