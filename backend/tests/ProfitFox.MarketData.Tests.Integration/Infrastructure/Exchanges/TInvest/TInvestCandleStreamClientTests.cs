@@ -46,6 +46,9 @@ public class TInvestCandleStreamClientTests
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
 
+    // The client tells the forming candles once a second.
+    private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
+
     // A lot of 10 shares of one, of 100 of the other.
     private static readonly Dictionary<string, decimal> Lots = new Dictionary<string, decimal> { [Sber] = 10m, [Gazp] = 100m };
 
@@ -182,7 +185,7 @@ public class TInvestCandleStreamClientTests
         forming.Tell(TInvestAnswers.StreamCandle(Sber, Minute.AddMinutes(1), open: 301m, high: 302m, low: 301m, close: 302m, lots: 4, lotsBought: 3));
         await forming.ReadAsync();
 
-        _time.Advance(TimeSpan.FromSeconds(1));
+        await _time.PassPeriodAsync(Second);
 
         Assert.That(_forming.Select(told => told.Candle.OpenTime), Is.EqualTo(new[] { Minute.AddMinutes(1) }));
     }
@@ -200,7 +203,7 @@ public class TInvestCandleStreamClientTests
         forming.Tell(TInvestAnswers.StreamCandle(Sber, Minute, open: 300m, high: 301m, low: 300m, close: 301m, lots: 2, lotsBought: 1));
         await forming.ReadAsync();
 
-        _time.Advance(TimeSpan.FromSeconds(1));
+        await _time.PassPeriodAsync(Second);
 
         Assert.That(_forming, Is.Empty);
     }
@@ -329,8 +332,8 @@ public class TInvestCandleStreamClientTests
         forming.Tell(TInvestAnswers.StreamCandle(Sber, Minute, open: 300m, high: 301m, low: 300m, close: 301m, lots: 3, lotsBought: 1));
         await forming.ReadAsync();
         bool toldBeforeTheSecond = _forming.Count > 0;
-        _time.Advance(TimeSpan.FromSeconds(1));
-        _time.Advance(TimeSpan.FromSeconds(1));
+        await _time.PassPeriodAsync(Second);
+        await _time.PassPeriodAsync(Second);
 
         Assert.Multiple(() =>
         {
