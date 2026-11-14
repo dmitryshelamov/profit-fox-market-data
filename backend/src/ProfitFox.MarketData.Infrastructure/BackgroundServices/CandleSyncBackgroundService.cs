@@ -15,13 +15,15 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the candles of every listed instrument of the exchanges <see cref="CandleSyncSettings" /> enables, back to
-///     <see cref="CandleSyncSettings.HistoryDays" />. A round loads one page of every instrument in turn, the newest it misses first, so
-///     fresh minutes come before old history and every instrument moves on at the same pace. Rounds follow one another while pages are
-///     left; an exchange with none left waits <see cref="CandleSyncSettings.IdleSeconds" />. The settings are read again before every
+///     <see cref="CandleSyncSettings.HistoryDays" />, and before them the windows reads asked for and could not load in time
+///     (<see cref="CandleLoadQueue" />). A round loads one page of every window and every instrument in turn, the newest it misses first,
+///     so fresh minutes come before old history and every instrument moves on at the same pace. Rounds follow one another while pages
+///     are left; an exchange with none left waits <see cref="CandleSyncSettings.IdleSeconds" />. The settings are read again before every
 ///     round.
 /// </summary>
 internal sealed class CandleSyncBackgroundService(
     IServiceScopeFactory scopes,
+    CandleLoadQueue queue,
     IOptionsMonitor<CandleSyncSettings> settings,
     TimeProvider time,
     ILogger<CandleSyncBackgroundService> logger) : BackgroundService
@@ -51,57 +53,78 @@ internal sealed class CandleSyncBackgroundService(
         }
     }
 
-    // A round: one page of every listed instrument of the exchange; whether any of them has more to load.
+    // A round: first one page of every window reads asked for, then one page of the history of every listed instrument of the exchange;
+    // whether any of them has more to load.
     private async Task<bool> LoadRoundAsync(Exchange exchange, int historyDays, CancellationToken stoppingToken)
     {
-        IReadOnlyList<Guid> instruments = await ListedInstrumentsAsync(exchange, stoppingToken);
+        IReadOnlyCollection<InstrumentInternal> instruments = await InstrumentsAsync(exchange, stoppingToken);
+        bool hasMorePages = await LoadRequestedAsync(exchange, instruments, stoppingToken);
         MinuteRange history = History(historyDays);
-        var hasMorePages = false;
 
-        foreach (Guid instrumentId in instruments)
+        foreach (InstrumentInternal instrument in instruments.Where(instrument => instrument.DelistedAt is null))
         {
-            hasMorePages |= await LoadPageAsync(exchange, instrumentId, history, stoppingToken);
+            hasMorePages |= await LoadPageAsync(exchange, instrument.Id, history, stoppingToken) == Page.MoreLeft;
         }
 
         return hasMorePages;
     }
 
-    // One page of one instrument; whether it has more to load. A pause of the exchange is waited out here, outside the transaction of the
-    // command; any other failure is logged and the instrument is tried again in the next round.
-    private async Task<bool> LoadPageAsync(Exchange exchange, Guid instrumentId, MinuteRange history, CancellationToken stoppingToken)
+    // One page of every window reads asked for of an instrument of the exchange, listed or not; a window leaves the queue once nothing of
+    // it is left, and one that failed stays for the next round.
+    private async Task<bool> LoadRequestedAsync(Exchange exchange, IReadOnlyCollection<InstrumentInternal> instruments, CancellationToken stoppingToken)
+    {
+        HashSet<Guid> ofExchange = [.. instruments.Select(instrument => instrument.Id)];
+        var hasMorePages = false;
+
+        foreach (CandleLoadRequest request in queue.Pending().Where(request => ofExchange.Contains(request.InstrumentId)))
+        {
+            Page page = await LoadPageAsync(exchange, request.InstrumentId, request.Range, stoppingToken);
+
+            if (page == Page.NoneLeft)
+            {
+                queue.Complete(request);
+            }
+
+            hasMorePages |= page == Page.MoreLeft;
+        }
+
+        return hasMorePages;
+    }
+
+    // One page of one instrument of the range. A pause of the exchange is waited out here, outside the transaction of the command; any
+    // other failure is logged and the page is tried again in the next round.
+    private async Task<Page> LoadPageAsync(Exchange exchange, Guid instrumentId, MinuteRange range, CancellationToken stoppingToken)
     {
         try
         {
-            return await SendAsync(new LoadCandlesCommand(instrumentId, history, time.GetUtcNow()), stoppingToken);
+            return await SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow()), stoppingToken) ? Page.MoreLeft : Page.NoneLeft;
         }
         catch (ExchangePausedException exception) when (!stoppingToken.IsCancellationRequested)
         {
             logger.LogWarning("{Exchange} paused the loading of candles until {Until:O}: {Reason}", exchange, exception.Until, exception.Message);
             await WaitUntilAsync(exception.Until, stoppingToken);
 
-            return true;
+            return Page.MoreLeft;
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
             logger.LogError(exception, "Loading the candles of instrument {InstrumentId} of {Exchange} failed.", instrumentId, exchange);
 
-            return false;
+            return Page.Failed;
         }
     }
 
-    // The instruments of the exchange that are listed now; none when the catalog cannot be read, which is logged.
-    private async Task<IReadOnlyList<Guid>> ListedInstrumentsAsync(Exchange exchange, CancellationToken stoppingToken)
+    // The instruments of the exchange in the catalog, listed or delisted; none when the catalog cannot be read, which is logged.
+    private async Task<IReadOnlyCollection<InstrumentInternal>> InstrumentsAsync(Exchange exchange, CancellationToken stoppingToken)
     {
         try
         {
-            IReadOnlyCollection<InstrumentInternal> instruments = exchange switch
+            return exchange switch
             {
                 Exchange.Bybit => await SendAsync(new GetBybitInstrumentsQuery(), stoppingToken),
                 Exchange.TInvest => await SendAsync(new GetTInvestSharesQuery(), stoppingToken),
                 _ => throw new NotSupportedException($"Candles of {exchange} are not loaded.")
             };
-
-            return [.. instruments.Where(instrument => instrument.DelistedAt is null).Select(instrument => instrument.Id)];
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -171,5 +194,13 @@ internal sealed class CandleSyncBackgroundService(
     {
         Bybit,
         TInvest
+    }
+
+    // What a page left of its range: more to load, nothing, or a failure that leaves the range as it was.
+    private enum Page
+    {
+        MoreLeft,
+        NoneLeft,
+        Failed
     }
 }

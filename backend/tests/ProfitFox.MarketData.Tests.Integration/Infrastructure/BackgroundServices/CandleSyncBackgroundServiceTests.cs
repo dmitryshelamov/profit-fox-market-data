@@ -31,6 +31,7 @@ public class CandleSyncBackgroundServiceTests
     public void SetUp()
     {
         _sent = Channel.CreateUnbounded<LoadCandlesCommand>();
+        _queue = new CandleLoadQueue();
         _time = new FakeTimeProvider(Start);
         _sender = Substitute.For<ISender>();
         _sender.Send(Arg.Any<GetBybitInstrumentsQuery>(), Arg.Any<CancellationToken>()).Returns([Btc.ToInternal(), Delisted.ToInternal()]);
@@ -83,6 +84,7 @@ public class CandleSyncBackgroundServiceTests
     private static readonly Instrument Sber = InstrumentGenerator.Generate(TInvestListedShareGenerator.Generate());
 
     private Channel<LoadCandlesCommand> _sent = null!;
+    private CandleLoadQueue _queue = null!;
     private FakeTimeProvider _time = null!;
     private ISender _sender = null!;
     private ServiceProvider? _services;
@@ -105,6 +107,7 @@ public class CandleSyncBackgroundServiceTests
         _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new CandleSyncBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
+            _queue,
             _services.GetRequiredService<IOptionsMonitor<CandleSyncSettings>>(),
             _time,
             NullLogger<CandleSyncBackgroundService>.Instance);
@@ -184,6 +187,27 @@ public class CandleSyncBackgroundServiceTests
         {
             Assert.That(sentInPause, Is.False);
             Assert.That((await SentAsync(count: 1)).Single().RequestedAt, Is.EqualTo(Start.AddSeconds(30)));
+        });
+    }
+
+    [Test]
+    public async Task A_window_a_read_asked_for_loads_before_the_history_and_leaves_the_queue_once_loaded()
+    {
+        var window = new MinuteRange(StartMinute.AddDays(-800), StartMinute.AddDays(-799));
+        var request = new CandleLoadRequest(Delisted.Id, window);
+        _queue.Enqueue(request);
+
+        await StartAsync(tinvest: false);
+        IReadOnlyList<LoadCandlesCommand> sent = await SentAsync(count: 2);
+
+        // The second round: the window, which has nothing left now and leaves the queue, then the history.
+        await SentAsync(count: 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sent, Is.EqualTo(new[] { new LoadCandlesCommand(Delisted.Id, window, Start), sent[1] }));
+            Assert.That(sent[1].InstrumentId, Is.EqualTo(Btc.Id));
+            Assert.That(_queue.Pending(), Is.Empty);
         });
     }
 
