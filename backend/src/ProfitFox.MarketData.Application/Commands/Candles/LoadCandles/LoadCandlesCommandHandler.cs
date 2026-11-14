@@ -17,8 +17,8 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 internal sealed class LoadCandlesCommandHandler(
     IInstrumentRepository instruments,
     ICandleSeriesRepository series,
-    IBybitCandles bybit,
-    ITInvestCandles tinvest) : IRequestHandler<LoadCandlesCommand, bool>
+    IBybitCandlesClient bybit,
+    ITInvestCandlesClient tinvest) : IRequestHandler<LoadCandlesCommand, bool>
 {
     // The exchange may still give the candle of a minute that closed a moment ago unfinished; covered, it would stay so for good.
     private static readonly TimeSpan Settling = TimeSpan.FromSeconds(5);

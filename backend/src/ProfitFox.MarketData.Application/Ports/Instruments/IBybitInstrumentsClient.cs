@@ -6,7 +6,7 @@ namespace ProfitFox.MarketData.Application.Ports.Instruments;
 /// <summary>
 ///     The instruments Bybit lists now.
 /// </summary>
-public interface IBybitInstruments
+public interface IBybitInstrumentsClient
 {
     /// <summary>
     ///     Every instrument Bybit lists in <paramref name="category" />, the whole list or none: a list cut short would delist the rest.

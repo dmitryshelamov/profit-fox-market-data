@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Application.Ports.Instruments;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
@@ -25,7 +26,8 @@ public static class InfrastructureRegistrar
         PostgresRegistrar.Configure(configuration, services);
 
         services.AddBybit();
-        services.AddScoped<IBybitInstruments, BybitInstruments>();
+        services.AddScoped<IBybitInstrumentsClient, BybitInstrumentsClient>();
+        services.AddScoped<IBybitCandlesClient, BybitCandlesClient>();
 
         TInvestRegistrar.Configure(configuration, services);
 

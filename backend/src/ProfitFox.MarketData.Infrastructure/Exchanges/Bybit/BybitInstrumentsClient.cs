@@ -14,7 +14,7 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 /// <summary>
 ///     Reads the instruments of spot and linear from the public API of Bybit. Bybit lists only the instruments that trade now.
 /// </summary>
-internal sealed class BybitInstruments(IBybitRestClient bybit) : IBybitInstruments
+internal sealed class BybitInstrumentsClient(IBybitRestClient bybit) : IBybitInstrumentsClient
 {
     // The largest page of linear instruments Bybit gives.
     private const int PageSize = 1000;

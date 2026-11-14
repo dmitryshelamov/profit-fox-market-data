@@ -15,10 +15,10 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 ///     <c>Shares</c> with the base status, the instruments that trade through the API. A failed call fails the whole list, as a list cut
 ///     short would delist the shares it misses.
 /// </summary>
-internal sealed class TInvestShares(
+internal sealed class TInvestSharesClient(
     InstrumentsService.InstrumentsServiceClient instruments,
     IOptionsMonitor<TInvestApiSettings> settings,
-    TimeProvider time) : ITInvestShares
+    TimeProvider time) : ITInvestSharesClient
 {
     // One answer holds every share of T-Invest.
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);

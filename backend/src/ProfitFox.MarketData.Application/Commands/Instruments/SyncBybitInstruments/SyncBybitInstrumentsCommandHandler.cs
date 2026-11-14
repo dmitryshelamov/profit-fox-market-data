@@ -8,7 +8,7 @@ namespace ProfitFox.MarketData.Application.Commands.Instruments.SyncBybitInstrum
 /// <summary>
 ///     Syncs the instruments of a category of Bybit, matched by symbol: a symbol is unique only within its category.
 /// </summary>
-internal sealed class SyncBybitInstrumentsCommandHandler(IBybitInstruments bybit, IInstrumentRepository instruments)
+internal sealed class SyncBybitInstrumentsCommandHandler(IBybitInstrumentsClient bybit, IInstrumentRepository instruments)
     : BaseSyncInstrumentsCommandHandler<SyncBybitInstrumentsCommand, BybitListedInstrument>(instruments)
 {
     protected override Task<IReadOnlyList<BybitListedInstrument>> ListAsync(SyncBybitInstrumentsCommand request, CancellationToken cancellationToken)

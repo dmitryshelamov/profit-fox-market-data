@@ -41,6 +41,6 @@ internal static class TInvestRegistrar
                 ThrowOperationCanceledOnCancellation = true
             }));
         services.AddSingleton(provider => new InstrumentsService.InstrumentsServiceClient(provider.GetRequiredService<GrpcChannel>()));
-        services.AddScoped<ITInvestShares, TInvestShares>();
+        services.AddScoped<ITInvestSharesClient, TInvestSharesClient>();
     }
 }

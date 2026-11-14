@@ -12,7 +12,7 @@ using ProfitFox.MarketData.Tests.Integration.Http;
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
 
 [TestFixture]
-public class BybitInstrumentsTests
+public class BybitInstrumentsClientTests
 {
     [SetUp]
     public void SetUp()
@@ -20,7 +20,7 @@ public class BybitInstrumentsTests
         _bybit = new StubHttpHandler();
 
         // The rate limiter of the SDK is off: it would wait in real time.
-        _instruments = new BybitInstruments(
+        _instruments = new BybitInstrumentsClient(
             new BybitRestClient(
                 new HttpClient(_bybit),
                 NullLoggerFactory.Instance,
@@ -36,7 +36,7 @@ public class BybitInstrumentsTests
     private static readonly DateTimeOffset LaunchTime = new DateTimeOffset(year: 2020, month: 3, day: 30, hour: 0, minute: 0, second: 0, TimeSpan.Zero);
 
     private StubHttpHandler _bybit = null!;
-    private BybitInstruments _instruments = null!;
+    private BybitInstrumentsClient _instruments = null!;
 
     [TestCase("Settling", "LinearPerpetual")]
     [TestCase("Trading", "InversePerpetual")]

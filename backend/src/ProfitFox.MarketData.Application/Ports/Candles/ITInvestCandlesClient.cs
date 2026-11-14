@@ -6,7 +6,7 @@ namespace ProfitFox.MarketData.Application.Ports.Candles;
 /// <summary>
 ///     The minute candles of the exchange T-Invest gives for its shares; the candles of its dealer trading on weekends are not among them.
 /// </summary>
-public interface ITInvestCandles
+public interface ITInvestCandlesClient
 {
     /// <summary>
     ///     Every closed candle of the share that opens inside <paramref name="range" />, at most one day long: one request to T-Invest. Its

@@ -6,7 +6,7 @@ namespace ProfitFox.MarketData.Application.Ports.Candles;
 /// <summary>
 ///     The minute candles Bybit gives for its instruments.
 /// </summary>
-public interface IBybitCandles
+public interface IBybitCandlesClient
 {
     /// <summary>
     ///     Every closed candle of the instrument that opens inside <paramref name="range" />, at most 1000 minutes long: one request to Bybit.

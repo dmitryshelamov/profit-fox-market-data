@@ -20,8 +20,8 @@ public class LoadCandlesCommandHandlerTests
     {
         _instruments = Substitute.For<IInstrumentRepository>();
         _series = Substitute.For<ICandleSeriesRepository>();
-        _bybit = Substitute.For<IBybitCandles>();
-        _tinvest = Substitute.For<ITInvestCandles>();
+        _bybit = Substitute.For<IBybitCandlesClient>();
+        _tinvest = Substitute.For<ITInvestCandlesClient>();
         _saved = null;
 
         _instruments.GetAsync(Linear.Id, Arg.Any<CancellationToken>()).Returns(Linear);
@@ -45,8 +45,8 @@ public class LoadCandlesCommandHandlerTests
 
     private IInstrumentRepository _instruments = null!;
     private ICandleSeriesRepository _series = null!;
-    private IBybitCandles _bybit = null!;
-    private ITInvestCandles _tinvest = null!;
+    private IBybitCandlesClient _bybit = null!;
+    private ITInvestCandlesClient _tinvest = null!;
     private CandleSeries? _saved;
     private LoadCandlesCommandHandler _handler = null!;
 

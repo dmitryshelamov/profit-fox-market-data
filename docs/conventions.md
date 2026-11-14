@@ -40,6 +40,12 @@ and this file is silent, ask which to follow.
   brings a second type to extract it from.
 - The domain knows no wire codes: enums, not strings; the adapter of an exchange maps its codes.
 
+## Application (`ProfitFox.MarketData.Application`)
+
+- `Ports/<Area>` holds the ports to exchanges, named `I<Exchange><What>Client` (`IBybitCandlesClient`, `ITInvestSharesClient`), as
+  profit-fox-old names them (`IMarketHistoryClient`); the adapter in `Infrastructure/Exchanges/<Exchange>` drops the `I`
+  (`BybitCandlesClient`). Not `Service`: the SDK of T-Invest names its gRPC clients so (`MarketDataService.MarketDataServiceClient`).
+
 ## Infrastructure (`ProfitFox.MarketData.Infrastructure`)
 
 - A FluentMigrator migration lives in `Persistence/Postgres/FluentMigrator/Migrations`, in a file named by its version and what it

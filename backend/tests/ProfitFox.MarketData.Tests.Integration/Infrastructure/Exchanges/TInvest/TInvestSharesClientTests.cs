@@ -13,7 +13,7 @@ using Tinkoff.InvestApi.V1;
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.TInvest;
 
 [TestFixture]
-public class TInvestSharesTests
+public class TInvestSharesClientTests
 {
     [SetUp]
     public void SetUp()
@@ -36,17 +36,17 @@ public class TInvestSharesTests
 
     private StubGrpcInvoker _api = null!;
     private ServiceProvider _services = null!;
-    private TInvestShares _shares = null!;
+    private TInvestSharesClient _shares = null!;
 
     // The settings as the app binds them from the TInvest section.
-    private TInvestShares Shares(string token)
+    private TInvestSharesClient Shares(string token)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Token"] = token, ["AppName"] = AppName })
             .Build();
         _services = new ServiceCollection().Configure<TInvestApiSettings>(configuration).BuildServiceProvider();
 
-        return new TInvestShares(
+        return new TInvestSharesClient(
             new InstrumentsService.InstrumentsServiceClient(_api),
             _services.GetRequiredService<IOptionsMonitor<TInvestApiSettings>>(),
             TimeProvider.System);
