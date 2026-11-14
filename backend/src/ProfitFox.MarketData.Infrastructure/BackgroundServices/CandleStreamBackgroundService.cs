@@ -18,12 +18,14 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 ///     <see cref="CandleStreamSettings" /> enables Bybit. It subscribes to the listed instruments of the catalog and reads the catalog
 ///     again every <see cref="CandleStreamSettings.RefreshSeconds" /> for the ones listed since. A delisted instrument stays subscribed
 ///     until the app restarts: Bybit tells nothing more of it. The closed candles wait in memory and are saved together,
-///     <see cref="CandleStreamSettings.BatchSeconds" /> after the first of them came, so a minute of the whole market is one save. A
-///     minute the stream did not tell, as during a downtime, is left to <see cref="CandleSyncBackgroundService" />.
+///     <see cref="CandleStreamSettings.BatchSeconds" /> after the first of them came, so a minute of the whole market is one save. The
+///     forming candles of the minute that goes on are not saved: they go to the feed of live candles as they come. A minute the stream
+///     did not tell, as during a downtime, is left to <see cref="CandleSyncBackgroundService" />.
 /// </summary>
 internal sealed class CandleStreamBackgroundService(
     IServiceScopeFactory scopes,
     IBybitCandleStreamClient bybit,
+    ILiveCandleFeed feed,
     IOptionsMonitor<CandleStreamSettings> settings,
     TimeProvider time,
     ILogger<CandleStreamBackgroundService> logger) : BackgroundService
@@ -103,7 +105,12 @@ internal sealed class CandleStreamBackgroundService(
     {
         try
         {
-            IAsyncDisposable subscription = await bybit.SubscribeAsync(category, ids.Keys, (symbol, candle) => Closed(ids[symbol], candle), stoppingToken);
+            IAsyncDisposable subscription = await bybit.SubscribeAsync(
+                category,
+                ids.Keys,
+                (symbol, candle) => Closed(ids[symbol], candle),
+                (symbol, candle) => feed.Publish([new LiveCandle(Exchange.Bybit, ids[symbol], candle, Closed: false)]),
+                stoppingToken);
             logger.LogInformation("Subscribed to the closed candles of {Count} {Category} instruments of Bybit.", ids.Count, category);
 
             return new CategorySubscription(category, ids.Keys, subscription);

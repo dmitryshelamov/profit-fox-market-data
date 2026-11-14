@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 using NSubstitute;
 
-using ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Domain.Entities.Candles;
@@ -100,9 +99,14 @@ public class CandleFeedServiceTests
         return updates;
     }
 
-    private void Publish(params ClosedCandle[] candles)
+    private void Publish(params LiveCandle[] candles)
     {
-        _app.Services.GetRequiredService<IClosedCandleFeed>().Publish(candles);
+        _app.Services.GetRequiredService<ILiveCandleFeed>().Publish(candles);
+    }
+
+    private static LiveCandle Closed(Exchange exchange, Instrument instrument, Candle candle)
+    {
+        return new LiveCandle(exchange, instrument.Id, candle, Closed: true);
     }
 
     private async Task StoreAsync(Instrument instrument, params Candle[] candles)
@@ -123,9 +127,9 @@ public class CandleFeedServiceTests
         using AsyncServerStreamingCall<CandleUpdate> call = await SubscribeAsync(new SubscribeRequest());
 
         Publish(
-            new ClosedCandle(
+            Closed(
                 Exchange.Bybit,
-                Linear.Id,
+                Linear,
                 new Candle(
                     HourAgo,
                     open: 0.00001234m,
@@ -135,7 +139,7 @@ public class CandleFeedServiceTests
                     volume: 1234567.89m,
                     turnover: 15.2771m,
                     buyVolume: 600000.5m)),
-            new ClosedCandle(Exchange.Bybit, Linear.Id, CandleAt(HourAgo.AddMinutes(1))));
+            Closed(Exchange.Bybit, Linear, CandleAt(HourAgo.AddMinutes(1))));
 
         IReadOnlyList<CandleUpdate> updates = await TakeAsync(call, count: 2);
         Assert.Multiple(() =>
@@ -168,7 +172,7 @@ public class CandleFeedServiceTests
         using AsyncServerStreamingCall<CandleUpdate> all = await SubscribeAsync(new SubscribeRequest());
         using AsyncServerStreamingCall<CandleUpdate> shares = await SubscribeAsync(new SubscribeRequest { Exchanges = { ProtoExchange.Tinvest } });
 
-        Publish(new ClosedCandle(Exchange.TInvest, Share.Id, CandleAt(HourAgo)), new ClosedCandle(Exchange.Bybit, Linear.Id, CandleAt(HourAgo)));
+        Publish(Closed(Exchange.TInvest, Share, CandleAt(HourAgo)), Closed(Exchange.Bybit, Linear, CandleAt(HourAgo)));
 
         IReadOnlyList<CandleUpdate> ofAll = await TakeAsync(all, count: 1);
         using var briefly = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
@@ -182,12 +186,31 @@ public class CandleFeedServiceTests
     }
 
     [Test]
+    public async Task A_forming_candle_comes_not_closed_and_only_to_a_caller_that_asked_for_them()
+    {
+        using AsyncServerStreamingCall<CandleUpdate> withForming = await SubscribeAsync(new SubscribeRequest { Forming = true });
+        using AsyncServerStreamingCall<CandleUpdate> closedOnly = await SubscribeAsync(new SubscribeRequest());
+        var forming = new Candle(HourAgo, open: 5m, high: 8m, low: 4m, close: 7m, volume: 3m, turnover: 18m, buyVolume: 2m);
+
+        Publish(new LiveCandle(Exchange.Bybit, Linear.Id, forming, Closed: false), Closed(Exchange.Bybit, Linear, CandleAt(HourAgo, close: 9m)));
+
+        IReadOnlyList<CandleUpdate> ofForming = await TakeAsync(withForming, count: 2);
+        IReadOnlyList<CandleUpdate> ofClosedOnly = await TakeAsync(closedOnly, count: 1);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ofForming.Select(update => (update.Closed, update.Close)), Is.EqualTo(new[] { (false, "7"), (true, "9") }));
+            Assert.That(ofForming[0].BuyVolume, Is.EqualTo("2"));
+            Assert.That(ofClosedOnly.Single().Closed, Is.True);
+        });
+    }
+
+    [Test]
     public async Task A_subscriber_that_fell_behind_is_cut_off_with_resource_exhausted()
     {
-        IClosedCandleSubscription cutOff = Substitute.For<IClosedCandleSubscription>();
+        ILiveCandleSubscription cutOff = Substitute.For<ILiveCandleSubscription>();
         cutOff.ReadAllAsync(Arg.Any<CancellationToken>()).Returns(_ => FallBehind());
-        IClosedCandleFeed feed = Substitute.For<IClosedCandleFeed>();
-        feed.Subscribe().Returns(cutOff);
+        ILiveCandleFeed feed = Substitute.For<ILiveCandleFeed>();
+        feed.Subscribe(Arg.Any<bool>()).Returns(cutOff);
         await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton(feed)));
         using GrpcChannel channel = Channel(app);
 
@@ -215,7 +238,7 @@ public class CandleFeedServiceTests
 
         using AsyncServerStreamingCall<CandleUpdate> call = await SubscribeAsync(new SubscribeRequest { Since = Timestamp.FromDateTimeOffset(HourAgo) });
         IReadOnlyList<CandleUpdate> stored = await TakeAsync(call, count: 2);
-        Publish(new ClosedCandle(Exchange.Bybit, Linear.Id, CandleAt(HourAgo.AddMinutes(2), close: 8m)));
+        Publish(Closed(Exchange.Bybit, Linear, CandleAt(HourAgo.AddMinutes(2), close: 8m)));
         IReadOnlyList<CandleUpdate> live = await TakeAsync(call, count: 1);
 
         Assert.Multiple(() =>
@@ -226,7 +249,7 @@ public class CandleFeedServiceTests
         });
     }
 
-    private static async IAsyncEnumerable<ClosedCandle> FallBehind()
+    private static async IAsyncEnumerable<LiveCandle> FallBehind()
     {
         await Task.Yield();
 

@@ -6,15 +6,20 @@ import "google/protobuf/timestamp.proto";
 
 option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
 
-// The minute candles of the catalog as they close.
+// The minute candles of the catalog as they come.
 service CandleFeed {
   // Tells every minute candle of the exchanges asked for once it closes and is stored, until the caller ends the call.
   // With `since`, the stored candles that opened at or after it come first, oldest first, and the live ones follow with
   // none left out. A candle may come again, such as with its buy volume once a late trade completed it: the caller
   // replaces the one it has by instrument and open time. The response headers come once the subscription is in place.
   //
+  // With `forming`, the candle of the minute that goes on comes too, with `closed` false: at most once a second for an
+  // instrument and only when it traded. The closed candle of that minute follows and replaces it. A forming candle is
+  // not stored and is not part of the catch-up; a caller that falls behind stops getting them until it caught up.
+  //
   // INVALID_ARGUMENT: `since` is further back than the service catches up.
-  // RESOURCE_EXHAUSTED: the caller read slower than the candles came and is cut off; it subscribes again with `since`.
+  // RESOURCE_EXHAUSTED: the caller read slower than the closed candles came and is cut off; it subscribes again with
+  // `since`.
   rpc Subscribe (SubscribeRequest) returns (stream CandleUpdate);
 }
 
@@ -30,6 +35,9 @@ message SubscribeRequest {
 
   // Where to catch up from; absent means live candles only.
   google.protobuf.Timestamp since = 2;
+
+  // Whether the candle of the minute that goes on is wanted too.
+  bool forming = 3;
 }
 
 // A minute candle. Prices and volumes are decimal numbers as text, exactly as stored: "0.00001234".
@@ -52,6 +60,7 @@ message CandleUpdate {
   // The part of the volume traded in trades the buyer started; absent where it is not known.
   optional string buy_volume = 10;
 
-  // Whether the minute is closed. Always true for now; a candle still forming will come with false.
+  // Whether the minute is closed. A candle not closed is the forming one: built from the trades of its minute so far, it
+  // opens at the close of the minute before and always has a buy volume.
   bool closed = 11;
 }

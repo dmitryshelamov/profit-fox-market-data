@@ -17,7 +17,7 @@ public class SaveClosedCandlesCommandHandlerTests
     public void SetUp()
     {
         _series = Substitute.For<ICandleSeriesRepository>();
-        _feed = Substitute.For<IClosedCandleFeed>();
+        _feed = Substitute.For<ILiveCandleFeed>();
         _stored = [];
         _saved = null;
         _published = [];
@@ -26,7 +26,7 @@ public class SaveClosedCandlesCommandHandlerTests
         _series.SaveAsync(Arg.Do<IReadOnlyCollection<CandleSeries>>(series => _saved = series), Arg.Any<CancellationToken>());
 
         // What is told to the feed, with whether storage held it by then.
-        _feed.Publish(Arg.Do<IReadOnlyCollection<ClosedCandle>>(candles => _published.Add((candles, SavedBefore: _saved is not null))));
+        _feed.Publish(Arg.Do<IReadOnlyCollection<LiveCandle>>(candles => _published.Add((candles, SavedBefore: _saved is not null))));
 
         _handler = new SaveClosedCandlesCommandHandler(_series, _feed);
     }
@@ -38,8 +38,8 @@ public class SaveClosedCandlesCommandHandlerTests
     private static readonly Guid Eth = Guid.Parse("0193a1f0-0000-7000-8000-000000000002");
 
     private ICandleSeriesRepository _series = null!;
-    private IClosedCandleFeed _feed = null!;
-    private List<(IReadOnlyCollection<ClosedCandle> Candles, bool SavedBefore)> _published = null!;
+    private ILiveCandleFeed _feed = null!;
+    private List<(IReadOnlyCollection<LiveCandle> Candles, bool SavedBefore)> _published = null!;
     private List<CandleSeries> _stored = null!;
     private IReadOnlyCollection<CandleSeries>? _saved;
     private SaveClosedCandlesCommandHandler _handler = null!;
@@ -54,6 +54,12 @@ public class SaveClosedCandlesCommandHandlerTests
     private static ClosedCandle Closed(Guid instrumentId, Candle candle)
     {
         return new ClosedCandle(Exchange.Bybit, instrumentId, candle);
+    }
+
+    // A saved candle as the feed hears of it.
+    private static LiveCandle Live(Guid instrumentId, Candle candle)
+    {
+        return new LiveCandle(Exchange.Bybit, instrumentId, candle, Closed: true);
     }
 
     private Task<SaveClosedCandlesResult> Save(params ClosedCandle[] candles)
@@ -146,7 +152,7 @@ public class SaveClosedCandlesCommandHandlerTests
 
             // The feed hears of the saved candles once, after they are saved.
             Assert.That(_published.Single().SavedBefore, Is.True);
-            Assert.That(_published.Single().Candles, Is.EquivalentTo(new[] { Closed(Btc, btc), Closed(Eth, eth), Closed(Eth, ethNext) }));
+            Assert.That(_published.Single().Candles, Is.EquivalentTo(new[] { Live(Btc, btc), Live(Eth, eth), Live(Eth, ethNext) }));
         });
     }
 

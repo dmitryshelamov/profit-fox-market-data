@@ -6,7 +6,7 @@ namespace ProfitFox.MarketData.Application.Ports.Candles;
 
 /// <summary>
 ///     The minute candles of Bybit as they close, each with how much of its volume the buyers took, which the candles Bybit gives on
-///     request do not tell.
+///     request do not tell, and the candle of the minute that goes on.
 /// </summary>
 public interface IBybitCandleStreamClient
 {
@@ -16,12 +16,15 @@ public interface IBybitCandleStreamClient
     ///     is disposed. The buy volume of a candle is null when the trades of its minute were not all seen, as in the minute the
     ///     subscription started in or one the connection broke in; a minute whose close was not seen gets no candle at all. A candle
     ///     may be told again: with its buy volume, once a trade of its minute that came after it completes them, or as Bybit repeats
-    ///     it after a reconnect. The connection is restored by the client itself.
+    ///     it after a reconnect. Meanwhile <paramref name="forming" /> gets, at most once a second for a symbol and only when it traded,
+    ///     the candle of the minute that goes on, built from its trades so far; no forming candle comes for a minute not seen from its
+    ///     start. The connection is restored by the client itself.
     /// </summary>
     /// <exception cref="TransientExchangeException">Bybit cannot be reached or refused the subscription; nothing stays subscribed.</exception>
     Task<IAsyncDisposable> SubscribeAsync(
         BybitCategory category,
         IReadOnlyCollection<string> symbols,
         Action<string, Candle> closed,
+        Action<string, Candle> forming,
         CancellationToken cancellationToken);
 }

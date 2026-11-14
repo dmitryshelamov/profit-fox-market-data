@@ -12,7 +12,7 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 ///     itself: the loading starts one with the time before the instrument began to trade covered, and a series started here would have
 ///     that time asked for page by page. The feed hears of a candle only after it is saved.
 /// </summary>
-internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository series, IClosedCandleFeed feed)
+internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository series, ILiveCandleFeed feed)
     : IRequestHandler<SaveClosedCandlesCommand, SaveClosedCandlesResult>
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
@@ -50,7 +50,7 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
         await series.SaveAsync(started, cancellationToken);
 
         ClosedCandle[] saved = [.. started.SelectMany(one => told[one.InstrumentId])];
-        feed.Publish(saved);
+        feed.Publish([.. saved.Select(closed => new LiveCandle(closed.Exchange, closed.InstrumentId, closed.Candle, Closed: true))]);
 
         return new SaveClosedCandlesResult(saved.Length);
     }

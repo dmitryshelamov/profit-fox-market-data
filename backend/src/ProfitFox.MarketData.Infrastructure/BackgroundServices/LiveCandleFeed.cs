@@ -1,26 +1,29 @@
 using System.Threading.Channels;
 
-using ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Candles;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     Tells the closed candles to the subscribers of the app, in memory only. Each subscriber has a place of its own where candles
-///     wait for it, at most <see cref="Capacity" />; publishing never waits for a subscriber, so one that reads too slowly is cut off
+///     Tells the live candles to the subscribers of the app, in memory only. Each subscriber has a place of its own where candles wait
+///     for it, at most <see cref="Capacity" />; publishing never waits for a subscriber. One that reads too slowly first stops getting
+///     forming candles, once more than <see cref="FormingLimit" /> wait for it, and is cut off when a closed candle no longer fits,
 ///     instead of holding back the saving of candles or the other subscribers.
 /// </summary>
-internal sealed class ClosedCandleFeed : IClosedCandleFeed
+internal sealed class LiveCandleFeed : ILiveCandleFeed
 {
     // About ten minutes of the closed candles of the whole market.
     internal const int Capacity = 15_000;
+
+    // A few seconds of the forming candles of the whole market: a subscriber that far behind gets no more of them until it caught up.
+    internal const int FormingLimit = 5_000;
 
     private readonly Lock _lock = new Lock();
 
     private readonly List<Subscription> _subscriptions = [];
 
-    public void Publish(IReadOnlyCollection<ClosedCandle> candles)
+    public void Publish(IReadOnlyCollection<LiveCandle> candles)
     {
         Subscription[] subscriptions;
 
@@ -35,9 +38,9 @@ internal sealed class ClosedCandleFeed : IClosedCandleFeed
         }
     }
 
-    public IClosedCandleSubscription Subscribe()
+    public ILiveCandleSubscription Subscribe(bool forming)
     {
-        var subscription = new Subscription(this);
+        var subscription = new Subscription(this, forming);
 
         lock (_lock)
         {
@@ -55,15 +58,25 @@ internal sealed class ClosedCandleFeed : IClosedCandleFeed
         }
     }
 
-    private sealed class Subscription(ClosedCandleFeed feed) : IClosedCandleSubscription
+    private sealed class Subscription(LiveCandleFeed feed, bool forming) : ILiveCandleSubscription
     {
-        private readonly Channel<ClosedCandle> _waiting = Channel.CreateBounded<ClosedCandle>(
+        private readonly Channel<LiveCandle> _waiting = Channel.CreateBounded<LiveCandle>(
             new BoundedChannelOptions(Capacity) { SingleReader = true, SingleWriter = false });
 
-        public void Take(IReadOnlyCollection<ClosedCandle> candles)
+        public void Take(IReadOnlyCollection<LiveCandle> candles)
         {
-            foreach (ClosedCandle candle in candles)
+            foreach (LiveCandle candle in candles)
             {
+                if (!candle.Closed)
+                {
+                    if (forming && _waiting.Reader.Count < FormingLimit)
+                    {
+                        _waiting.Writer.TryWrite(candle);
+                    }
+
+                    continue;
+                }
+
                 if (!_waiting.Writer.TryWrite(candle))
                 {
                     // No room: the subscriber reads what fitted and is told it fell behind. A subscription already ended takes nothing.
@@ -75,7 +88,7 @@ internal sealed class ClosedCandleFeed : IClosedCandleFeed
             }
         }
 
-        public IAsyncEnumerable<ClosedCandle> ReadAllAsync(CancellationToken cancellationToken)
+        public IAsyncEnumerable<LiveCandle> ReadAllAsync(CancellationToken cancellationToken)
         {
             return _waiting.Reader.ReadAllAsync(cancellationToken);
         }

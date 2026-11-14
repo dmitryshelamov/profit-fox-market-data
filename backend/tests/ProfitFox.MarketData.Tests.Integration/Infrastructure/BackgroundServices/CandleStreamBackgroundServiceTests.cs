@@ -34,6 +34,15 @@ public class CandleStreamBackgroundServiceTests
     {
         _saved = Channel.CreateUnbounded<SaveClosedCandlesCommand>();
         _stream = new StreamStub();
+        _feed = Substitute.For<ILiveCandleFeed>();
+        _told = Channel.CreateUnbounded<LiveCandle>();
+        _feed.Publish(Arg.Do<IReadOnlyCollection<LiveCandle>>(candles =>
+        {
+            foreach (LiveCandle candle in candles)
+            {
+                _told.Writer.TryWrite(candle);
+            }
+        }));
         _time = new WatchedTimeProvider(Start);
         _sender = Substitute.For<ISender>();
         BybitHas(Btc, Eth, BtcSpot, Delisted);
@@ -77,6 +86,8 @@ public class CandleStreamBackgroundServiceTests
 
     private Channel<SaveClosedCandlesCommand> _saved = null!;
     private StreamStub _stream = null!;
+    private ILiveCandleFeed _feed = null!;
+    private Channel<LiveCandle> _told = null!;
     private WatchedTimeProvider _time = null!;
     private ISender _sender = null!;
     private ServiceProvider? _services;
@@ -98,6 +109,7 @@ public class CandleStreamBackgroundServiceTests
         _service = new CandleStreamBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _stream,
+            _feed,
             _services.GetRequiredService<IOptionsMonitor<CandleStreamSettings>>(),
             _time,
             NullLogger<CandleStreamBackgroundService>.Instance);
@@ -164,6 +176,7 @@ public class CandleStreamBackgroundServiceTests
             BybitCategory category,
             IReadOnlyCollection<string> symbols,
             Action<string, Candle> closed,
+            Action<string, Candle> forming,
             CancellationToken cancellationToken)
         {
             if (RefusesNext)
@@ -180,7 +193,7 @@ public class CandleStreamBackgroundServiceTests
                     TaskScheduler.Default);
             }
 
-            var subscription = new Subscription(category, [.. symbols], closed);
+            var subscription = new Subscription(category, [.. symbols], closed, forming);
             _subscriptions.Writer.TryWrite(subscription);
 
             return Task.FromResult<IAsyncDisposable>(subscription);
@@ -197,13 +210,16 @@ public class CandleStreamBackgroundServiceTests
         }
     }
 
-    private sealed class Subscription(BybitCategory category, string[] symbols, Action<string, Candle> closed) : IAsyncDisposable
+    private sealed class Subscription(BybitCategory category, string[] symbols, Action<string, Candle> closed, Action<string, Candle> forming)
+        : IAsyncDisposable
     {
         public BybitCategory Category { get; } = category;
 
         public string[] Symbols { get; } = symbols;
 
         public Action<string, Candle> Closed { get; } = closed;
+
+        public Action<string, Candle> Forming { get; } = forming;
 
         public bool Ended { get; private set; }
 
@@ -323,6 +339,24 @@ public class CandleStreamBackgroundServiceTests
                         new ClosedCandle(Exchange.Bybit, Btc.Id, candle),
                         new ClosedCandle(Exchange.Bybit, Eth.Id, ofEth)
                     }));
+            Assert.That(_saved.Reader.TryPeek(out _), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task A_forming_candle_goes_to_the_feed_at_once_and_is_not_saved()
+    {
+        Candle candle = CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m);
+        await StartAsync();
+        await _stream.NextAsync();
+        Subscription spot = await _stream.NextAsync();
+
+        spot.Forming("BTCUSDT", candle);
+
+        LiveCandle told = await _told.Reader.ReadAsync().AsTask().WaitAsync(Patience);
+        Assert.Multiple(() =>
+        {
+            Assert.That(told, Is.EqualTo(new LiveCandle(Exchange.Bybit, BtcSpot.Id, candle, Closed: false)));
             Assert.That(_saved.Reader.TryPeek(out _), Is.False);
         });
     }

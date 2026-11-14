@@ -19,22 +19,28 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 ///     confirms it; its buy volume is summed from the topic <c>publicTrade</c>. The two agree: the trades of a minute add up to the
 ///     volume of its candle exactly, so a sum that does not is a minute whose trades were not all seen, and its buy volume is not told.
 ///     A trade of the last closed minute that comes after its candle is still counted, and the candle is told again once they add up.
-///     The candle is not built from the trades: its open is the close of the minute before, not the first trade. CryptoExchange.Net
-///     reconnects and subscribes again.
+///     The closed candle is not built from the trades: its open is the close of the minute before, not the first trade. The candle of
+///     the minute that goes on is: Bybit pushes one too, but never at the moment the trades were summed, so its volume and the bought
+///     part would not agree. It is told once a second for the symbols that traded in that second. CryptoExchange.Net reconnects and
+///     subscribes again.
 /// </summary>
-internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, ILogger<BybitCandleStreamClient> logger) : IBybitCandleStreamClient
+internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, TimeProvider time, ILogger<BybitCandleStreamClient> logger)
+    : IBybitCandleStreamClient
 {
     // The most topics Bybit takes in one subscribe request of spot; linear uses the same, so both lay out alike.
     private const int BatchSize = 10;
+
+    private static readonly TimeSpan FormingPeriod = TimeSpan.FromSeconds(1);
 
     public async Task<IAsyncDisposable> SubscribeAsync(
         BybitCategory category,
         IReadOnlyCollection<string> symbols,
         Action<string, Candle> closed,
+        Action<string, Candle> forming,
         CancellationToken cancellationToken)
     {
         var trades = new BybitMinuteTrades();
-        var subscription = new Subscription();
+        var subscription = new Subscription(time.CreateTimer(_ => TellForming(category, trades, forming), state: null, FormingPeriod, FormingPeriod));
 
         try
         {
@@ -42,8 +48,12 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, ILogger<
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // The trades first, so they are counted by the time the first candle of the batch closes.
-                subscription.Add(Subscribed(category, await SubscribeToTradesAsync(category, batch, trades, closed)));
+                // The trades first, so they are counted by the time the first candle of the batch closes. They are seen from now on,
+                // and from the moment the connection is back after a break.
+                UpdateSubscription ofTrades = Subscribed(category, await SubscribeToTradesAsync(category, batch, trades, closed));
+                trades.Watch(batch, time.GetUtcNow());
+                ofTrades.ConnectionRestored += _ => trades.Watch(batch, time.GetUtcNow());
+                subscription.Add(ofTrades);
                 subscription.Add(Subscribed(category, await SubscribeToKlinesAsync(category, batch, trades, closed)));
             }
         }
@@ -121,7 +131,7 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, ILogger<
         {
             try
             {
-                if (trades.Add(trade.Symbol, Utc(trade.Timestamp), trade.Quantity, trade.Side == OrderSide.Buy) is { } completed)
+                if (trades.Add(trade.Symbol, Utc(trade.Timestamp), trade.Quantity, trade.Price, trade.Side == OrderSide.Buy) is { } completed)
                 {
                     closed(trade.Symbol, completed);
                 }
@@ -161,12 +171,29 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, ILogger<
         }
     }
 
+    // Runs on the timer once a second: the forming candles of the symbols that traded since the last time.
+    private void TellForming(BybitCategory category, BybitMinuteTrades trades, Action<string, Candle> forming)
+    {
+        try
+        {
+            foreach ((string symbol, Candle candle) in trades.TakeForming())
+            {
+                forming(symbol, candle);
+            }
+        }
+        catch (Exception exception)
+        {
+            // A listener that failed: the candles of this second are dropped, the next second tells them anew.
+            logger.LogError(exception, "The forming candles of the {Category} stream of Bybit are dropped.", category);
+        }
+    }
+
     private static DateTimeOffset Utc(DateTime time)
     {
         return new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc));
     }
 
-    private sealed class Subscription : IAsyncDisposable
+    private sealed class Subscription(ITimer forming) : IAsyncDisposable
     {
         private readonly List<UpdateSubscription> _subscriptions = [];
 
@@ -177,6 +204,7 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, ILogger<
 
         public async ValueTask DisposeAsync()
         {
+            await forming.DisposeAsync();
             await Task.WhenAll(_subscriptions.Select(subscription => subscription.CloseAsync()));
         }
     }
