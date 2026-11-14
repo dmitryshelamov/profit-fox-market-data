@@ -50,6 +50,7 @@ internal static class BackgroundServicesRegistrar
             .Validate(stream => stream.RefreshSeconds > 0, "CandleStream:RefreshSeconds must be above zero.")
             .Validate(stream => stream.BatchSeconds > 0, "CandleStream:BatchSeconds must be above zero.")
             .ValidateOnStart();
+        services.AddSingleton<IClosedCandleFeed, ClosedCandleFeed>();
         services.AddHostedService<CandleStreamBackgroundService>();
 
         services.AddOptions<BuyVolumeSyncSettings>()

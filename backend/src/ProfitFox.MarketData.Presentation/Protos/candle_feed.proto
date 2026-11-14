@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
+
+// The minute candles of the catalog as they close.
+service CandleFeed {
+  // Tells every minute candle of the exchanges asked for once it closes and is stored, until the caller ends the call.
+  // With `since`, the stored candles that opened at or after it come first, oldest first, and the live ones follow with
+  // none left out. A candle may come again, such as with its buy volume once a late trade completed it: the caller
+  // replaces the one it has by instrument and open time. The response headers come once the subscription is in place.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than the candles came and is cut off; it subscribes again with `since`.
+  rpc Subscribe (SubscribeRequest) returns (stream CandleUpdate);
+}
+
+enum Exchange {
+  EXCHANGE_UNSPECIFIED = 0;
+  EXCHANGE_BYBIT = 1;
+  EXCHANGE_TINVEST = 2;
+}
+
+message SubscribeRequest {
+  // The exchanges whose candles are wanted; none means all. Only Bybit is told live for now.
+  repeated Exchange exchanges = 1;
+
+  // Where to catch up from; absent means live candles only.
+  google.protobuf.Timestamp since = 2;
+}
+
+// A minute candle. Prices and volumes are decimal numbers as text, exactly as stored: "0.00001234".
+message CandleUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  Exchange exchange = 2;
+  google.protobuf.Timestamp open_time = 3;
+  string open = 4;
+  string high = 5;
+  string low = 6;
+  string close = 7;
+
+  // What was traded: the base asset on Bybit, shares on T-Invest.
+  string volume = 8;
+
+  // What the trades were worth in the quote asset; absent where the exchange does not tell it.
+  optional string turnover = 9;
+
+  // The part of the volume traded in trades the buyer started; absent where it is not known.
+  optional string buy_volume = 10;
+
+  // Whether the minute is closed. Always true for now; a candle still forming will come with false.
+  bool closed = 11;
+}

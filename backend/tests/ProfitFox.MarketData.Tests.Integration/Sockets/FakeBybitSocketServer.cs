@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -49,6 +50,10 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
     public static async Task<FakeBybitSocketServer> StartAsync()
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+
+        // The settings of the app lie next to the tests and would give this server the endpoints of the app; it keeps only its own.
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection();
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         WebApplication app = builder.Build();

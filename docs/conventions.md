@@ -52,6 +52,8 @@ and this file is silent, ask which to follow.
   picks the client by `listing.Exchange` and has no `switch`. Ports whose shapes differ stay apart (Bybit lists a category,
   T-Invest has none). A port to a stream of an exchange is named the same way (`IBybitCandleStreamClient`) and is held by a
   hosted service, not asked by a handler: a subscription outlives any request.
+- A query whose answer is too large to hold is an `IStreamRequest` (`GetClosedCandlesQuery`), read with `ISender.CreateStream`;
+  its handler reads storage row by row.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
   `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
 - No request runs in a transaction of the MediatR pipeline: a handler asks an exchange, which no open transaction should wait
@@ -82,6 +84,14 @@ and this file is silent, ask which to follow.
   the service goes on. `BackgroundServicesRegistrar` registers the services with the checks of their sections; an exchange is
   switched by `ExchangeSyncSettings`. `MarketDataTestApplication` leaves the services out.
 
+## Presentation (`ProfitFox.MarketData.Presentation`)
+
+- `Controllers` holds the REST API. `Protos` holds the gRPC contracts, one `.proto` a service, with `csharp_namespace`
+  `ProfitFox.MarketData.Presentation.Protos`; `GrpcServices` holds their implementations, named `<Service>Service`
+  (`CandleFeedService`). A contract speaks of what a consumer needs to know and names no type of the code. gRPC needs HTTP/2,
+  which has an endpoint of its own in the `Kestrel` section of `appsettings.json`.
+- Decimal numbers go over gRPC as text, exactly as stored: protobuf has no decimal type.
+
 ## Files and code style
 
 - One top-level type per file, named after the type (a migration is named by its version, see above); namespaces follow folders.
@@ -105,6 +115,7 @@ and this file is silent, ask which to follow.
 - `Tests.Unit` tests Domain and Application only and references nothing above Application; ports are NSubstitute substitutes.
 - Infrastructure and Presentation are tested in `Tests.Integration`, against a real TimescaleDB (Testcontainers) and with HTTP to
   an exchange answered by `StubHttpHandler`; a stream of Bybit is answered by `FakeBybitSocketServer`, its sockets on a local port.
+  A gRPC service is called with its generated client over the app in memory (`ResponseVersionHandler`).
 - `Tests.Shared` holds what both test projects use: generators of domain objects in `Generators/Domain/<Entities|ValueObjects>/<Area>`,
   static `<Type>Generator` classes with `Generate…` methods whose parameters default to a valid object
   (`InstrumentGenerator.Generate(listing, firstSeenAt, id)`, `BybitListedInstrumentGenerator.GenerateLinear("ETH")`). A test passes

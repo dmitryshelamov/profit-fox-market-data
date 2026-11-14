@@ -134,7 +134,7 @@ internal sealed class CandleStreamBackgroundService(
     // Called on the threads of the stream: the candle only joins the ones waiting to be saved.
     private void Closed(Guid instrumentId, Candle candle)
     {
-        _closed.Writer.TryWrite(new ClosedCandle(instrumentId, candle));
+        _closed.Writer.TryWrite(new ClosedCandle(Exchange.Bybit, instrumentId, candle));
     }
 
     // The first candle that waits opens a batch; BatchSeconds later all that wait by then are saved together, in a scope of their own.

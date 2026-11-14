@@ -1,5 +1,6 @@
 using MediatR;
 
+using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Domain.Entities.Candles;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
@@ -9,9 +10,10 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 /// <summary>
 ///     Adds the minutes of the candles to the series the loading of candles started and saves those series together. It starts no series
 ///     itself: the loading starts one with the time before the instrument began to trade covered, and a series started here would have
-///     that time asked for page by page.
+///     that time asked for page by page. The feed hears of a candle only after it is saved.
 /// </summary>
-internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository series) : IRequestHandler<SaveClosedCandlesCommand, SaveClosedCandlesResult>
+internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository series, IClosedCandleFeed feed)
+    : IRequestHandler<SaveClosedCandlesCommand, SaveClosedCandlesResult>
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
 
@@ -23,7 +25,7 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
             .GroupBy(closed => (closed.InstrumentId, closed.Candle.OpenTime))
             .Select(minute => minute.LastOrDefault(closed => closed.Candle.BuyVolume is not null) ?? minute.Last())
             .GroupBy(closed => closed.InstrumentId)
-            .ToDictionary(instrument => instrument.Key, instrument => instrument.Select(closed => closed.Candle).ToArray());
+            .ToDictionary(instrument => instrument.Key, instrument => instrument.ToArray());
 
         if (told.Count == 0)
         {
@@ -39,14 +41,17 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
 
         foreach (CandleSeries one in started)
         {
-            foreach (Candle candle in told[one.InstrumentId])
+            foreach (ClosedCandle closed in told[one.InstrumentId])
             {
-                one.Cover(new MinuteRange(candle.OpenTime, candle.OpenTime + Minute), [candle]);
+                one.Cover(new MinuteRange(closed.Candle.OpenTime, closed.Candle.OpenTime + Minute), [closed.Candle]);
             }
         }
 
         await series.SaveAsync(started, cancellationToken);
 
-        return new SaveClosedCandlesResult(started.Sum(one => told[one.InstrumentId].Length));
+        ClosedCandle[] saved = [.. started.SelectMany(one => told[one.InstrumentId])];
+        feed.Publish(saved);
+
+        return new SaveClosedCandlesResult(saved.Length);
     }
 }

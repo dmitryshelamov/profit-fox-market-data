@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
 using ProfitFox.MarketData.Presentation.ExceptionHandlers;
+using ProfitFox.MarketData.Presentation.GrpcServices;
 using ProfitFox.MarketData.Presentation.Settings;
 
 using Serilog;
@@ -34,6 +35,15 @@ public class Program
                 .Validate(read => read.MaxExchangeRequests > 0, "CandleRead:MaxExchangeRequests must be above zero.")
                 .ValidateOnStart();
 
+            // An app with a broken CandleFeed section stops at start.
+            builder.Services.AddOptions<CandleFeedSettings>()
+                .Bind(builder.Configuration.GetSection(CandleFeedSettings.Section))
+                .Validate(feed => feed.MaxCatchUpHours > 0, "CandleFeed:MaxCatchUpHours must be above zero.")
+                .ValidateOnStart();
+
+            // The feed of closed candles; it needs HTTP/2, which has an endpoint of its own in the Kestrel section of the settings.
+            builder.Services.AddGrpc();
+
             // The failures the application tells by an exception are answered in one place.
             builder.Services.AddProblemDetails();
             builder.Services.AddExceptionHandler<ApplicationExceptionHandler>();
@@ -63,6 +73,7 @@ public class Program
             app.UseAuthorization();
 
             app.MapControllers();
+            app.MapGrpcService<CandleFeedService>();
 
             app.Run();
 

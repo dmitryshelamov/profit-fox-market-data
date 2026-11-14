@@ -240,7 +240,7 @@ public class CandleStreamBackgroundServiceTests
         linear.Closed("BTCUSDT", second);
         await PassBatchWindowAsync();
 
-        Assert.That(await SavedAsync(), Is.EqualTo(new[] { new ClosedCandle(Btc.Id, second) }));
+        Assert.That(await SavedAsync(), Is.EqualTo(new[] { new ClosedCandle(Exchange.Bybit, Btc.Id, second) }));
     }
 
     [Test]
@@ -260,8 +260,8 @@ public class CandleStreamBackgroundServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstBatch, Is.EqualTo(new[] { new ClosedCandle(Btc.Id, first) }));
-            Assert.That(nextBatch, Is.EqualTo(new[] { new ClosedCandle(Btc.Id, again) }));
+            Assert.That(firstBatch, Is.EqualTo(new[] { new ClosedCandle(Exchange.Bybit, Btc.Id, first) }));
+            Assert.That(nextBatch, Is.EqualTo(new[] { new ClosedCandle(Exchange.Bybit, Btc.Id, again) }));
         });
     }
 
@@ -316,7 +316,13 @@ public class CandleStreamBackgroundServiceTests
             Assert.That(savedBeforeTheWindow, Is.False);
             Assert.That(
                 saved,
-                Is.EqualTo(new[] { new ClosedCandle(BtcSpot.Id, candle), new ClosedCandle(Btc.Id, candle), new ClosedCandle(Eth.Id, ofEth) }));
+                Is.EqualTo(
+                    new[]
+                    {
+                        new ClosedCandle(Exchange.Bybit, BtcSpot.Id, candle),
+                        new ClosedCandle(Exchange.Bybit, Btc.Id, candle),
+                        new ClosedCandle(Exchange.Bybit, Eth.Id, ofEth)
+                    }));
             Assert.That(_saved.Reader.TryPeek(out _), Is.False);
         });
     }

@@ -5,6 +5,8 @@
     </PropertyGroup>
 
     <ItemGroup Label="ASP.NET Core">
+        <!-- The gRPC server of the candle feed and the tools that generate it from Protos/*.proto. -->
+        <PackageVersion Include="Grpc.AspNetCore" Version="2.85.0"/>
         <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13"/>
         <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerUI" Version="11.0.0"/>
     </ItemGroup>
