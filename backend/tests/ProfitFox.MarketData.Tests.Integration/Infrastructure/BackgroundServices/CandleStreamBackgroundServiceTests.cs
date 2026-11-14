@@ -219,13 +219,24 @@ public class CandleStreamBackgroundServiceTests
     public async Task A_batch_that_fails_to_save_does_not_stop_the_ones_after_it()
     {
         Candle second = CandleGenerator.Generate(Minute.AddMinutes(1));
+        var failed = new TaskCompletionSource();
         _sender.Send(Arg.Any<SaveClosedCandlesCommand>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromException<SaveClosedCandlesResult>(new InvalidOperationException("Storage is down.")), Recorded);
+            .Returns(
+                _ =>
+                {
+                    failed.SetResult();
+
+                    return Task.FromException<SaveClosedCandlesResult>(new InvalidOperationException("Storage is down."));
+                },
+                Recorded);
         await StartAsync();
         Subscription linear = await _stream.NextAsync();
 
         linear.Closed("BTCUSDT", CandleGenerator.Generate(Minute));
         await PassBatchWindowAsync();
+
+        // The first batch is taken by now: a candle told before that would join it and fail with it.
+        await failed.Task.WaitAsync(Patience);
         linear.Closed("BTCUSDT", second);
         await PassBatchWindowAsync();
 
