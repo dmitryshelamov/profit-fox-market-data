@@ -15,7 +15,7 @@ public static class InfrastructureRegistrar
 {
     /// <summary>
     ///     MediatR with its handlers and the transaction of a command, the catalog in Postgres with its migrations, the public API of Bybit,
-    ///     the Invest API of T-Invest, the background sync of the catalog and the clock.
+    ///     the Invest API of T-Invest, the background sync of the catalog, the background loading of candles and the clock.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
@@ -44,6 +44,20 @@ public static class InfrastructureRegistrar
                 "InstrumentSync:TInvest needs TInvestApi:Token while it is enabled.")
             .ValidateOnStart();
         services.AddHostedService<InstrumentSyncBackgroundService>();
+
+        // An app with a broken CandleSync section stops at start rather than never loading.
+        services.AddOptions<CandleSyncSettings>()
+            .Bind(configuration.GetSection(CandleSyncSettings.Section))
+            .Validate(sync => sync.HistoryDays > 0, "CandleSync:HistoryDays must be above zero.")
+            .Validate(sync => sync.IdleSeconds > 0, "CandleSync:IdleSeconds must be above zero.")
+            .Validate(
+                sync => sync.Bybit.Enabled || sync.TInvest.Enabled,
+                "CandleSync must load something: enable CandleSync:Bybit or CandleSync:TInvest.")
+            .Validate<IOptionsMonitor<TInvestApiSettings>>(
+                (sync, tinvest) => !sync.TInvest.Enabled || tinvest.CurrentValue.HasToken,
+                "CandleSync:TInvest needs TInvestApi:Token while it is enabled.")
+            .ValidateOnStart();
+        services.AddHostedService<CandleSyncBackgroundService>();
 
         return services;
     }
