@@ -1,6 +1,7 @@
 using MediatR;
 
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 
@@ -8,13 +9,18 @@ namespace ProfitFox.MarketData.Application.Commands.Instruments.Base;
 
 /// <summary>
 ///     Syncs the instruments of one market with the list of its exchange; an exchange tells only how to read its list
-///     (<see cref="ListAsync" />), what identifies a listing (<see cref="Key" />) and which stored listings are of the market
-///     (<see cref="InMarket" />). The instruments of other markets stay as they are.
+///     (<see cref="ListAsync" />), which exchange it is (<see cref="Exchange" />), what identifies a listing (<see cref="Key" />) and which
+///     stored listings are of the market (<see cref="InMarket" />). The instruments of other markets stay as they are.
 /// </summary>
 internal abstract class BaseSyncInstrumentsCommandHandler<TCommand, TListing>(IInstrumentRepository instruments) : IRequestHandler<TCommand>
     where TCommand : BaseSyncInstrumentsCommand
     where TListing : ListedInstrument
 {
+    /// <summary>
+    ///     The exchange of the listings, whose stored instruments the sync reads.
+    /// </summary>
+    protected abstract Exchange Exchange { get; }
+
     /// <summary>
     ///     Every stored instrument of the market takes its new listing, or is delisted at the request if the list has it no more, and a
     ///     listing the catalog does not know becomes an instrument first seen then; all of them are saved together.
@@ -22,10 +28,10 @@ internal abstract class BaseSyncInstrumentsCommandHandler<TCommand, TListing>(II
     public async Task Handle(TCommand request, CancellationToken cancellationToken)
     {
         IReadOnlyList<TListing> listed = await ListAsync(request, cancellationToken);
-        IReadOnlyList<Instrument> catalog = await instruments.GetAllAsync(cancellationToken);
+        IReadOnlyList<Instrument> ofExchange = await instruments.GetByExchangeAsync(Exchange, cancellationToken);
         DateTimeOffset now = request.RequestedAt;
 
-        var stored = catalog.Where(instrument => instrument.Listing is TListing listing && InMarket(request, listing)).ToList();
+        var stored = ofExchange.Where(instrument => InMarket(request, (TListing)instrument.Listing)).ToList();
         var listingsByKey = listed.ToDictionary(Key);
 
         foreach (Instrument instrument in stored)

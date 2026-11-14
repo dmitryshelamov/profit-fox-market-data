@@ -34,7 +34,7 @@ public sealed class InstrumentsController(ISender sender, TimeProvider time) : C
     [ProducesResponseType<IReadOnlyCollection<InstrumentInternal>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListBybit(CancellationToken cancellationToken)
     {
-        IReadOnlyCollection<InstrumentInternal> instruments = await sender.Send(new GetBybitInstrumentsQuery(), cancellationToken);
+        IReadOnlyCollection<InstrumentInternal> instruments = await sender.Send(new GetInstrumentsQuery(Exchange.Bybit), cancellationToken);
 
         return Ok(instruments);
     }
@@ -46,13 +46,14 @@ public sealed class InstrumentsController(ISender sender, TimeProvider time) : C
     [ProducesResponseType<IReadOnlyCollection<InstrumentInternal>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListTInvest(CancellationToken cancellationToken)
     {
-        IReadOnlyCollection<InstrumentInternal> instruments = await sender.Send(new GetTInvestSharesQuery(), cancellationToken);
+        IReadOnlyCollection<InstrumentInternal> instruments = await sender.Send(new GetInstrumentsQuery(Exchange.TInvest), cancellationToken);
 
         return Ok(instruments);
     }
 
     /// <summary>
-    ///     Brings the catalog of the category in line with the list of Bybit now; a category the catalog does not sync is a 400.
+    ///     Brings the catalog of the category in line with the list of Bybit now; a category the catalog does not keep is a 400, and
+    ///     a Bybit that holds the requests or is unavailable is a 503.
     /// </summary>
     [HttpPost("bybit/sync")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -63,7 +64,8 @@ public sealed class InstrumentsController(ISender sender, TimeProvider time) : C
     }
 
     /// <summary>
-    ///     Brings the shares of the catalog in line with the list of T-Invest now; without a token of T-Invest it is a 400.
+    ///     Brings the shares of the catalog in line with the list of T-Invest now; without a token of T-Invest it is a 400, and a
+    ///     T-Invest that is unavailable is a 503.
     /// </summary>
     [HttpPost("tinvest/sync")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -73,7 +75,7 @@ public sealed class InstrumentsController(ISender sender, TimeProvider time) : C
         return SyncAsync(new SyncTInvestSharesCommand(time.GetUtcNow()), cancellationToken);
     }
 
-    // A sync the catalog cannot run (a category it does not sync, an exchange without its token) is refused before any request goes.
+    // A sync the catalog cannot run (an exchange without its token) is refused before any request goes.
     private async Task<IActionResult> SyncAsync(BaseSyncInstrumentsCommand command, CancellationToken cancellationToken)
     {
         try

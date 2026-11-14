@@ -1,3 +1,4 @@
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 
 namespace ProfitFox.MarketData.Domain.ValueObjects.Instruments;
@@ -19,6 +20,8 @@ public sealed record TInvestListedShare : ListedInstrument
     public string Ticker { get; }
 
     public InstrumentRules Rules { get; }
+
+    public override Exchange Exchange => Exchange.TInvest;
 
     public TInvestListedShare(string uid, string ticker, InstrumentRules rules)
     {

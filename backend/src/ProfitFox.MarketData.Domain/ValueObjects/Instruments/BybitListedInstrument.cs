@@ -4,9 +4,8 @@ using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 namespace ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 
 /// <summary>
-///     An instrument Bybit lists: its symbol, the coins it trades, whether it trades and the rules of an order; <see cref="Category" /> and
-///     <see cref="Symbol" /> identify it. A contract of linear or inverse tells its <see cref="ContractType" />, which must belong to its
-///     category; spot and option have none.
+///     An instrument Bybit lists: its symbol, the assets it trades, whether it trades and the rules of an order; <see cref="Category" /> and
+///     <see cref="Symbol" /> identify it. A linear contract tells its <see cref="ContractType" /> and a spot pair has none.
 /// </summary>
 public sealed record BybitListedInstrument : ListedInstrument
 {
@@ -24,12 +23,12 @@ public sealed record BybitListedInstrument : ListedInstrument
     /// </summary>
     public string QuoteAsset { get; }
 
-    public InstrumentStatus Status { get; }
+    public BybitInstrumentStatus Status { get; }
 
     public InstrumentRules Rules { get; }
 
     /// <summary>
-    ///     Perpetual or futures, linear or inverse; none on spot and option.
+    ///     Perpetual or futures on linear; none on spot.
     /// </summary>
     public BybitContractType? ContractType { get; }
 
@@ -38,49 +37,35 @@ public sealed record BybitListedInstrument : ListedInstrument
     /// </summary>
     public DateTimeOffset? LaunchTime { get; }
 
+    public override Exchange Exchange => Exchange.Bybit;
+
+    /// <exception cref="ArgumentException">A name is blank, a linear contract has no contract type, or a spot pair has one.</exception>
     public BybitListedInstrument(
         BybitCategory category,
         string symbol,
-        string baseCoin,
-        string quoteCoin,
-        InstrumentStatus status,
+        string baseAsset,
+        string quoteAsset,
+        BybitInstrumentStatus status,
         InstrumentRules rules,
         BybitContractType? contractType = null,
         DateTimeOffset? launchTime = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
-        ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
-        ArgumentException.ThrowIfNullOrWhiteSpace(quoteCoin);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseAsset);
+        ArgumentException.ThrowIfNullOrWhiteSpace(quoteAsset);
 
-        EnsureContractTypeMatchesCategory(category, contractType);
+        if (category == BybitCategory.Linear != contractType is not null)
+        {
+            throw new ArgumentException($"A linear contract tells its contract type and a spot pair has none; {category} {symbol} does not.", nameof(contractType));
+        }
 
         Category = category;
         Symbol = symbol;
-        BaseAsset = baseCoin;
-        QuoteAsset = quoteCoin;
+        BaseAsset = baseAsset;
+        QuoteAsset = quoteAsset;
         Status = status;
         Rules = rules;
         ContractType = contractType;
         LaunchTime = launchTime;
-    }
-
-    private static void EnsureContractTypeMatchesCategory(BybitCategory category, BybitContractType? contractType)
-    {
-        bool isContract = category is BybitCategory.Linear or BybitCategory.Inverse;
-
-        if (contractType is null)
-        {
-            if (isContract)
-            {
-                throw new ArgumentException($"A {category} instrument needs a contract type.", nameof(contractType));
-            }
-
-            return;
-        }
-
-        if (contractType.Value.Category() != category)
-        {
-            throw new ArgumentException($"Contract type {contractType} does not belong to {category}.", nameof(contractType));
-        }
     }
 }

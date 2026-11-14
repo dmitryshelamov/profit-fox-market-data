@@ -33,12 +33,6 @@ public class TInvestCertificatesTests
     }
 
     [Test]
-    public void The_chain_of_tinvest_ends_at_the_trusted_root()
-    {
-        Assert.That(Builds(Load("tbank_server.cer"), Load("russian_trusted_sub_ca.cer")), Is.True);
-    }
-
-    [Test]
     public void A_server_of_another_root_is_refused()
     {
         using var key = RSA.Create(2048);
@@ -47,5 +41,11 @@ public class TInvestCertificatesTests
         using X509Certificate2 selfSigned = request.CreateSelfSigned(new DateTimeOffset(Presented.AddDays(-1)), new DateTimeOffset(Presented.AddDays(1)));
 
         Assert.That(Builds(selfSigned), Is.False);
+    }
+
+    [Test]
+    public void The_chain_of_tinvest_ends_at_the_trusted_root()
+    {
+        Assert.That(Builds(Load("tbank_server.cer"), Load("russian_trusted_sub_ca.cer")), Is.True);
     }
 }

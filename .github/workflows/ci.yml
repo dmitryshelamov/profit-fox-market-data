@@ -39,8 +39,9 @@ jobs:
       - name: Build
         run: dotnet build ProfitFox.MarketData.sln --configuration Release --no-restore
 
+      # dotnet format --verify-no-changes, but for the space between attributes the code style keeps: see the script.
       - name: Verify format
-        run: dotnet format ProfitFox.MarketData.sln --verify-no-changes --no-restore
+        run: sh ../scripts/verify-format.sh ProfitFox.MarketData.sln
 
       - name: Verify XML doc summaries
         run: |

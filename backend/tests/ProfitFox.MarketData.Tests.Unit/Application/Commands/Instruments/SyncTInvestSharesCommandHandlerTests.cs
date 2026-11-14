@@ -3,6 +3,7 @@ using NSubstitute;
 using ProfitFox.MarketData.Application.Commands.Instruments.SyncTInvestShares;
 using ProfitFox.MarketData.Application.Ports.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
@@ -16,7 +17,7 @@ public class SyncTInvestSharesCommandHandlerTests
     [SetUp]
     public void SetUp()
     {
-        _shares = Substitute.For<ITInvestShares>();
+        _shares = Substitute.For<ITInvestSharesClient>();
         _repository = Substitute.For<IInstrumentRepository>();
         _repository.SaveAsync(Arg.Do<IReadOnlyCollection<Instrument>>(instruments => _saved = instruments), Arg.Any<CancellationToken>());
 
@@ -29,7 +30,7 @@ public class SyncTInvestSharesCommandHandlerTests
 
     private static readonly DateTimeOffset Now = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 0, TimeSpan.Zero);
 
-    private ITInvestShares _shares = null!;
+    private ITInvestSharesClient _shares = null!;
     private IInstrumentRepository _repository = null!;
     private IReadOnlyCollection<Instrument> _saved = [];
     private SyncTInvestSharesCommandHandler _handler = null!;
@@ -41,7 +42,9 @@ public class SyncTInvestSharesCommandHandlerTests
 
     private void Stored(params Instrument[] instruments)
     {
-        _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(instruments);
+        // As the repository does: only the instruments of the exchange asked for.
+        _repository.GetByExchangeAsync(Arg.Any<Exchange>(), Arg.Any<CancellationToken>())
+            .Returns(call => instruments.Where(instrument => instrument.Listing.Exchange == call.Arg<Exchange>()).ToList());
     }
 
     private void Listed(params TInvestListedShare[] shares)

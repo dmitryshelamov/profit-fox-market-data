@@ -64,6 +64,23 @@ public class InstrumentsControllerTests
     }
 
     [Test]
+    public async Task A_sync_while_Bybit_holds_the_requests_is_unavailable_and_tells_when_to_retry()
+    {
+        // An app of its own: the pause of Bybit stays in its gate. Bybit bans the IP, which pauses the requests for ten minutes.
+        await using var app = new MarketDataTestApplication();
+        using HttpClient client = app.CreateClient();
+        app.Bybit.RespondJson("", HttpStatusCode.Forbidden);
+
+        HttpResponseMessage sync = await client.PostAsync("api/instruments/bybit/sync?category=Linear", content: null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sync.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+            Assert.That(sync.Headers.RetryAfter?.Delta, Is.InRange(TimeSpan.FromMinutes(9), TimeSpan.FromMinutes(10)));
+        });
+    }
+
+    [Test]
     public async Task A_synced_category_is_in_the_catalog_first_seen_at_the_request()
     {
         _app.Bybit.RespondJson(BybitAnswers.List("linear", items: BybitAnswers.LinearContract("BTCUSDT", "BTC")));
@@ -121,8 +138,12 @@ public class InstrumentsControllerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(bybit!.Select(instrument => instrument.Listing).Cast<BybitListedInstrumentInternal>().Select(listing => listing.Symbol), Is.EqualTo(new[] { "BTCUSDT" }));
-            Assert.That(tinvest!.Select(instrument => instrument.Listing).Cast<TInvestListedShareInternal>().Select(listing => listing.Uid), Is.EqualTo(new[] { SberUid }));
+            Assert.That(
+                bybit!.Select(instrument => instrument.Listing).Cast<BybitListedInstrumentInternal>().Select(listing => listing.Symbol),
+                Is.EqualTo(new[] { "BTCUSDT" }));
+            Assert.That(
+                tinvest!.Select(instrument => instrument.Listing).Cast<TInvestListedShareInternal>().Select(listing => listing.Uid),
+                Is.EqualTo(new[] { SberUid }));
         });
     }
 }

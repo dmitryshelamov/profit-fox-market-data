@@ -39,4 +39,19 @@ internal static class BybitAnswers
     {
         return $$"""{"retCode":{{code}},"retMsg":"{{message}}","result":{},"retExtInfo":{},"time":0}""";
     }
+
+    /// <summary>
+    ///     A kline as Bybit writes it: the start in milliseconds, then open, high, low, close, volume and turnover.
+    /// </summary>
+    public static string Kline(DateTimeOffset start, string open, string high, string low, string close, string volume, string turnover)
+    {
+        return $"""["{start.ToUnixTimeMilliseconds()}","{open}","{high}","{low}","{close}","{volume}","{turnover}"]""";
+    }
+
+    public static string Klines(string category, string symbol, params string[] klines)
+    {
+        return $$"""
+                 {"retCode":0,"retMsg":"OK","result":{"category":"{{category}}","symbol":"{{symbol}}","list":[{{string.Join(",", klines)}}]},"retExtInfo":{},"time":0}
+                 """;
+    }
 }

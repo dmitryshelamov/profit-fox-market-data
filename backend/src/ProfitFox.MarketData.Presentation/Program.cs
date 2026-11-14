@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.FluentMigrator.Extensions;
+using ProfitFox.MarketData.Presentation.ExceptionHandlers;
+using ProfitFox.MarketData.Presentation.Settings;
 
 using Serilog;
 
@@ -26,6 +28,16 @@ public class Program
 
             builder.Services.AddInfrastructure(builder.Configuration);
 
+            // An app with a broken CandleRead section stops at start.
+            builder.Services.AddOptions<CandleReadSettings>()
+                .Bind(builder.Configuration.GetSection(CandleReadSettings.Section))
+                .Validate(read => read.MaxExchangeRequests > 0, "CandleRead:MaxExchangeRequests must be above zero.")
+                .ValidateOnStart();
+
+            // The failures the application tells by an exception are answered in one place.
+            builder.Services.AddProblemDetails();
+            builder.Services.AddExceptionHandler<ApplicationExceptionHandler>();
+
             builder.Services
                 .AddControllers()
                 .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -38,6 +50,7 @@ public class Program
             app.Services.MigrateToLatestVersion();
 
             app.UseSerilogRequestLogging();
+            app.UseExceptionHandler();
 
             if (app.Environment.IsDevelopment())
             {

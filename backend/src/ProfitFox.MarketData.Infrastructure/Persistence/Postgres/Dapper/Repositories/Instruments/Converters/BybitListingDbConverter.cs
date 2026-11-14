@@ -35,7 +35,7 @@ internal static class BybitListingDbConverter
             row.Symbol,
             row.BaseAsset,
             row.QuoteAsset,
-            Parse<InstrumentStatus>(row.InstrumentId, row.Status),
+            Parse<BybitInstrumentStatus>(row.InstrumentId, row.Status),
             new InstrumentRules(row.TickSize, row.QuantityStep, row.MinQuantity, row.MinAmount),
             row.ContractType is null ? null : Parse<BybitContractType>(row.InstrumentId, row.ContractType),
             row.LaunchTime);

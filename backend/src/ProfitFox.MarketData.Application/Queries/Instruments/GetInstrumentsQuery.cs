@@ -1,9 +1,11 @@
+using MediatR;
+
 using ProfitFox.MarketData.Application.Contracts.Instruments;
-using ProfitFox.MarketData.Application.Queries.Base;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 
 namespace ProfitFox.MarketData.Application.Queries.Instruments;
 
 /// <summary>
-///     Every instrument of the catalog, listed or delisted.
+///     The instruments of the catalog, listed or delisted: of one exchange, or of every exchange when none is named.
 /// </summary>
-public sealed record GetInstrumentsQuery : IQuery<IReadOnlyCollection<InstrumentInternal>>;
+public sealed record GetInstrumentsQuery(Exchange? Exchange = null) : IRequest<IReadOnlyCollection<InstrumentInternal>>;

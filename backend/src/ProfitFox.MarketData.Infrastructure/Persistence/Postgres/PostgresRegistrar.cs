@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Instruments;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Transactions;
 
@@ -24,6 +25,7 @@ internal static class PostgresRegistrar
         services.AddScoped<PostgresTransactionAccessor>();
         services.AddScoped<PostgresTransactionExecutor>();
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
+        services.AddScoped<ICandleSeriesRepository, CandleSeriesRepository>();
 
         services
             .AddFluentMigratorCore()

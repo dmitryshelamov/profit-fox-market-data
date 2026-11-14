@@ -6,9 +6,10 @@ set -e
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
 # The .NET build reads backend/ and .editorconfig.
-if echo "$staged" | grep -qE '^(backend/|\.editorconfig$)'; then
+if echo "$staged" | grep -qE '^(backend/|\.editorconfig$|scripts/verify-format\.sh$)'; then
     dotnet build backend/ProfitFox.MarketData.sln --nologo -v:q
-    dotnet format backend/ProfitFox.MarketData.sln --verify-no-changes --no-restore
+    # dotnet format --verify-no-changes, but for the space between attributes the code style keeps: see the script.
+    sh scripts/verify-format.sh backend/ProfitFox.MarketData.sln
 fi
 
 # A <summary> is never on one line: `/// <summary>`, the text indented by 5 spaces, `/// </summary>`.

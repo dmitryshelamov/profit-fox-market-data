@@ -20,7 +20,7 @@ public static class BybitListedInstrumentGenerator
             baseAsset + QuoteAsset,
             baseAsset,
             QuoteAsset,
-            InstrumentStatus.Trading,
+            BybitInstrumentStatus.Trading,
             new InstrumentRules(tickSize, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
             BybitContractType.LinearPerpetual,
             LaunchTime);
@@ -33,7 +33,7 @@ public static class BybitListedInstrumentGenerator
             baseAsset + QuoteAsset,
             baseAsset,
             QuoteAsset,
-            InstrumentStatus.Trading,
+            BybitInstrumentStatus.Trading,
             new InstrumentRules(tickSize, quantityStep: 0.000001m, minQuantity: 0.000001m));
     }
 }

@@ -17,7 +17,7 @@ public class SyncBybitInstrumentsCommandHandlerTests
     [SetUp]
     public void SetUp()
     {
-        _bybit = Substitute.For<IBybitInstruments>();
+        _bybit = Substitute.For<IBybitInstrumentsClient>();
         _repository = Substitute.For<IInstrumentRepository>();
         _repository.SaveAsync(Arg.Do<IReadOnlyCollection<Instrument>>(instruments => _saved = instruments), Arg.Any<CancellationToken>());
 
@@ -28,7 +28,7 @@ public class SyncBybitInstrumentsCommandHandlerTests
 
     private static readonly DateTimeOffset Now = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 0, TimeSpan.Zero);
 
-    private IBybitInstruments _bybit = null!;
+    private IBybitInstrumentsClient _bybit = null!;
     private IInstrumentRepository _repository = null!;
     private IReadOnlyCollection<Instrument> _saved = [];
     private SyncBybitInstrumentsCommandHandler _handler = null!;
@@ -40,7 +40,9 @@ public class SyncBybitInstrumentsCommandHandlerTests
 
     private void Stored(params Instrument[] instruments)
     {
-        _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(instruments);
+        // As the repository does: only the instruments of the exchange asked for.
+        _repository.GetByExchangeAsync(Arg.Any<Exchange>(), Arg.Any<CancellationToken>())
+            .Returns(call => instruments.Where(instrument => instrument.Listing.Exchange == call.Arg<Exchange>()).ToList());
     }
 
     private void Listed(BybitCategory category, params BybitListedInstrument[] listings)
