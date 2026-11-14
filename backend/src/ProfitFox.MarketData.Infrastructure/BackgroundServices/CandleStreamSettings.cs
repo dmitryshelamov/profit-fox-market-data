@@ -20,4 +20,6 @@ internal sealed class CandleStreamSettings
     public int BatchSeconds { get; init; } = 3;
 
     public ExchangeSyncSettings Bybit { get; init; } = new ExchangeSyncSettings();
+
+    public ExchangeSyncSettings TInvest { get; init; } = new ExchangeSyncSettings();
 }

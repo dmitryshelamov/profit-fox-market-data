@@ -28,9 +28,7 @@ namespace ProfitFox.MarketData.Presentation.GrpcServices;
 public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOptionsMonitor<CandleFeedSettings> settings, TimeProvider time)
     : CandleFeed.CandleFeedBase
 {
-    // The exchanges whose candles are told as they close. T-Invest is not among them until it has a stream of its own: its candles
-    // come by polling, a minute or two late, and catching up on them from storage would then stop without a word.
-    private static readonly Exchange[] Streamed = [Exchange.Bybit];
+    private static readonly Exchange[] All = System.Enum.GetValues<Exchange>();
 
     public override async Task Subscribe(SubscribeRequest request, IServerStreamWriter<CandleUpdate> responseStream, ServerCallContext context)
     {
@@ -73,17 +71,10 @@ public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOpt
         }
     }
 
-    // The streamed exchanges among the ones asked for; all of the streamed when none is named.
+    // The exchanges asked for; all of them when none is named.
     private static Exchange[] Asked(SubscribeRequest request)
     {
-        if (request.Exchanges.Count == 0)
-        {
-            return Streamed;
-        }
-
-        Exchange[] asked = [.. request.Exchanges.Select(ToDomain)];
-
-        return [.. Streamed.Where(asked.Contains)];
+        return request.Exchanges.Count == 0 ? All : [.. request.Exchanges.Select(ToDomain).Distinct()];
     }
 
     private static Exchange ToDomain(ProtoExchange exchange)

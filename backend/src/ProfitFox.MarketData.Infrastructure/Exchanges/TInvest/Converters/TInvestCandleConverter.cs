@@ -23,6 +23,21 @@ internal static class TInvestCandleConverter
             buyVolume: TellsSides(candle) ? candle.VolumeBuy * lot : null);
     }
 
+    /// <summary>
+    ///     A candle of the stream, closed or forming: the same values as a candle of the history.
+    /// </summary>
+    internal static Candle ToDomain(Tinkoff.InvestApi.V1.Candle candle, decimal lot)
+    {
+        return new Candle(
+            candle.Time.ToDateTimeOffset(),
+            candle.Open.ToDecimal(),
+            candle.High.ToDecimal(),
+            candle.Low.ToDecimal(),
+            candle.Close.ToDecimal(),
+            candle.Volume * lot,
+            buyVolume: candle.VolumeBuy + candle.VolumeSell == candle.Volume ? candle.VolumeBuy * lot : null);
+    }
+
     // T-Invest tells the sides of the trades from 26 August 2025: a candle before that has nothing bought and nothing sold whatever its
     // volume, which is not a minute of sells only.
     private static bool TellsSides(HistoricCandle candle)

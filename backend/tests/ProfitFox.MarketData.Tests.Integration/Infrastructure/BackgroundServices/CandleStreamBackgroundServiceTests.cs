@@ -34,6 +34,7 @@ public class CandleStreamBackgroundServiceTests
     {
         _saved = Channel.CreateUnbounded<SaveClosedCandlesCommand>();
         _stream = new StreamStub();
+        _shares = new SharesStub();
         _feed = Substitute.For<ILiveCandleFeed>();
         _told = Channel.CreateUnbounded<LiveCandle>();
         _feed.Publish(Arg.Do<IReadOnlyCollection<LiveCandle>>(candles =>
@@ -46,6 +47,7 @@ public class CandleStreamBackgroundServiceTests
         _time = new WatchedTimeProvider(Start);
         _sender = Substitute.For<ISender>();
         BybitHas(Btc, Eth, BtcSpot, Delisted);
+        _sender.Send(new GetInstrumentsQuery(Exchange.TInvest), Arg.Any<CancellationToken>()).Returns([Sber.ToInternal()]);
 
         // Every command is recorded.
         _sender.Send(Arg.Any<SaveClosedCandlesCommand>(), Arg.Any<CancellationToken>()).Returns(Recorded);
@@ -84,8 +86,14 @@ public class CandleStreamBackgroundServiceTests
 
     private static readonly Instrument Delisted = Delist(InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("LUNA")));
 
+    private const string SberUid = "e6123145-9665-43e0-8413-cd61b8aa9b13";
+
+    // A lot of 10 shares.
+    private static readonly Instrument Sber = InstrumentGenerator.Generate(TInvestListedShareGenerator.Generate(uid: SberUid));
+
     private Channel<SaveClosedCandlesCommand> _saved = null!;
     private StreamStub _stream = null!;
+    private SharesStub _shares = null!;
     private ILiveCandleFeed _feed = null!;
     private Channel<LiveCandle> _told = null!;
     private WatchedTimeProvider _time = null!;
@@ -94,7 +102,7 @@ public class CandleStreamBackgroundServiceTests
     private CandleStreamBackgroundService? _service;
 
     // The settings as the app binds them; the sender is the last ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true)
+    private async Task StartAsync(bool bybit = true, bool tinvest = false)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -102,13 +110,16 @@ public class CandleStreamBackgroundServiceTests
                 {
                     ["CandleStream:RefreshSeconds"] = "60",
                     ["CandleStream:BatchSeconds"] = "3",
-                    ["CandleStream:Bybit:Enabled"] = bybit.ToString()
+                    ["CandleStream:Bybit:Enabled"] = bybit.ToString(),
+                    ["CandleStream:TInvest:Enabled"] = tinvest.ToString(),
+                    ["TInvestApi:Token"] = "test-token"
                 })
             .Build();
         _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new CandleStreamBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _stream,
+            _shares,
             _feed,
             _services.GetRequiredService<IOptionsMonitor<CandleStreamSettings>>(),
             _time,
@@ -207,6 +218,55 @@ public class CandleStreamBackgroundServiceTests
         public bool HasNext()
         {
             return _subscriptions.Reader.TryPeek(out _);
+        }
+    }
+
+    /// <summary>
+    ///     The stream of T-Invest for a test: it records every subscription with its lots and listeners.
+    /// </summary>
+    private sealed class SharesStub : ITInvestCandleStreamClient
+    {
+        private readonly Channel<ShareSubscription> _subscriptions = Channel.CreateUnbounded<ShareSubscription>();
+
+        public Task<IAsyncDisposable> SubscribeAsync(
+            IReadOnlyDictionary<string, decimal> lotsByUid,
+            Action<string, Candle> closed,
+            Action<string, Candle> forming,
+            CancellationToken cancellationToken)
+        {
+            var subscription = new ShareSubscription(lotsByUid, closed, forming);
+            _subscriptions.Writer.TryWrite(subscription);
+
+            return Task.FromResult<IAsyncDisposable>(subscription);
+        }
+
+        public async Task<ShareSubscription> NextAsync()
+        {
+            return await _subscriptions.Reader.ReadAsync().AsTask().WaitAsync(Patience);
+        }
+
+        public bool HasNext()
+        {
+            return _subscriptions.Reader.TryPeek(out _);
+        }
+    }
+
+    private sealed class ShareSubscription(IReadOnlyDictionary<string, decimal> lots, Action<string, Candle> closed, Action<string, Candle> forming)
+        : IAsyncDisposable
+    {
+        public IReadOnlyDictionary<string, decimal> Lots { get; } = lots;
+
+        public Action<string, Candle> Closed { get; } = closed;
+
+        public Action<string, Candle> Forming { get; } = forming;
+
+        public bool Ended { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            Ended = true;
+
+            return ValueTask.CompletedTask;
         }
     }
 
@@ -392,6 +452,27 @@ public class CandleStreamBackgroundServiceTests
     }
 
     [Test]
+    public async Task The_candles_of_a_share_of_T_Invest_are_saved_and_told_as_those_of_T_Invest()
+    {
+        Candle closed = CandleGenerator.Generate(Minute, volume: 30m, buyVolume: 20m);
+        Candle forming = CandleGenerator.Generate(Minute.AddMinutes(1), volume: 10m, buyVolume: 10m);
+        await StartAsync(bybit: false, tinvest: true);
+        ShareSubscription shares = await _shares.NextAsync();
+
+        shares.Forming(SberUid, forming);
+        shares.Closed(SberUid, closed);
+        await PassBatchWindowAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(shares.Lots, Is.EqualTo(new Dictionary<string, decimal> { [SberUid] = 10m }));
+            Assert.That(await _told.Reader.ReadAsync().AsTask().WaitAsync(Patience), Is.EqualTo(new LiveCandle(Exchange.TInvest, Sber.Id, forming, Closed: false)));
+            Assert.That(await SavedAsync(), Is.EqualTo(new[] { new ClosedCandle(Exchange.TInvest, Sber.Id, closed) }));
+            Assert.That(_stream.HasNext(), Is.False);
+        });
+    }
+
+    [Test]
     public async Task The_listed_instruments_are_subscribed_to_each_category_in_a_subscription_of_its_own()
     {
         await StartAsync();
@@ -405,6 +486,22 @@ public class CandleStreamBackgroundServiceTests
             Assert.That(subscriptions[0].Symbols, Is.EquivalentTo(new[] { "BTCUSDT", "ETHUSDT" }));
             Assert.That(subscriptions[1].Symbols, Is.EqualTo(new[] { "BTCUSDT" }));
             Assert.That(_stream.HasNext(), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task The_shares_are_subscribed_to_once_and_only_while_T_Invest_is_on()
+    {
+        await StartAsync(tinvest: true);
+        ShareSubscription shares = await _shares.NextAsync();
+        await _time.PassNextWaitAsync();
+        await _time.NextWaitAsync();
+        await _service!.StopAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_shares.HasNext(), Is.False);
+            Assert.That(shares.Ended, Is.True);
         });
     }
 

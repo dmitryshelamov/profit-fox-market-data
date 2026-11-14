@@ -72,6 +72,30 @@ internal static class TInvestAnswers
         };
     }
 
+    /// <summary>
+    ///     A message of the candle stream with a minute candle of the exchange, its volume in lots, <paramref name="lotsBought" /> of
+    ///     them bought and the rest sold.
+    /// </summary>
+    public static MarketDataResponse StreamCandle(string uid, DateTimeOffset time, decimal open, decimal high, decimal low, decimal close, long lots, long lotsBought)
+    {
+        return new MarketDataResponse
+        {
+            Candle = new Candle
+            {
+                InstrumentUid = uid,
+                Interval = SubscriptionInterval.OneMinute,
+                Time = Timestamp.FromDateTimeOffset(time),
+                Open = Quotation(open),
+                High = Quotation(high),
+                Low = Quotation(low),
+                Close = Quotation(close),
+                Volume = lots,
+                VolumeBuy = lotsBought,
+                VolumeSell = lots - lotsBought
+            }
+        };
+    }
+
     public static ShareResponse ShareBy(string uid, DateTimeOffset? firstMinuteCandle)
     {
         var share = new Share { Uid = uid };

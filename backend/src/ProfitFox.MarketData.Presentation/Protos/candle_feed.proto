@@ -30,7 +30,7 @@ enum Exchange {
 }
 
 message SubscribeRequest {
-  // The exchanges whose candles are wanted; none means all. Only Bybit is told live for now.
+  // The exchanges whose candles are wanted; none means all.
   repeated Exchange exchanges = 1;
 
   // Where to catch up from; absent means live candles only.
@@ -60,7 +60,6 @@ message CandleUpdate {
   // The part of the volume traded in trades the buyer started; absent where it is not known.
   optional string buy_volume = 10;
 
-  // Whether the minute is closed. A candle not closed is the forming one: built from the trades of its minute so far, it
-  // opens at the close of the minute before and always has a buy volume.
+  // Whether the minute is closed. A candle not closed is the forming one, as far as the trades of its minute went.
   bool closed = 11;
 }

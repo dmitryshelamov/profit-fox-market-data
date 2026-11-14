@@ -167,21 +167,19 @@ public class CandleFeedServiceTests
     }
 
     [Test]
-    public async Task A_candle_of_an_exchange_not_asked_for_or_not_streamed_is_left_out()
+    public async Task A_caller_gets_the_candles_of_the_exchanges_it_asked_for_and_of_all_when_it_named_none()
     {
         using AsyncServerStreamingCall<CandleUpdate> all = await SubscribeAsync(new SubscribeRequest());
         using AsyncServerStreamingCall<CandleUpdate> shares = await SubscribeAsync(new SubscribeRequest { Exchanges = { ProtoExchange.Tinvest } });
 
-        Publish(Closed(Exchange.TInvest, Share, CandleAt(HourAgo)), Closed(Exchange.Bybit, Linear, CandleAt(HourAgo)));
+        Publish(Closed(Exchange.Bybit, Linear, CandleAt(HourAgo)), Closed(Exchange.TInvest, Share, CandleAt(HourAgo)));
 
-        IReadOnlyList<CandleUpdate> ofAll = await TakeAsync(all, count: 1);
-        using var briefly = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        IReadOnlyList<CandleUpdate> ofAll = await TakeAsync(all, count: 2);
+        IReadOnlyList<CandleUpdate> ofShares = await TakeAsync(shares, count: 1);
         Assert.Multiple(() =>
         {
-            Assert.That(ofAll.Single().InstrumentId, Is.EqualTo(Linear.Id.ToString()));
-
-            // T-Invest is not streamed yet, so a caller that asks only for it hears nothing.
-            Assert.That(async () => await shares.ResponseStream.MoveNext(briefly.Token), Throws.InstanceOf<RpcException>());
+            Assert.That(ofAll.Select(update => update.Exchange), Is.EqualTo(new[] { ProtoExchange.Bybit, ProtoExchange.Tinvest }));
+            Assert.That(ofShares.Single().InstrumentId, Is.EqualTo(Share.Id.ToString()));
         });
     }
 
@@ -236,7 +234,8 @@ public class CandleFeedServiceTests
         await StoreAsync(Linear, CandleAt(HourAgo.AddMinutes(-1)), CandleAt(HourAgo, close: 6m), CandleAt(HourAgo.AddMinutes(1), close: 7m));
         await StoreAsync(Share, CandleAt(HourAgo));
 
-        using AsyncServerStreamingCall<CandleUpdate> call = await SubscribeAsync(new SubscribeRequest { Since = Timestamp.FromDateTimeOffset(HourAgo) });
+        using AsyncServerStreamingCall<CandleUpdate> call = await SubscribeAsync(
+            new SubscribeRequest { Since = Timestamp.FromDateTimeOffset(HourAgo), Exchanges = { ProtoExchange.Bybit } });
         IReadOnlyList<CandleUpdate> stored = await TakeAsync(call, count: 2);
         Publish(Closed(Exchange.Bybit, Linear, CandleAt(HourAgo.AddMinutes(2), close: 8m)));
         IReadOnlyList<CandleUpdate> live = await TakeAsync(call, count: 1);

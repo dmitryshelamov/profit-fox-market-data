@@ -14,10 +14,10 @@ using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     Saves the minute candles of every listed instrument of Bybit as they close, each with its buy volume, while
-///     <see cref="CandleStreamSettings" /> enables Bybit. It subscribes to the listed instruments of the catalog and reads the catalog
-///     again every <see cref="CandleStreamSettings.RefreshSeconds" /> for the ones listed since. A delisted instrument stays subscribed
-///     until the app restarts: Bybit tells nothing more of it. The closed candles wait in memory and are saved together,
+///     Saves the minute candles of every listed instrument as they close, each with its buy volume, of the exchanges
+///     <see cref="CandleStreamSettings" /> enables: Bybit and T-Invest. It subscribes to the listed instruments of the catalog and reads
+///     the catalog again every <see cref="CandleStreamSettings.RefreshSeconds" /> for the ones listed since. A delisted instrument stays
+///     subscribed until the app restarts: its exchange tells nothing more of it. The closed candles wait in memory and are saved together,
 ///     <see cref="CandleStreamSettings.BatchSeconds" /> after the first of them came, so a minute of the whole market is one save. The
 ///     forming candles of the minute that goes on are not saved: they go to the feed of live candles as they come. A minute the stream
 ///     did not tell, as during a downtime, is left to <see cref="CandleSyncBackgroundService" />.
@@ -25,6 +25,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal sealed class CandleStreamBackgroundService(
     IServiceScopeFactory scopes,
     IBybitCandleStreamClient bybit,
+    ITInvestCandleStreamClient tinvest,
     ILiveCandleFeed feed,
     IOptionsMonitor<CandleStreamSettings> settings,
     TimeProvider time,
@@ -41,6 +42,11 @@ internal sealed class CandleStreamBackgroundService(
 
     private readonly List<IAsyncDisposable> _subscriptions = [];
 
+    // The uids of the shares of T-Invest subscribed to, and their subscriptions.
+    private readonly HashSet<string> _shares = [];
+
+    private readonly List<IAsyncDisposable> _shareSubscriptions = [];
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         return Task.WhenAll(SubscribeAsync(stoppingToken), SaveAsync(stoppingToken));
@@ -56,14 +62,10 @@ internal sealed class CandleStreamBackgroundService(
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                if (stream.Bybit.Enabled)
-                {
-                    await SubscribeToListedAsync(stoppingToken);
-                }
-                else
-                {
-                    await UnsubscribeAsync();
-                }
+                // Each exchange on its own: the hundreds of requests of Bybit do not hold back T-Invest.
+                await Task.WhenAll(
+                    stream.Bybit.Enabled ? SubscribeToListedAsync(stoppingToken) : UnsubscribeAsync(_subscriptions, _subscribed.Clear),
+                    stream.TInvest.Enabled ? SubscribeToListedSharesAsync(stoppingToken) : UnsubscribeAsync(_shareSubscriptions, _shares.Clear));
 
                 await Task.Delay(TimeSpan.FromSeconds(stream.RefreshSeconds), time, stoppingToken);
 
@@ -72,7 +74,8 @@ internal sealed class CandleStreamBackgroundService(
         }
         finally
         {
-            await UnsubscribeAsync();
+            await UnsubscribeAsync(_subscriptions, _subscribed.Clear);
+            await UnsubscribeAsync(_shareSubscriptions, _shares.Clear);
         }
     }
 
@@ -108,7 +111,7 @@ internal sealed class CandleStreamBackgroundService(
             IAsyncDisposable subscription = await bybit.SubscribeAsync(
                 category,
                 ids.Keys,
-                (symbol, candle) => Closed(ids[symbol], candle),
+                (symbol, candle) => Closed(Exchange.Bybit, ids[symbol], candle),
                 (symbol, candle) => feed.Publish([new LiveCandle(Exchange.Bybit, ids[symbol], candle, Closed: false)]),
                 stoppingToken);
             logger.LogInformation("Subscribed to the closed candles of {Count} {Category} instruments of Bybit.", ids.Count, category);
@@ -127,21 +130,59 @@ internal sealed class CandleStreamBackgroundService(
         }
     }
 
-    private async Task UnsubscribeAsync()
+    // One subscription for the listed shares of T-Invest not subscribed to yet: all of them at the first pass, later only the ones
+    // listed since. The stream of T-Invest opens and reopens by itself, so only a missing token fails here.
+    private async Task SubscribeToListedSharesAsync(CancellationToken stoppingToken)
     {
-        foreach (IAsyncDisposable subscription in _subscriptions)
+        IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.TInvest, logger, stoppingToken);
+
+        (Guid Id, TInvestListedShareInternal Listing)[] listed =
+        [
+            .. instruments
+                .Where(instrument => instrument.DelistedAt is null)
+                .Select(instrument => (instrument.Id, Listing: (TInvestListedShareInternal)instrument.Listing))
+                .Where(share => !_shares.Contains(share.Listing.Uid))
+        ];
+
+        if (listed.Length == 0)
+        {
+            return;
+        }
+
+        Dictionary<string, Guid> ids = listed.ToDictionary(share => share.Listing.Uid, share => share.Id);
+
+        try
+        {
+            _shareSubscriptions.Add(
+                await tinvest.SubscribeAsync(
+                    listed.ToDictionary(share => share.Listing.Uid, share => share.Listing.Rules.QuantityStep),
+                    (uid, candle) => Closed(Exchange.TInvest, ids[uid], candle),
+                    (uid, candle) => feed.Publish([new LiveCandle(Exchange.TInvest, ids[uid], candle, Closed: false)]),
+                    stoppingToken));
+            _shares.UnionWith(ids.Keys);
+            logger.LogInformation("Subscribed to the closed candles of {Count} shares of T-Invest.", ids.Count);
+        }
+        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "Subscribing to the closed candles of {Count} shares of T-Invest failed; it is tried again later.", ids.Count);
+        }
+    }
+
+    private static async Task UnsubscribeAsync(List<IAsyncDisposable> subscriptions, Action forget)
+    {
+        foreach (IAsyncDisposable subscription in subscriptions)
         {
             await subscription.DisposeAsync();
         }
 
-        _subscriptions.Clear();
-        _subscribed.Clear();
+        subscriptions.Clear();
+        forget();
     }
 
     // Called on the threads of the stream: the candle only joins the ones waiting to be saved.
-    private void Closed(Guid instrumentId, Candle candle)
+    private void Closed(Exchange exchange, Guid instrumentId, Candle candle)
     {
-        _closed.Writer.TryWrite(new ClosedCandle(Exchange.Bybit, instrumentId, candle));
+        _closed.Writer.TryWrite(new ClosedCandle(exchange, instrumentId, candle));
     }
 
     // The first candle that waits opens a batch; BatchSeconds later all that wait by then are saved together, in a scope of their own.
