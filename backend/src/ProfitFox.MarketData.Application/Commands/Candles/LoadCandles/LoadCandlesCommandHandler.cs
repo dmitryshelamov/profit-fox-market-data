@@ -34,8 +34,8 @@ internal sealed class LoadCandlesCommandHandler(
             return LoadCandlesResult.NothingLeft;
         }
 
-        IExchangeCandlesClient exchange = exchanges.FirstOrDefault(client => client.Serves(instrument.Listing))
-            ?? throw new NotSupportedException($"Candles of a listing of {instrument.Listing.GetType().Name} are not loaded.");
+        IExchangeCandlesClient exchange = exchanges.FirstOrDefault(client => client.Exchange == instrument.Listing.Exchange)
+            ?? throw new NotSupportedException($"Candles of {instrument.Listing.Exchange} are not loaded.");
 
         CandleSeries? stored = await series.GetAsync(instrument.Id, cancellationToken);
         CandleSeries current = stored ?? await StartAsync(exchange, instrument, range, cancellationToken);

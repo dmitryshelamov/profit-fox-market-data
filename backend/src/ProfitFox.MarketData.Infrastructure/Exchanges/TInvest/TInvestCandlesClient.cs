@@ -5,6 +5,7 @@ using Grpc.Core;
 using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Ports.Candles;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
@@ -33,10 +34,7 @@ internal sealed class TInvestCandlesClient(
     // T-Invest gives the minute candles of at most one day in a request.
     public TimeSpan PageLength => TimeSpan.FromDays(1);
 
-    public bool Serves(ListedInstrument listing)
-    {
-        return listing is TInvestListedShare;
-    }
+    public Exchange Exchange => Exchange.TInvest;
 
     /// <exception cref="NotSupportedException">TInvestApi:Token is not set; no call goes.</exception>
     public async Task<IReadOnlyList<Candle>> GetAsync(ListedInstrument listing, MinuteRange range, CancellationToken cancellationToken)

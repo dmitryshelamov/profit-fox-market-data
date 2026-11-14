@@ -21,10 +21,7 @@ internal sealed class BybitCandlesClient(IBybitRestClient bybit, BybitRequestGat
 
     public TimeSpan PageLength => TimeSpan.FromMinutes(PageSize);
 
-    public bool Serves(ListedInstrument listing)
-    {
-        return listing is BybitListedInstrument;
-    }
+    public Exchange Exchange => Exchange.Bybit;
 
     public async Task<IReadOnlyList<Candle>> GetAsync(ListedInstrument listed, MinuteRange range, CancellationToken cancellationToken)
     {

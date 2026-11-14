@@ -1,5 +1,3 @@
-using MediatR;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,22 +35,7 @@ internal sealed class InstrumentSyncBackgroundService(
             await Task.WhenAll(SyncBybitAsync(sync.Bybit, stoppingToken), SyncTInvestAsync(sync.TInvest, stoppingToken));
             await wait;
 
-            sync = ReadSettings(sync);
-        }
-    }
-
-    // A broken change (an interval of zero, an unknown category) is logged, and the last valid settings stay until it is fixed.
-    private InstrumentSyncSettings ReadSettings(InstrumentSyncSettings lastValid)
-    {
-        try
-        {
-            return settings.CurrentValue;
-        }
-        catch (Exception exception) when (exception is OptionsValidationException or InvalidOperationException)
-        {
-            logger.LogError(exception, "The InstrumentSync settings are broken; the sync goes on with the last valid ones.");
-
-            return lastValid;
+            sync = settings.CurrentOrLastValid(sync, logger);
         }
     }
 
@@ -70,7 +53,7 @@ internal sealed class InstrumentSyncBackgroundService(
         }
     }
 
-    private async Task SyncTInvestAsync(TInvestInstrumentSyncSettings tinvest, CancellationToken stoppingToken)
+    private async Task SyncTInvestAsync(ExchangeSyncSettings tinvest, CancellationToken stoppingToken)
     {
         if (tinvest.Enabled)
         {
@@ -84,10 +67,7 @@ internal sealed class InstrumentSyncBackgroundService(
     {
         try
         {
-            await using AsyncServiceScope scope = scopes.CreateAsyncScope();
-            ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
-
-            await sender.Send(command, stoppingToken);
+            await scopes.SendAsync(command, stoppingToken);
             logger.LogInformation("Synced {What}.", what);
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)

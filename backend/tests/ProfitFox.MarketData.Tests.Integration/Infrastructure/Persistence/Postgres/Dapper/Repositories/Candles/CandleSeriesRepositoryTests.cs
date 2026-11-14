@@ -9,6 +9,7 @@ using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles;
@@ -73,7 +74,7 @@ public class CandleSeriesRepositoryTests
 
     private static Candle CandleAt(DateTimeOffset openTime, decimal close)
     {
-        return new Candle(openTime, open: 5m, high: 10m, low: 1m, close, volume: 1m);
+        return CandleGenerator.Generate(openTime, close);
     }
 
     private static MinuteRange Range(DateTimeOffset from, int minutes)
@@ -171,6 +172,17 @@ public class CandleSeriesRepositoryTests
     }
 
     [Test]
+    public async Task Candles_are_stored_exactly_as_the_exchange_gave_them()
+    {
+        var bybit = new Candle(Start, open: 0.00001234m, high: 0.00001240m, low: 0.00001230m, close: 0.00001238m, volume: 1234567.89m, turnover: 15.2771m);
+        var tinvest = new Candle(Start.AddMinutes(1), open: 300.5m, high: 301m, low: 300m, close: 300.75m, volume: 1000m);
+
+        await SaveAsync(Range(Start, minutes: 2), bybit, tinvest);
+
+        Assert.That(await StoredCandlesAsync(), Is.EqualTo(new[] { StoredCandle.Of(bybit), StoredCandle.Of(tinvest) }));
+    }
+
+    [Test]
     public async Task Two_loaders_that_read_the_same_series_both_keep_what_they_covered()
     {
         await SaveAsync(Range(Start, minutes: 10));
@@ -184,16 +196,5 @@ public class CandleSeriesRepositoryTests
 
         CandleSeries? stored = await _repository.GetAsync(Linear.Id, CancellationToken.None);
         Assert.That(stored?.Covered, Is.EqualTo(new[] { Range(Start.AddMinutes(-10), minutes: 30) }));
-    }
-
-    [Test]
-    public async Task Candles_are_stored_exactly_as_the_exchange_gave_them()
-    {
-        var bybit = new Candle(Start, open: 0.00001234m, high: 0.00001240m, low: 0.00001230m, close: 0.00001238m, volume: 1234567.89m, turnover: 15.2771m);
-        var tinvest = new Candle(Start.AddMinutes(1), open: 300.5m, high: 301m, low: 300m, close: 300.75m, volume: 1000m);
-
-        await SaveAsync(Range(Start, minutes: 2), bybit, tinvest);
-
-        Assert.That(await StoredCandlesAsync(), Is.EqualTo(new[] { StoredCandle.Of(bybit), StoredCandle.Of(tinvest) }));
     }
 }

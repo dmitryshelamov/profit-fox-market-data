@@ -1,5 +1,3 @@
-using MediatR;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,6 +7,7 @@ using ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -49,7 +48,7 @@ internal sealed class CandleSyncBackgroundService(
                 await Task.Delay(TimeSpan.FromSeconds(sync.IdleSeconds), time, stoppingToken);
             }
 
-            sync = ReadSettings(sync);
+            sync = settings.CurrentOrLastValid(sync, logger);
         }
     }
 
@@ -108,7 +107,7 @@ internal sealed class CandleSyncBackgroundService(
     {
         try
         {
-            return await SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow()), stoppingToken);
+            return await scopes.SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow()), stoppingToken);
         }
         catch (ExchangePausedException exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -130,12 +129,7 @@ internal sealed class CandleSyncBackgroundService(
     {
         try
         {
-            return exchange switch
-            {
-                Exchange.Bybit => await SendAsync(new GetBybitInstrumentsQuery(), stoppingToken),
-                Exchange.TInvest => await SendAsync(new GetTInvestSharesQuery(), stoppingToken),
-                _ => throw new NotSupportedException($"Candles of {exchange} are not loaded.")
-            };
+            return await scopes.SendAsync(new GetInstrumentsQuery(exchange), stoppingToken);
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -171,34 +165,5 @@ internal sealed class CandleSyncBackgroundService(
         {
             await Task.Delay(wait, time, stoppingToken);
         }
-    }
-
-    // A broken change is logged, and the last valid settings stay until it is fixed.
-    private CandleSyncSettings ReadSettings(CandleSyncSettings lastValid)
-    {
-        try
-        {
-            return settings.CurrentValue;
-        }
-        catch (Exception exception) when (exception is OptionsValidationException or InvalidOperationException)
-        {
-            logger.LogError(exception, "The CandleSync settings are broken; the loading goes on with the last valid ones.");
-
-            return lastValid;
-        }
-    }
-
-    // Each request has a scope of its own, so it has a connection of its own and a command a transaction of its own.
-    private async Task<T> SendAsync<T>(IRequest<T> request, CancellationToken stoppingToken)
-    {
-        await using AsyncServiceScope scope = scopes.CreateAsyncScope();
-
-        return await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, stoppingToken);
-    }
-
-    private enum Exchange
-    {
-        Bybit,
-        TInvest
     }
 }

@@ -5,11 +5,12 @@ using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Domain.Entities.Candles;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
-using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
 namespace ProfitFox.MarketData.Tests.Unit.Application.Commands.Candles;
@@ -22,8 +23,8 @@ public class LoadCandlesCommandHandlerTests
     {
         _instruments = Substitute.For<IInstrumentRepository>();
         _series = Substitute.For<ICandleSeriesRepository>();
-        _bybit = Exchange<BybitListedInstrument>(TimeSpan.FromMinutes(1000));
-        _tinvest = Exchange<TInvestListedShare>(TimeSpan.FromDays(1));
+        _bybit = Client(Exchange.Bybit, TimeSpan.FromMinutes(1000));
+        _tinvest = Client(Exchange.TInvest, TimeSpan.FromDays(1));
         _saved = null;
 
         _instruments.GetAsync(Linear.Id, Arg.Any<CancellationToken>()).Returns(Linear);
@@ -50,16 +51,15 @@ public class LoadCandlesCommandHandlerTests
     private CandleSeries? _saved;
     private LoadCandlesCommandHandler _handler = null!;
 
-    // The client of an exchange: it serves the listings of its type, gives pages of its length and has no candles unless a test says so.
-    private static IExchangeCandlesClient Exchange<TListing>(TimeSpan pageLength)
-        where TListing : ListedInstrument
+    // The client of an exchange: it gives pages of its length and has no candles unless a test says so.
+    private static IExchangeCandlesClient Client(Exchange exchange, TimeSpan pageLength)
     {
-        IExchangeCandlesClient exchange = Substitute.For<IExchangeCandlesClient>();
-        exchange.Serves(Arg.Any<ListedInstrument>()).Returns(call => call.Arg<ListedInstrument>() is TListing);
-        exchange.PageLength.Returns(pageLength);
-        exchange.GetAsync(Arg.Any<ListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>()).Returns([]);
+        IExchangeCandlesClient client = Substitute.For<IExchangeCandlesClient>();
+        client.Exchange.Returns(exchange);
+        client.PageLength.Returns(pageLength);
+        client.GetAsync(Arg.Any<ListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>()).Returns([]);
 
-        return exchange;
+        return client;
     }
 
     private Task<LoadCandlesResult> Load(Instrument instrument, MinuteRange range, DateTimeOffset? requestedAt = null)
@@ -76,7 +76,7 @@ public class LoadCandlesCommandHandlerTests
 
     private static Candle CandleAt(int minute)
     {
-        return new Candle(Now.AddMinutes(minute), open: 5m, high: 10m, low: 1m, close: 5m, volume: 1m);
+        return CandleGenerator.Generate(Now.AddMinutes(minute));
     }
 
     private static MinuteRange Minutes(int from, int until)

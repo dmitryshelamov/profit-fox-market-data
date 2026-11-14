@@ -43,10 +43,11 @@ internal static class InstrumentRepositoryQueries
 
     private const string TInvestByIdSql = $"{TInvestSelect} WHERE i.id = @Id";
 
-    // A stored row of the same id takes every value of the saved one.
+    // The rows go as one array per column, so a whole catalog is one statement. A stored row of the same id takes every value of the
+    // saved one.
     private const string UpsertInstrumentsSql = """
                                                 INSERT INTO instruments (id, first_seen_at, delisted_at)
-                                                VALUES (@Id, @FirstSeenAt, @DelistedAt)
+                                                SELECT * FROM unnest(@Ids::uuid[], @FirstSeenAts::timestamptz[], @DelistedAts::timestamptz[])
                                                 ON CONFLICT (id) DO UPDATE SET
                                                     first_seen_at = EXCLUDED.first_seen_at,
                                                     delisted_at = EXCLUDED.delisted_at
@@ -55,8 +56,10 @@ internal static class InstrumentRepositoryQueries
     private const string UpsertBybitSql = """
                                           INSERT INTO bybit_listings (instrument_id, category, symbol, base_asset, quote_asset, status, tick_size,
                                                                       quantity_step, min_quantity, min_amount, contract_type, launch_time)
-                                          VALUES (@InstrumentId, @Category, @Symbol, @BaseAsset, @QuoteAsset, @Status, @TickSize,
-                                                  @QuantityStep, @MinQuantity, @MinAmount, @ContractType, @LaunchTime)
+                                          SELECT * FROM unnest(
+                                              @InstrumentIds::uuid[], @Categories::text[], @Symbols::text[], @BaseAssets::text[], @QuoteAssets::text[],
+                                              @Statuses::text[], @TickSizes::numeric[], @QuantitySteps::numeric[], @MinQuantities::numeric[],
+                                              @MinAmounts::numeric[], @ContractTypes::text[], @LaunchTimes::timestamptz[])
                                           ON CONFLICT (instrument_id) DO UPDATE SET
                                               category = EXCLUDED.category,
                                               symbol = EXCLUDED.symbol,
@@ -73,7 +76,9 @@ internal static class InstrumentRepositoryQueries
 
     private const string UpsertTInvestSql = """
                                             INSERT INTO tinvest_shares (instrument_id, uid, ticker, tick_size, quantity_step, min_quantity)
-                                            VALUES (@InstrumentId, @Uid, @Ticker, @TickSize, @QuantityStep, @MinQuantity)
+                                            SELECT * FROM unnest(
+                                                @InstrumentIds::uuid[], @Uids::text[], @Tickers::text[], @TickSizes::numeric[],
+                                                @QuantitySteps::numeric[], @MinQuantities::numeric[])
                                             ON CONFLICT (instrument_id) DO UPDATE SET
                                                 uid = EXCLUDED.uid,
                                                 ticker = EXCLUDED.ticker,
@@ -102,19 +107,51 @@ internal static class InstrumentRepositoryQueries
         return new CommandDefinition(TInvestByIdSql, new { Id = id }, transaction, cancellationToken: cancellationToken);
     }
 
-    // Dapper runs each upsert once per row, all in the transaction.
     public static CommandDefinition UpsertInstruments(IReadOnlyCollection<InstrumentDb> rows, IDbTransaction? transaction, CancellationToken cancellationToken)
     {
-        return new CommandDefinition(UpsertInstrumentsSql, rows, transaction, cancellationToken: cancellationToken);
+        var columns = new
+        {
+            Ids = rows.Select(row => row.Id).ToArray(),
+            FirstSeenAts = rows.Select(row => row.FirstSeenAt.ToUniversalTime()).ToArray(),
+            DelistedAts = rows.Select(row => row.DelistedAt?.ToUniversalTime()).ToArray()
+        };
+
+        return new CommandDefinition(UpsertInstrumentsSql, columns, transaction, cancellationToken: cancellationToken);
     }
 
     public static CommandDefinition UpsertBybit(IReadOnlyCollection<BybitListingDb> rows, IDbTransaction? transaction, CancellationToken cancellationToken)
     {
-        return new CommandDefinition(UpsertBybitSql, rows, transaction, cancellationToken: cancellationToken);
+        var columns = new
+        {
+            InstrumentIds = rows.Select(row => row.InstrumentId).ToArray(),
+            Categories = rows.Select(row => row.Category).ToArray(),
+            Symbols = rows.Select(row => row.Symbol).ToArray(),
+            BaseAssets = rows.Select(row => row.BaseAsset).ToArray(),
+            QuoteAssets = rows.Select(row => row.QuoteAsset).ToArray(),
+            Statuses = rows.Select(row => row.Status).ToArray(),
+            TickSizes = rows.Select(row => row.TickSize).ToArray(),
+            QuantitySteps = rows.Select(row => row.QuantityStep).ToArray(),
+            MinQuantities = rows.Select(row => row.MinQuantity).ToArray(),
+            MinAmounts = rows.Select(row => row.MinAmount).ToArray(),
+            ContractTypes = rows.Select(row => row.ContractType).ToArray(),
+            LaunchTimes = rows.Select(row => row.LaunchTime?.ToUniversalTime()).ToArray()
+        };
+
+        return new CommandDefinition(UpsertBybitSql, columns, transaction, cancellationToken: cancellationToken);
     }
 
     public static CommandDefinition UpsertTInvest(IReadOnlyCollection<TInvestShareDb> rows, IDbTransaction? transaction, CancellationToken cancellationToken)
     {
-        return new CommandDefinition(UpsertTInvestSql, rows, transaction, cancellationToken: cancellationToken);
+        var columns = new
+        {
+            InstrumentIds = rows.Select(row => row.InstrumentId).ToArray(),
+            Uids = rows.Select(row => row.Uid).ToArray(),
+            Tickers = rows.Select(row => row.Ticker).ToArray(),
+            TickSizes = rows.Select(row => row.TickSize).ToArray(),
+            QuantitySteps = rows.Select(row => row.QuantityStep).ToArray(),
+            MinQuantities = rows.Select(row => row.MinQuantity).ToArray()
+        };
+
+        return new CommandDefinition(UpsertTInvestSql, columns, transaction, cancellationToken: cancellationToken);
     }
 }

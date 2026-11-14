@@ -1,4 +1,5 @@
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 
 namespace ProfitFox.MarketData.Domain.Repositories;
 
@@ -11,6 +12,11 @@ public interface IInstrumentRepository
     ///     Every instrument the catalog ever kept.
     /// </summary>
     Task<IReadOnlyList<Instrument>> GetAllAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Every instrument of the exchange the catalog ever kept.
+    /// </summary>
+    Task<IReadOnlyList<Instrument>> GetByExchangeAsync(Exchange exchange, CancellationToken cancellationToken);
 
     /// <summary>
     ///     The instrument of the id, listed or delisted; null when the catalog never kept it.

@@ -10,55 +10,50 @@ public class BybitListedInstrumentTests
 
     private static readonly DateTimeOffset LaunchTime = new DateTimeOffset(year: 2020, month: 3, day: 20, hour: 0, minute: 0, second: 0, TimeSpan.Zero);
 
-    [TestCase(BybitCategory.Linear, BybitContractType.LinearPerpetual)]
-    [TestCase(BybitCategory.Linear, BybitContractType.LinearFutures)]
-    [TestCase(BybitCategory.Inverse, BybitContractType.InversePerpetual)]
-    [TestCase(BybitCategory.Inverse, BybitContractType.InverseFutures)]
-    public void Contract_keeps_a_contract_type_of_its_category(BybitCategory category, BybitContractType contractType)
+    [TestCase(BybitContractType.LinearPerpetual)]
+    [TestCase(BybitContractType.LinearFutures)]
+    public void A_linear_contract_keeps_its_contract_type_and_launch_time(BybitContractType contractType)
     {
-        BybitListedInstrument instrument = Create(category, contractType);
+        BybitListedInstrument instrument = Create(BybitCategory.Linear, contractType);
 
         Assert.Multiple(() =>
         {
             Assert.That(instrument.ContractType, Is.EqualTo(contractType));
             Assert.That(instrument.LaunchTime, Is.EqualTo(LaunchTime));
+            Assert.That(instrument.Exchange, Is.EqualTo(Exchange.Bybit));
         });
-    }
-
-    [TestCase(BybitCategory.Linear, BybitContractType.InversePerpetual)]
-    [TestCase(BybitCategory.Inverse, BybitContractType.LinearFutures)]
-    [TestCase(BybitCategory.Spot, BybitContractType.LinearPerpetual)]
-    [TestCase(BybitCategory.Option, BybitContractType.LinearFutures)]
-    public void Contract_type_of_another_category_is_rejected(BybitCategory category, BybitContractType contractType)
-    {
-        Assert.Throws<ArgumentException>(() => Create(category, contractType));
-    }
-
-    [TestCase(BybitCategory.Linear)]
-    [TestCase(BybitCategory.Inverse)]
-    public void Contract_without_contract_type_is_rejected(BybitCategory category)
-    {
-        Assert.Throws<ArgumentException>(() => Create(category, contractType: null));
     }
 
     [TestCase("", "BTC", "USDT")]
     [TestCase("BTCUSDT", " ", "USDT")]
     [TestCase("BTCUSDT", "BTC", "")]
-    public void Blank_symbol_or_coin_is_rejected(string symbol, string baseCoin, string quoteCoin)
+    public void A_blank_symbol_or_asset_is_rejected(string symbol, string baseAsset, string quoteAsset)
     {
         Assert.Throws<ArgumentException>(() =>
-            new BybitListedInstrument(BybitCategory.Spot, symbol, baseCoin, quoteCoin, InstrumentStatus.Trading, Rules));
+            new BybitListedInstrument(BybitCategory.Spot, symbol, baseAsset, quoteAsset, BybitInstrumentStatus.Trading, Rules));
     }
 
     private static BybitListedInstrument Create(BybitCategory category, BybitContractType? contractType)
     {
-        return new BybitListedInstrument(category, "BTCUSDT", "BTC", "USDT", InstrumentStatus.Trading, Rules, contractType, LaunchTime);
+        return new BybitListedInstrument(category, "BTCUSDT", "BTC", "USDT", BybitInstrumentStatus.Trading, Rules, contractType, LaunchTime);
+    }
+
+    [Test]
+    public void A_linear_contract_without_a_contract_type_is_rejected()
+    {
+        Assert.Throws<ArgumentException>(() => Create(BybitCategory.Linear, contractType: null));
+    }
+
+    [Test]
+    public void A_spot_pair_with_a_contract_type_is_rejected()
+    {
+        Assert.Throws<ArgumentException>(() => Create(BybitCategory.Spot, BybitContractType.LinearPerpetual));
     }
 
     [Test]
     public void Spot_has_no_contract_type()
     {
-        var instrument = new BybitListedInstrument(BybitCategory.Spot, "BTCUSDT", "BTC", "USDT", InstrumentStatus.Trading, Rules);
+        var instrument = new BybitListedInstrument(BybitCategory.Spot, "BTCUSDT", "BTC", "USDT", BybitInstrumentStatus.Trading, Rules);
 
         Assert.Multiple(() =>
         {

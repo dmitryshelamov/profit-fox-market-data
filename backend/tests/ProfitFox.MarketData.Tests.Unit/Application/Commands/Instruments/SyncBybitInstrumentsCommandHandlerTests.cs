@@ -40,7 +40,9 @@ public class SyncBybitInstrumentsCommandHandlerTests
 
     private void Stored(params Instrument[] instruments)
     {
-        _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(instruments);
+        // As the repository does: only the instruments of the exchange asked for.
+        _repository.GetByExchangeAsync(Arg.Any<Exchange>(), Arg.Any<CancellationToken>())
+            .Returns(call => instruments.Where(instrument => instrument.Listing.Exchange == call.Arg<Exchange>()).ToList());
     }
 
     private void Listed(BybitCategory category, params BybitListedInstrument[] listings)

@@ -1,4 +1,5 @@
-using ProfitFox.MarketData.Application.Commands.Base;
+using MediatR;
+
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
 namespace ProfitFox.MarketData.Application.Commands.Candles.EnsureCandlesLoaded;
@@ -9,4 +10,4 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.EnsureCandlesLoaded;
 ///     is handed to the background loading, and the range is <see cref="CandlesReadiness.Loading" />.
 /// </summary>
 public sealed record EnsureCandlesLoadedCommand(Guid InstrumentId, MinuteRange Range, DateTimeOffset RequestedAt, int MaxExchangeRequests)
-    : ICommandWithoutTransaction<CandlesReadiness>;
+    : IRequest<CandlesReadiness>;

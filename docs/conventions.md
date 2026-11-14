@@ -14,9 +14,9 @@ Before choosing a library or a pattern, look at how the owner's sibling reposito
   FluentMigrator, Testcontainers), the TimescaleDB image tag from its `docker-compose.yml`; the Bybit adapter follows
   `ProfitFox.Infrastructure/Exchanges/Bybit`.
 - **profit-fox-old** (`~/RiderProjects/profit-fox-old`, `gitlab.com/dmitry_shelamov/profit-fox`): migrations
-  (`Persistence/Postgres/FluentMigrator`), the MediatR transaction behavior (`Mediatr/Behaviors/PostgresTransactionBehavior`), the
-  test application (`ProfitFoxTestApplication : WebApplicationFactory<Program>`) and the generators of domain objects in
-  `Tests.Shared/Generators`.
+  (`Persistence/Postgres/FluentMigrator`), the test application (`ProfitFoxTestApplication : WebApplicationFactory<Program>`), the
+  generators of domain objects in `Tests.Shared/Generators` and the names of ports and contracts (below). Its MediatR transaction
+  behavior is not taken: see Application.
 
 A library neither of them uses is a question to the owner, with a recommendation, not a choice to make alone. Where the two differ
 and this file is silent, ask which to follow.
@@ -36,8 +36,10 @@ and this file is silent, ask which to follow.
   never changes state or raises an event.
 - A value object is a `sealed record` with get-only properties; its constructor checks what can really come wrong from the
   exchange (blank strings, a contract type of another category), not enum values out of range or nulls the compiler already rules out.
-- An exchange gets its own types (`BybitListedInstrument`, `BybitCategory`); a common base appears only when a second exchange
-  brings a second type to extract it from.
+- An exchange gets its own types (`BybitListedInstrument`, `BybitCategory`, `BybitInstrumentStatus`); a common base appears only
+  when a second exchange brings a second type to extract it from. What the exchanges share is `ListedInstrument.Exchange`: code
+  that must tell the exchanges apart reads it and does not test the type of a listing, except where it maps a listing to its own
+  table or contract.
 - The domain knows no wire codes: enums, not strings; the adapter of an exchange maps its codes.
 
 ## Application (`ProfitFox.MarketData.Application`)
@@ -46,15 +48,21 @@ and this file is silent, ask which to follow.
   profit-fox-old names them (`IMarketHistoryClient`); the adapter in `Infrastructure/Exchanges/<Exchange>` drops the `I`
   (`BybitInstrumentsClient`). Not `Service`: the SDK of T-Invest names its gRPC clients so (`MarketDataService.MarketDataServiceClient`).
   A port every exchange implements the same way is one interface, `IExchange<What>Client` (`IExchangeCandlesClient`), with an
-  adapter per exchange (`BybitCandlesClient`, `TInvestCandlesClient`); its `Serves(listing)` tells which listings are its, so a
-  handler picks the client and has no `switch` on the exchange.
+  adapter per exchange (`BybitCandlesClient`, `TInvestCandlesClient`); its `Exchange` tells whose listings are its, so a handler
+  picks the client by `listing.Exchange` and has no `switch`. Ports whose shapes differ stay apart (Bybit lists a category,
+  T-Invest has none).
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
   `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
-- A command that asks an exchange implements `ICommandWithoutTransaction<TResponse>`: it runs outside the transaction of the
-  pipeline, so no transaction stays open while the exchange answers, and saves through one call of a repository, whole by itself.
+- No request runs in a transaction of the MediatR pipeline: a handler asks an exchange, which no open transaction should wait
+  for. A handler saves through one call of a repository, and the repository makes that call whole in a transaction of its own
+  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it.
 - A command gives a named result (`LoadCandlesResult.MoreLeft`), not a bare `bool`.
 - `Queries/<Area>` holds a query with what it asks by (`CandleWindow`, `CandleInterval`); a rule of the input is checked there, not
-  in the controller. A query only reads.
+  in the controller. A query only reads. Its handler lives next to it when the repositories of the domain answer it
+  (`GetInstrumentsQueryHandler`), and in `Infrastructure/Persistence/Queries/Handlers/<Area>` when it needs SQL of its own
+  (`GetCandlesQueryHandler`).
+- `Contracts/<Area>` holds what a query gives and the API shows, named `<Name>Internal` as in profit-fox-old
+  (`InstrumentInternal`), with converters from the domain in `Contracts/<Area>/Converters`.
 
 ## Infrastructure (`ProfitFox.MarketData.Infrastructure`)
 
@@ -63,10 +71,15 @@ and this file is silent, ask which to follow.
   its PascalCase name (`CreateInstrumentsTableMigration`). It derives from `Migration` and undoes itself in `Down()`.
 - Names of constraints are snake_case: `<table>_pk`, `<table>_<columns>_unique`.
 - Enums are stored as `text` with the names of their members, not as Postgres `ENUM` types.
+- The failures the application tells by an exception are answered in one place, `ApplicationExceptionHandler` of Presentation
+  (404 for an unknown instrument, 503 for an exchange that holds the requests or is unavailable); a controller catches only what
+  means something of its own there.
 - A hosted service lives in `BackgroundServices` with its settings (`InstrumentSyncSettings`, the `InstrumentSync` section of
   `appsettings.json`), bound with `AddOptions().Bind().Validate().ValidateOnStart()` and read through `IOptionsMonitor` before every
-  run, so a saved change applies from the next run without a restart; a broken change is logged and the last valid settings stay. Each run takes its own scope and sends a
-  command through `ISender`; a failure is logged and the service goes on. `MarketDataTestApplication` leaves it out.
+  run, so a saved change applies from the next run without a restart; a broken change is logged and the last valid settings stay
+  (`CurrentOrLastValid`). Each request goes in a scope of its own through `ISender` (`scopes.SendAsync`); a failure is logged and
+  the service goes on. `BackgroundServicesRegistrar` registers the services with the checks of their sections; an exchange is
+  switched by `ExchangeSyncSettings`. `MarketDataTestApplication` leaves the services out.
 
 ## Files and code style
 

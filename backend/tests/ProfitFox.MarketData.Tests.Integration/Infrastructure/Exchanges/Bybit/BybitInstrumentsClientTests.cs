@@ -56,17 +56,6 @@ public class BybitInstrumentsClientTests
         Assert.ThrowsAsync<InvalidOperationException>(() => _instruments.ListAsync(BybitCategory.Linear, CancellationToken.None));
     }
 
-    [TestCase(BybitCategory.Inverse)]
-    [TestCase(BybitCategory.Option)]
-    public void A_category_the_catalog_does_not_sync_is_refused_without_asking_Bybit(BybitCategory category)
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.ThrowsAsync<NotSupportedException>(() => _instruments.ListAsync(category, CancellationToken.None));
-            Assert.That(_bybit.Requests, Is.Empty);
-        });
-    }
-
     [Test]
     public void A_page_Bybit_refuses_fails_the_whole_list()
     {
@@ -99,7 +88,7 @@ public class BybitInstrumentsClientTests
                             "BTCUSDT",
                             "BTC",
                             "USDT",
-                            InstrumentStatus.Trading,
+                            BybitInstrumentStatus.Trading,
                             rules,
                             BybitContractType.LinearPerpetual,
                             LaunchTime),
@@ -108,7 +97,7 @@ public class BybitInstrumentsClientTests
                             "BTCUSDT-26DEC25",
                             "BTC",
                             "USDT",
-                            InstrumentStatus.Trading,
+                            BybitInstrumentStatus.Trading,
                             rules,
                             BybitContractType.LinearFutures,
                             LaunchTime)
@@ -140,7 +129,7 @@ public class BybitInstrumentsClientTests
                             "BTCUSDT",
                             "BTC",
                             "USDT",
-                            InstrumentStatus.Trading,
+                            BybitInstrumentStatus.Trading,
                             new InstrumentRules(tickSize: 0.01m, quantityStep: 0.000001m, minQuantity: 0.000048m, minAmount: 1m))
                     }));
             Assert.That(_bybit.Requests.Single().Query, Does.Contain("category=spot"));

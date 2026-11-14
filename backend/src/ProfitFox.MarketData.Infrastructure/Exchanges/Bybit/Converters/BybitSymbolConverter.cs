@@ -50,15 +50,15 @@ internal static class BybitSymbolConverter
             new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)));
     }
 
-    private static InstrumentStatus Status(string symbol, SymbolStatus status)
+    private static BybitInstrumentStatus Status(string symbol, SymbolStatus status)
     {
         return status switch
         {
-            SymbolStatus.PreLaunch => InstrumentStatus.PreLaunch,
-            SymbolStatus.PendingOpen => InstrumentStatus.PendingOpen,
-            SymbolStatus.Trading => InstrumentStatus.Trading,
-            SymbolStatus.Delivering => InstrumentStatus.Delivering,
-            SymbolStatus.Closed => InstrumentStatus.Closed,
+            SymbolStatus.PreLaunch => BybitInstrumentStatus.PreLaunch,
+            SymbolStatus.PendingOpen => BybitInstrumentStatus.PendingOpen,
+            SymbolStatus.Trading => BybitInstrumentStatus.Trading,
+            SymbolStatus.Delivering => BybitInstrumentStatus.Delivering,
+            SymbolStatus.Closed => BybitInstrumentStatus.Closed,
             _ => throw new InvalidOperationException($"Bybit lists {symbol} with status {status}, which the catalog does not know.")
         };
     }

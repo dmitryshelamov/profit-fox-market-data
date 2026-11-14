@@ -14,5 +14,5 @@ internal sealed class InstrumentSyncSettings
 
     public BybitInstrumentSyncSettings Bybit { get; init; } = new BybitInstrumentSyncSettings();
 
-    public TInvestInstrumentSyncSettings TInvest { get; init; } = new TInvestInstrumentSyncSettings();
+    public ExchangeSyncSettings TInvest { get; init; } = new ExchangeSyncSettings();
 }

@@ -18,7 +18,7 @@ internal sealed class CandleSyncSettings
     /// </summary>
     public int IdleSeconds { get; init; } = 60;
 
-    public CandleSyncExchangeSettings Bybit { get; init; } = new CandleSyncExchangeSettings();
+    public ExchangeSyncSettings Bybit { get; init; } = new ExchangeSyncSettings();
 
-    public CandleSyncExchangeSettings TInvest { get; init; } = new CandleSyncExchangeSettings();
+    public ExchangeSyncSettings TInvest { get; init; } = new ExchangeSyncSettings();
 }

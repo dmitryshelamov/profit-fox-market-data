@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Commands.Candles.EnsureCandlesLoaded;
 using ProfitFox.MarketData.Application.Contracts.Candles;
-using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries.Candles;
 using ProfitFox.MarketData.Presentation.Settings;
 
@@ -29,7 +28,8 @@ public sealed class CandlesController(ISender sender, IOptionsMonitor<CandleRead
     /// <summary>
     ///     The candles of <paramref name="interval" /> (1m, 5m, 15m, 1h, 4h or 1d, in UTC) of the instrument in <c>[from, to)</c>, at most
     ///     1000; <paramref name="from" /> and <paramref name="to" /> start candles of the interval. Minutes storage does not hold are
-    ///     loaded from the exchange first; a 202 says the window is still loading: ask again later.
+    ///     loaded from the exchange first; a 202 says the window is still loading: ask again later. An instrument the catalog does not
+    ///     have is a 404.
     /// </summary>
     [HttpGet]
     [ProducesResponseType<CandlesInternal>(StatusCodes.Status200OK)]
@@ -38,9 +38,9 @@ public sealed class CandlesController(ISender sender, IOptionsMonitor<CandleRead
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(
         Guid instrumentId,
-        [FromQuery][BindRequired] string interval,
-        [FromQuery][BindRequired] DateTimeOffset from,
-        [FromQuery][BindRequired] DateTimeOffset to,
+        [FromQuery, BindRequired] string interval,
+        [FromQuery, BindRequired] DateTimeOffset from,
+        [FromQuery, BindRequired] DateTimeOffset to,
         CancellationToken cancellationToken)
     {
         if (!Intervals.TryGetValue(interval, out CandleInterval candleInterval))
@@ -59,21 +59,14 @@ public sealed class CandlesController(ISender sender, IOptionsMonitor<CandleRead
             return Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest);
         }
 
-        try
-        {
-            CandlesReadiness readiness = await sender.Send(
-                new EnsureCandlesLoadedCommand(instrumentId, window.Range, time.GetUtcNow(), settings.CurrentValue.MaxExchangeRequests),
-                cancellationToken);
-            CandlesInternal candles = await sender.Send(new GetCandlesQuery(instrumentId, window), cancellationToken);
+        CandlesReadiness readiness = await sender.Send(
+            new EnsureCandlesLoadedCommand(instrumentId, window.Range, time.GetUtcNow(), settings.CurrentValue.MaxExchangeRequests),
+            cancellationToken);
+        CandlesInternal candles = await sender.Send(new GetCandlesQuery(instrumentId, window), cancellationToken);
 
-            // A window still loading gives no candles yet, only what of it storage holds by now.
-            return readiness == CandlesReadiness.Loading
-                ? StatusCode(StatusCodes.Status202Accepted, candles with { Loading = true, Candles = [] })
-                : Ok(candles);
-        }
-        catch (InstrumentNotFoundException exception)
-        {
-            return Problem(exception.Message, statusCode: StatusCodes.Status404NotFound);
-        }
+        // A window still loading gives no candles yet, only what of it storage holds by now.
+        return readiness == CandlesReadiness.Loading
+            ? StatusCode(StatusCodes.Status202Accepted, candles with { Loading = true, Candles = [] })
+            : Ok(candles);
     }
 }

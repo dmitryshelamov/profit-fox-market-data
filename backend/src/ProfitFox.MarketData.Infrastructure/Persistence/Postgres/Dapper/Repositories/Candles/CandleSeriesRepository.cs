@@ -12,7 +12,7 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Transactions;
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles;
 
 /// <summary>
-///     Works on the connection of the scope, in the transaction of the command if one runs. A series is stored in <c>candle_series</c>,
+///     Works on the connection of the scope and saves in a transaction of its own. A series is stored in <c>candle_series</c>,
 ///     its candles in the hypertable <c>candles</c>.
 /// </summary>
 internal sealed class CandleSeriesRepository(

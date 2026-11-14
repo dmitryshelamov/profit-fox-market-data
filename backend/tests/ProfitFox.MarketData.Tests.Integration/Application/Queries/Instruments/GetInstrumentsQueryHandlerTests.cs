@@ -8,8 +8,10 @@ using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
-namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Persistence.Queries.Handlers.Instruments;
+namespace ProfitFox.MarketData.Tests.Integration.Application.Queries.Instruments;
 
 [TestFixture]
 public class GetInstrumentsQueryHandlerTests
@@ -42,6 +44,20 @@ public class GetInstrumentsQueryHandlerTests
     private ServiceProvider _services = null!;
     private IServiceScope _scope = null!;
 
+    [TestCase(Exchange.Bybit)]
+    [TestCase(Exchange.TInvest)]
+    public async Task Returns_only_the_instruments_of_the_exchange_asked_for(Exchange exchange)
+    {
+        Instrument linear = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear());
+        Instrument share = InstrumentGenerator.Generate(TInvestListedShareGenerator.Generate());
+        await _scope.ServiceProvider.GetRequiredService<IInstrumentRepository>().SaveAsync([linear, share], CancellationToken.None);
+
+        IReadOnlyCollection<InstrumentInternal> result =
+            await _scope.ServiceProvider.GetRequiredService<ISender>().Send(new GetInstrumentsQuery(exchange), CancellationToken.None);
+
+        Assert.That(result.Select(instrument => instrument.Id), Is.EqualTo(new[] { exchange == Exchange.Bybit ? linear.Id : share.Id }));
+    }
+
     [Test]
     public async Task Returns_every_instrument_of_the_catalog_as_a_contract()
     {
@@ -52,7 +68,7 @@ public class GetInstrumentsQueryHandlerTests
                 "BTCUSDT",
                 "BTC",
                 "USDT",
-                InstrumentStatus.Trading,
+                BybitInstrumentStatus.Trading,
                 new InstrumentRules(tickSize: 0.1m, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
                 BybitContractType.LinearPerpetual,
                 LaunchTime),
@@ -64,7 +80,7 @@ public class GetInstrumentsQueryHandlerTests
                 "LUNAUSDT",
                 "LUNA",
                 "USDT",
-                InstrumentStatus.Trading,
+                BybitInstrumentStatus.Trading,
                 new InstrumentRules(tickSize: 0.0001m, quantityStep: 0.01m, minQuantity: 0.01m)),
             Then);
         delisted.Delist(Now);
@@ -85,7 +101,7 @@ public class GetInstrumentsQueryHandlerTests
                             "BTCUSDT",
                             "BTC",
                             "USDT",
-                            InstrumentStatus.Trading,
+                            BybitInstrumentStatus.Trading,
                             new InstrumentRulesInternal(TickSize: 0.1m, QuantityStep: 0.001m, MinQuantity: 0.001m, MinAmount: 5m),
                             BybitContractType.LinearPerpetual,
                             LaunchTime),
@@ -98,7 +114,7 @@ public class GetInstrumentsQueryHandlerTests
                             "LUNAUSDT",
                             "LUNA",
                             "USDT",
-                            InstrumentStatus.Trading,
+                            BybitInstrumentStatus.Trading,
                             new InstrumentRulesInternal(TickSize: 0.0001m, QuantityStep: 0.01m, MinQuantity: 0.01m, MinAmount: null),
                             ContractType: null,
                             LaunchTime: null),

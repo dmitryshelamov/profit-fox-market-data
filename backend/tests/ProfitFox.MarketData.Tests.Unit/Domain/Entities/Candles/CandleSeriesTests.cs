@@ -1,5 +1,6 @@
 using ProfitFox.MarketData.Domain.Entities.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
+using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Candles;
 
 namespace ProfitFox.MarketData.Tests.Unit.Domain.Entities.Candles;
 
@@ -12,7 +13,7 @@ public class CandleSeriesTests
 
     private static Candle CandleAt(int minute)
     {
-        return new Candle(Start.AddMinutes(minute), open: 5m, high: 10m, low: 1m, close: 5m, volume: 1m);
+        return CandleGenerator.Generate(Start.AddMinutes(minute));
     }
 
     private static MinuteRange Minutes(int from, int until)

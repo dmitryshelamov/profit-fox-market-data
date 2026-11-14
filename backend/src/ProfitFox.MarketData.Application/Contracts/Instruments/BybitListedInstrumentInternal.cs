@@ -8,7 +8,7 @@ public sealed record BybitListedInstrumentInternal(
     string Symbol,
     string BaseAsset,
     string QuoteAsset,
-    InstrumentStatus Status,
+    BybitInstrumentStatus Status,
     InstrumentRulesInternal Rules,
     BybitContractType? ContractType,
     DateTimeOffset? LaunchTime) : ListedInstrumentInternal;

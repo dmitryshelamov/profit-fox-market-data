@@ -1,24 +1,21 @@
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments.Base;
 
 namespace ProfitFox.MarketData.Application.Ports.Candles;
 
 /// <summary>
-///     The minute candles one exchange gives for its listings; every exchange has a client of its own, and <see cref="Serves" /> tells
-///     which listings are its.
+///     The minute candles one exchange gives for its listings; every exchange has a client of its own, picked by <see cref="Exchange" />.
 /// </summary>
 public interface IExchangeCandlesClient
 {
+    Exchange Exchange { get; }
+
     /// <summary>
     ///     The longest range one request to the exchange gives.
     /// </summary>
     TimeSpan PageLength { get; }
-
-    /// <summary>
-    ///     Whether the listing is of the exchange of this client.
-    /// </summary>
-    bool Serves(ListedInstrument listing);
 
     /// <summary>
     ///     Every closed candle of the listing that opens inside <paramref name="range" />, oldest first, in one request to the exchange; the

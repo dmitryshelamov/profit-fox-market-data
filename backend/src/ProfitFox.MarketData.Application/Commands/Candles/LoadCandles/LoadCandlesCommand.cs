@@ -1,4 +1,5 @@
-using ProfitFox.MarketData.Application.Commands.Base;
+using MediatR;
+
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
 namespace ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
@@ -8,5 +9,4 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 ///     its exchange, saved at once. Only minutes closed by <see cref="RequestedAt" /> are loaded. A caller sends it again while it gives
 ///     <see cref="LoadCandlesResult.MoreLeft" />.
 /// </summary>
-public sealed record LoadCandlesCommand(Guid InstrumentId, MinuteRange Range, DateTimeOffset RequestedAt)
-    : ICommandWithoutTransaction<LoadCandlesResult>;
+public sealed record LoadCandlesCommand(Guid InstrumentId, MinuteRange Range, DateTimeOffset RequestedAt) : IRequest<LoadCandlesResult>;

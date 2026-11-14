@@ -15,6 +15,7 @@ using ProfitFox.MarketData.Application.Contracts.Instruments.Converters;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -34,8 +35,8 @@ public class CandleSyncBackgroundServiceTests
         _queue = new CandleLoadQueue();
         _time = new WatchedTimeProvider(Start);
         _sender = Substitute.For<ISender>();
-        _sender.Send(Arg.Any<GetBybitInstrumentsQuery>(), Arg.Any<CancellationToken>()).Returns([Btc.ToInternal(), Delisted.ToInternal()]);
-        _sender.Send(Arg.Any<GetTInvestSharesQuery>(), Arg.Any<CancellationToken>()).Returns([Sber.ToInternal()]);
+        _sender.Send(new GetInstrumentsQuery(Exchange.Bybit), Arg.Any<CancellationToken>()).Returns([Btc.ToInternal(), Delisted.ToInternal()]);
+        _sender.Send(new GetInstrumentsQuery(Exchange.TInvest), Arg.Any<CancellationToken>()).Returns([Sber.ToInternal()]);
 
         // Every command is recorded; the first page of an instrument leaves more to load, the next ones nothing.
         var loaded = new HashSet<Guid>();
@@ -141,7 +142,7 @@ public class CandleSyncBackgroundServiceTests
 
     private void BybitHas(params Instrument[] instruments)
     {
-        _sender.Send(Arg.Any<GetBybitInstrumentsQuery>(), Arg.Any<CancellationToken>())
+        _sender.Send(new GetInstrumentsQuery(Exchange.Bybit), Arg.Any<CancellationToken>())
             .Returns([.. instruments.Select(instrument => instrument.ToInternal())]);
     }
 
