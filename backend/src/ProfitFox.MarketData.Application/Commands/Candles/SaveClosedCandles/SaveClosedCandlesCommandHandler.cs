@@ -17,10 +17,11 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
 
     public async Task<SaveClosedCandlesResult> Handle(SaveClosedCandlesCommand request, CancellationToken cancellationToken)
     {
-        // A candle told again knows more of the trades of its minute, so the last told stands for the minute.
+        // The last told stands for the minute, but one told without a buy volume never takes the place of one told with it, as in
+        // storage: Bybit tells a candle again after a reconnect, when the trades of its minute are no longer all seen.
         var told = request.Candles
             .GroupBy(closed => (closed.InstrumentId, closed.Candle.OpenTime))
-            .Select(minute => minute.Last())
+            .Select(minute => minute.LastOrDefault(closed => closed.Candle.BuyVolume is not null) ?? minute.Last())
             .GroupBy(closed => closed.InstrumentId)
             .ToDictionary(instrument => instrument.Key, instrument => instrument.Select(closed => closed.Candle).ToArray());
 

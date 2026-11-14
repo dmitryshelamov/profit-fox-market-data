@@ -80,6 +80,21 @@ public class SaveClosedCandlesCommandHandlerTests
     }
 
     [Test]
+    public async Task A_minute_told_again_without_a_buy_volume_keeps_the_one_it_was_told_with()
+    {
+        Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute));
+        Candle complete = CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m);
+
+        SaveClosedCandlesResult result = await Save(new ClosedCandle(Btc, complete), new ClosedCandle(Btc, CandleGenerator.Generate(Minute, volume: 3m)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.EqualTo(new SaveClosedCandlesResult(Saved: 1)));
+            Assert.That(SavedOf(Btc).NewCandles, Is.EqualTo(new[] { complete }));
+        });
+    }
+
+    [Test]
     public async Task Candles_of_series_not_started_are_left_out()
     {
         Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute));
