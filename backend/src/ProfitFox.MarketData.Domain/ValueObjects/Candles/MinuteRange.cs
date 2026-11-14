@@ -24,6 +24,32 @@ public sealed record MinuteRange
         Until = until;
     }
 
+    /// <summary>
+    ///     The parts of this range outside <paramref name="other" />, oldest first: the whole range when the two are apart, none when
+    ///     <paramref name="other" /> holds all of it, else the part before it, the part after it or both.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> Except(MinuteRange other)
+    {
+        if (other.Until <= From || other.From >= Until)
+        {
+            return [this];
+        }
+
+        var parts = new List<MinuteRange>();
+
+        if (From < other.From)
+        {
+            parts.Add(new MinuteRange(From, other.From));
+        }
+
+        if (other.Until < Until)
+        {
+            parts.Add(new MinuteRange(other.Until, Until));
+        }
+
+        return parts;
+    }
+
     private static void EnsureStartOfMinute(DateTimeOffset time, string name)
     {
         if (time.UtcTicks % TimeSpan.TicksPerMinute != 0)

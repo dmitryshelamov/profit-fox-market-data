@@ -41,6 +41,27 @@ public class InstrumentRepositoryTests
     private IInstrumentRepository _repository = null!;
 
     [Test]
+    public async Task An_instrument_is_found_by_its_id_whatever_its_exchange()
+    {
+        Instrument linear = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear(), Then, LinearId);
+        Instrument share = InstrumentGenerator.Generate(TInvestListedShareGenerator.Generate("SBER", tickSize: 0.01m, ShareUid), Then, ShareId);
+        share.Delist(Now);
+        await _repository.SaveAsync([linear, share], CancellationToken.None);
+
+        Instrument? foundLinear = await _repository.GetAsync(LinearId, CancellationToken.None);
+        Instrument? foundShare = await _repository.GetAsync(ShareId, CancellationToken.None);
+        Instrument? unknown = await _repository.GetAsync(SpotId, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(foundLinear?.Listing, Is.EqualTo(linear.Listing));
+            Assert.That(foundShare?.Listing, Is.EqualTo(share.Listing));
+            Assert.That(foundShare?.DelistedAt, Is.EqualTo(Now));
+            Assert.That(unknown, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task Instruments_of_both_exchanges_come_back_as_they_were_saved()
     {
         Instrument linear = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear(), Then, LinearId);

@@ -5,10 +5,10 @@ namespace ProfitFox.MarketData.Domain.Entities.Candles;
 
 /// <summary>
 ///     The minute candles of one instrument of the catalog as far as storage holds them: inside every range of <see cref="Covered" />
-///     every candle the exchange gave is stored, so a minute missing there had no trades (a quiet minute, a night, a weekend, the time
-///     before the instrument started to trade) and is never asked for again. The coverage only grows, and only together with the candles
-///     of the range it takes. Storage writes <see cref="NewCandles" /> with the coverage in one transaction, so the coverage never claims a
-///     minute storage does not hold.
+///     every candle the exchange gave is stored, so a minute without a candle there had no trades (a quiet minute, a night, a weekend,
+///     the time before the instrument started to trade) and is never asked for again. The coverage only grows, and only together with
+///     the candles of the range it takes. Storage writes <see cref="NewCandles" /> with the coverage in one transaction, so the coverage
+///     never claims a minute storage does not hold.
 /// </summary>
 public sealed class CandleSeries : AggregateRoot
 {
@@ -84,38 +84,17 @@ public sealed class CandleSeries : AggregateRoot
     }
 
     /// <summary>
-    ///     The parts of <paramref name="wanted" /> no range covers, oldest first; none when all of it is covered.
+    ///     The parts of <paramref name="range" /> no covered range holds, oldest first; none when all of it is covered.
     /// </summary>
-    public IReadOnlyList<MinuteRange> Missing(MinuteRange wanted)
+    public IReadOnlyList<MinuteRange> Uncovered(MinuteRange range)
     {
-        var missing = new List<MinuteRange>();
-        DateTimeOffset cursor = wanted.From;
+        IReadOnlyList<MinuteRange> uncovered = [range];
 
         foreach (MinuteRange covered in _covered)
         {
-            if (covered.Until <= cursor)
-            {
-                continue;
-            }
-
-            if (covered.From >= wanted.Until)
-            {
-                break;
-            }
-
-            if (covered.From > cursor)
-            {
-                missing.Add(new MinuteRange(cursor, covered.From));
-            }
-
-            cursor = covered.Until;
+            uncovered = [.. uncovered.SelectMany(part => part.Except(covered))];
         }
 
-        if (cursor < wanted.Until)
-        {
-            missing.Add(new MinuteRange(cursor, wanted.Until));
-        }
-
-        return missing;
+        return uncovered;
     }
 }

@@ -35,7 +35,7 @@ public class CandleSeriesTests
     }
 
     [Test]
-    public void A_new_series_misses_all_it_is_asked_for()
+    public void A_new_series_leaves_all_of_a_range_uncovered()
     {
         var series = CandleSeries.Create(InstrumentId);
 
@@ -43,7 +43,7 @@ public class CandleSeriesTests
         {
             Assert.That(series.InstrumentId, Is.EqualTo(InstrumentId));
             Assert.That(series.Covered, Is.Empty);
-            Assert.That(series.Missing(Minutes(from: 0, until: 60)), Is.EqualTo(new[] { Minutes(from: 0, until: 60) }));
+            Assert.That(series.Uncovered(Minutes(from: 0, until: 60)), Is.EqualTo(new[] { Minutes(from: 0, until: 60) }));
         });
     }
 
@@ -107,16 +107,16 @@ public class CandleSeriesTests
     }
 
     [Test]
-    public void Missing_gives_nothing_for_a_covered_range()
+    public void Uncovered_gives_nothing_for_a_covered_range()
     {
         var series = CandleSeries.Create(InstrumentId);
         series.Cover(Minutes(from: 0, until: 30), []);
 
-        Assert.That(series.Missing(Minutes(from: 5, until: 30)), Is.Empty);
+        Assert.That(series.Uncovered(Minutes(from: 5, until: 30)), Is.Empty);
     }
 
     [Test]
-    public void Missing_gives_the_parts_around_and_between_the_covered_ranges_oldest_first()
+    public void Uncovered_gives_the_parts_around_and_between_the_covered_ranges_oldest_first()
     {
         var series = CandleSeries.Create(InstrumentId);
         series.Cover(Minutes(from: 10, until: 20), []);
@@ -124,17 +124,17 @@ public class CandleSeriesTests
         series.Cover(Minutes(from: 70, until: 80), []);
 
         Assert.That(
-            series.Missing(Minutes(from: 0, until: 60)),
+            series.Uncovered(Minutes(from: 0, until: 60)),
             Is.EqualTo(new[] { Minutes(from: 0, until: 10), Minutes(from: 20, until: 30), Minutes(from: 40, until: 60) }));
     }
 
     [Test]
-    public void Missing_leaves_out_what_a_range_covers_at_either_end()
+    public void Uncovered_leaves_out_what_a_range_covers_at_either_end()
     {
         var series = CandleSeries.Create(InstrumentId);
         series.Cover(Minutes(from: 0, until: 10), []);
         series.Cover(Minutes(from: 50, until: 70), []);
 
-        Assert.That(series.Missing(Minutes(from: 5, until: 60)), Is.EqualTo(new[] { Minutes(from: 10, until: 50) }));
+        Assert.That(series.Uncovered(Minutes(from: 5, until: 60)), Is.EqualTo(new[] { Minutes(from: 10, until: 50) }));
     }
 }

@@ -37,6 +37,27 @@ internal sealed class InstrumentRepository(
         return [.. bybit, .. tinvest];
     }
 
+    // An id is of one exchange only, so the first table that has it gives the instrument.
+    public async Task<Instrument?> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        IEnumerable<Instrument> bybit = await connection.QueryAsync<InstrumentDb, BybitListingDb, Instrument>(
+            InstrumentRepositoryQueries.BybitById(id, transactions.Current, cancellationToken),
+            (instrument, listing) => InstrumentDbConverter.ToDomain(instrument, BybitListingDbConverter.ToDomain(listing)),
+            InstrumentRepositoryQueries.SplitOn);
+
+        if (bybit.SingleOrDefault() is { } found)
+        {
+            return found;
+        }
+
+        IEnumerable<Instrument> tinvest = await connection.QueryAsync<InstrumentDb, TInvestShareDb, Instrument>(
+            InstrumentRepositoryQueries.TInvestById(id, transactions.Current, cancellationToken),
+            (instrument, share) => InstrumentDbConverter.ToDomain(instrument, TInvestShareDbConverter.ToDomain(share)),
+            InstrumentRepositoryQueries.SplitOn);
+
+        return tinvest.SingleOrDefault();
+    }
+
     // Saves all together even outside a command: without a transaction of its own it opens one. The rows of instruments go first, as the
     // listings refer to them.
     public async Task SaveAsync(IReadOnlyCollection<Instrument> instruments, CancellationToken cancellationToken)

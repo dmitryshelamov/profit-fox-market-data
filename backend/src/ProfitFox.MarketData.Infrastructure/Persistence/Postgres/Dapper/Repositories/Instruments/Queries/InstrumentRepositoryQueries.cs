@@ -16,26 +16,32 @@ internal static class InstrumentRepositoryQueries
 
     private const string InstrumentColumns = """i.id, i.first_seen_at AS "FirstSeenAt", i.delisted_at AS "DelistedAt" """;
 
-    // The id breaks ties so the order is stable.
-    private const string BybitSql = $"""
-                                     SELECT {InstrumentColumns},
-                                            l.instrument_id AS "InstrumentId", l.category, l.symbol, l.base_asset AS "BaseAsset",
-                                            l.quote_asset AS "QuoteAsset", l.status, l.tick_size AS "TickSize", l.quantity_step AS "QuantityStep",
-                                            l.min_quantity AS "MinQuantity", l.min_amount AS "MinAmount", l.contract_type AS "ContractType",
-                                            l.launch_time AS "LaunchTime"
-                                     FROM instruments i
-                                     JOIN bybit_listings l ON l.instrument_id = i.id
-                                     ORDER BY l.category, l.symbol, i.id
-                                     """;
+    private const string BybitSelect = $"""
+                                        SELECT {InstrumentColumns},
+                                               l.instrument_id AS "InstrumentId", l.category, l.symbol, l.base_asset AS "BaseAsset",
+                                               l.quote_asset AS "QuoteAsset", l.status, l.tick_size AS "TickSize", l.quantity_step AS "QuantityStep",
+                                               l.min_quantity AS "MinQuantity", l.min_amount AS "MinAmount", l.contract_type AS "ContractType",
+                                               l.launch_time AS "LaunchTime"
+                                        FROM instruments i
+                                        JOIN bybit_listings l ON l.instrument_id = i.id
+                                        """;
 
-    private const string TInvestSql = $"""
-                                       SELECT {InstrumentColumns},
-                                              s.instrument_id AS "InstrumentId", s.uid, s.ticker, s.tick_size AS "TickSize",
-                                              s.quantity_step AS "QuantityStep", s.min_quantity AS "MinQuantity"
-                                       FROM instruments i
-                                       JOIN tinvest_shares s ON s.instrument_id = i.id
-                                       ORDER BY s.ticker, i.id
-                                       """;
+    // The id breaks ties so the order is stable.
+    private const string BybitSql = $"{BybitSelect} ORDER BY l.category, l.symbol, i.id";
+
+    private const string BybitByIdSql = $"{BybitSelect} WHERE i.id = @Id";
+
+    private const string TInvestSelect = $"""
+                                          SELECT {InstrumentColumns},
+                                                 s.instrument_id AS "InstrumentId", s.uid, s.ticker, s.tick_size AS "TickSize",
+                                                 s.quantity_step AS "QuantityStep", s.min_quantity AS "MinQuantity"
+                                          FROM instruments i
+                                          JOIN tinvest_shares s ON s.instrument_id = i.id
+                                          """;
+
+    private const string TInvestSql = $"{TInvestSelect} ORDER BY s.ticker, i.id";
+
+    private const string TInvestByIdSql = $"{TInvestSelect} WHERE i.id = @Id";
 
     // A stored row of the same id takes every value of the saved one.
     private const string UpsertInstrumentsSql = """
@@ -84,6 +90,16 @@ internal static class InstrumentRepositoryQueries
     public static CommandDefinition AllTInvest(IDbTransaction? transaction, CancellationToken cancellationToken)
     {
         return new CommandDefinition(TInvestSql, transaction: transaction, cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition BybitById(Guid id, IDbTransaction? transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(BybitByIdSql, new { Id = id }, transaction, cancellationToken: cancellationToken);
+    }
+
+    public static CommandDefinition TInvestById(Guid id, IDbTransaction? transaction, CancellationToken cancellationToken)
+    {
+        return new CommandDefinition(TInvestByIdSql, new { Id = id }, transaction, cancellationToken: cancellationToken);
     }
 
     // Dapper runs each upsert once per row, all in the transaction.
