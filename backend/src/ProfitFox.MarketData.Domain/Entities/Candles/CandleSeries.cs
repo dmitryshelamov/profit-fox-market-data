@@ -4,14 +4,16 @@ using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 namespace ProfitFox.MarketData.Domain.Entities.Candles;
 
 /// <summary>
-///     The minute candles of one instrument of the catalog as far as storage holds them: inside <c>[CoveredFrom, CoveredUntil)</c> every
-///     candle the exchange gave is stored, so a minute missing there had no trades (a quiet minute, a night, a weekend) and is never asked
-///     for again. The coverage only grows, and only together with the candles of the range it takes: forward as new minutes close, back as
-///     older history is loaded. Storage writes <see cref="NewCandles" /> with the coverage in one transaction, so the coverage never
-///     claims a minute storage does not hold.
+///     The minute candles of one instrument of the catalog as far as storage holds them: inside every range of <see cref="Covered" />
+///     every candle the exchange gave is stored, so a minute missing there had no trades (a quiet minute, a night, a weekend, the time
+///     before the instrument started to trade) and is never asked for again. The coverage only grows, and only together with the candles
+///     of the range it takes. Storage writes <see cref="NewCandles" /> with the coverage in one transaction, so the coverage never claims a
+///     minute storage does not hold.
 /// </summary>
 public sealed class CandleSeries : AggregateRoot
 {
+    private readonly List<MinuteRange> _covered = [];
+
     private readonly List<Candle> _newCandles = [];
 
     /// <summary>
@@ -19,71 +21,101 @@ public sealed class CandleSeries : AggregateRoot
     /// </summary>
     public Guid InstrumentId { get; }
 
-    public DateTimeOffset CoveredFrom { get; private set; }
-
-    public DateTimeOffset CoveredUntil { get; private set; }
+    /// <summary>
+    ///     The covered ranges, oldest first, apart from one another: ranges that touch or overlap are joined into one.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> Covered => _covered.AsReadOnly();
 
     /// <summary>
     ///     The candles of the ranges taken since the series was read from storage, which storage writes together with the coverage.
     /// </summary>
     public IReadOnlyCollection<Candle> NewCandles => _newCandles.AsReadOnly();
 
-    private CandleSeries(Guid instrumentId, DateTimeOffset coveredFrom, DateTimeOffset coveredUntil)
+    private CandleSeries(Guid instrumentId)
     {
         InstrumentId = instrumentId;
-        CoveredFrom = coveredFrom;
-        CoveredUntil = coveredUntil;
     }
 
     /// <summary>
-    ///     The series of an instrument once its first range <c>[coveredFrom, coveredUntil)</c> is loaded with the candles the exchange gave
-    ///     for it.
+    ///     The series of an instrument none of whose minutes is loaded yet.
     /// </summary>
-    /// <exception cref="ArgumentException">The range is empty, or a candle opens outside it.</exception>
-    public static CandleSeries Create(Guid instrumentId, DateTimeOffset coveredFrom, DateTimeOffset coveredUntil, IReadOnlyCollection<Candle> candles)
+    public static CandleSeries Create(Guid instrumentId)
     {
-        EnsureLoadedRange(coveredFrom, coveredUntil, candles);
-
-        var series = new CandleSeries(instrumentId, coveredFrom, coveredUntil);
-        series._newCandles.AddRange(candles);
-
-        return series;
+        return new CandleSeries(instrumentId);
     }
 
     /// <summary>
-    ///     Takes a loaded range <c>[from, until)</c> with the candles the exchange gave for it, when the range touches or overlaps the
-    ///     coverage. A range apart from the coverage is left out with its candles: the minutes between them are not loaded, and a coverage
-    ///     over them would say they had no trades.
+    ///     Takes a loaded range with the candles the exchange gave for it, an empty list for a range without trades.
     /// </summary>
-    /// <exception cref="ArgumentException">The range is empty, or a candle opens outside it.</exception>
-    public void Cover(DateTimeOffset from, DateTimeOffset until, IReadOnlyCollection<Candle> candles)
+    /// <exception cref="ArgumentException">A candle opens outside the range.</exception>
+    public void Cover(MinuteRange range, IReadOnlyCollection<Candle> candles)
     {
-        EnsureLoadedRange(from, until, candles);
-
-        if (until < CoveredFrom || from > CoveredUntil)
-        {
-            return;
-        }
-
-        CoveredFrom = from < CoveredFrom ? from : CoveredFrom;
-        CoveredUntil = until > CoveredUntil ? until : CoveredUntil;
-        _newCandles.AddRange(candles);
-    }
-
-    private static void EnsureLoadedRange(DateTimeOffset from, DateTimeOffset until, IReadOnlyCollection<Candle> candles)
-    {
-        if (until <= from)
-        {
-            throw new ArgumentException($"A covered range must end after it starts, not at {until:O} from {from:O}.", nameof(until));
-        }
-
         // A candle outside the range would be stored without a coverage over it, or would stand for a minute the range was not asked for.
         foreach (Candle candle in candles)
         {
-            if (candle.OpenTime < from || candle.OpenTime >= until)
+            if (candle.OpenTime < range.From || candle.OpenTime >= range.Until)
             {
-                throw new ArgumentException($"A candle that opens at {candle.OpenTime:O} is outside the range [{from:O}, {until:O}).", nameof(candles));
+                throw new ArgumentException(
+                    $"A candle that opens at {candle.OpenTime:O} is outside the range [{range.From:O}, {range.Until:O}).",
+                    nameof(candles));
             }
         }
+
+        DateTimeOffset from = range.From;
+        DateTimeOffset until = range.Until;
+
+        // The ranges that touch or overlap the new one are joined into it.
+        _covered.RemoveAll(covered =>
+        {
+            if (covered.Until < from || covered.From > until)
+            {
+                return false;
+            }
+
+            from = covered.From < from ? covered.From : from;
+            until = covered.Until > until ? covered.Until : until;
+
+            return true;
+        });
+
+        int index = _covered.FindIndex(covered => covered.From > until);
+        _covered.Insert(index < 0 ? _covered.Count : index, new MinuteRange(from, until));
+        _newCandles.AddRange(candles);
+    }
+
+    /// <summary>
+    ///     The parts of <paramref name="wanted" /> no range covers, oldest first; none when all of it is covered.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> Missing(MinuteRange wanted)
+    {
+        var missing = new List<MinuteRange>();
+        DateTimeOffset cursor = wanted.From;
+
+        foreach (MinuteRange covered in _covered)
+        {
+            if (covered.Until <= cursor)
+            {
+                continue;
+            }
+
+            if (covered.From >= wanted.Until)
+            {
+                break;
+            }
+
+            if (covered.From > cursor)
+            {
+                missing.Add(new MinuteRange(cursor, covered.From));
+            }
+
+            cursor = covered.Until;
+        }
+
+        if (cursor < wanted.Until)
+        {
+            missing.Add(new MinuteRange(cursor, wanted.Until));
+        }
+
+        return missing;
     }
 }
