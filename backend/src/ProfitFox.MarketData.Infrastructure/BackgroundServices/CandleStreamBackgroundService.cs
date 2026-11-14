@@ -8,7 +8,6 @@ using Microsoft.Extensions.Options;
 using ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
 using ProfitFox.MarketData.Application.Ports.Candles;
-using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
@@ -79,41 +78,35 @@ internal sealed class CandleStreamBackgroundService(
     // a stream of its own at Bybit, and the hundreds of requests of one would hold back the other.
     private async Task SubscribeToListedAsync(CancellationToken stoppingToken)
     {
-        IReadOnlyCollection<InstrumentInternal> instruments = await InstrumentsAsync(stoppingToken);
+        IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.Bybit, logger, stoppingToken);
 
-        (BybitCategory Category, Dictionary<string, Guid> Ids)[] categories =
-        [
-            .. instruments
-                .Where(instrument => instrument.DelistedAt is null)
-                .Select(instrument => (instrument.Id, Listing: (BybitListedInstrumentInternal)instrument.Listing))
-                .Where(instrument => !_subscribed.Contains((instrument.Listing.Category, instrument.Listing.Symbol)))
-                .GroupBy(instrument => instrument.Listing.Category)
-                .Select(category => (category.Key, category.ToDictionary(instrument => instrument.Listing.Symbol, instrument => instrument.Id)))
-        ];
+        // The ids of the instruments to subscribe to by their symbols, a category at a time.
+        IEnumerable<IGrouping<BybitCategory, KeyValuePair<string, Guid>>> categories = instruments
+            .Where(instrument => instrument.DelistedAt is null)
+            .Select(instrument => (instrument.Id, Listing: (BybitListedInstrumentInternal)instrument.Listing))
+            .Where(instrument => !_subscribed.Contains((instrument.Listing.Category, instrument.Listing.Symbol)))
+            .GroupBy(instrument => instrument.Listing.Category, instrument => KeyValuePair.Create(instrument.Listing.Symbol, instrument.Id));
 
-        IAsyncDisposable?[] subscriptions = await Task.WhenAll(
-            categories.Select(category => SubscribeToCategoryAsync(category.Category, category.Ids, stoppingToken)));
+        CategorySubscription?[] taken = await Task.WhenAll(
+            categories.Select(category => SubscribeToCategoryAsync(category.Key, new Dictionary<string, Guid>(category), stoppingToken)));
 
-        foreach (((BybitCategory category, Dictionary<string, Guid> ids), IAsyncDisposable? subscription) in categories.Zip(subscriptions))
+        foreach (CategorySubscription subscription in taken.OfType<CategorySubscription>())
         {
-            if (subscription is not null)
-            {
-                _subscriptions.Add(subscription);
-                _subscribed.UnionWith(ids.Keys.Select(symbol => (category, symbol)));
-            }
+            _subscriptions.Add(subscription.Subscription);
+            _subscribed.UnionWith(subscription.Symbols.Select(symbol => (subscription.Category, symbol)));
         }
     }
 
     // The subscription to the instruments of a category; null when Bybit did not take it, which is logged: it is tried again after the
     // wait.
-    private async Task<IAsyncDisposable?> SubscribeToCategoryAsync(BybitCategory category, Dictionary<string, Guid> ids, CancellationToken stoppingToken)
+    private async Task<CategorySubscription?> SubscribeToCategoryAsync(BybitCategory category, Dictionary<string, Guid> ids, CancellationToken stoppingToken)
     {
         try
         {
             IAsyncDisposable subscription = await bybit.SubscribeAsync(category, ids.Keys, (symbol, candle) => Closed(ids[symbol], candle), stoppingToken);
             logger.LogInformation("Subscribed to the closed candles of {Count} {Category} instruments of Bybit.", ids.Count, category);
 
-            return subscription;
+            return new CategorySubscription(category, ids.Keys, subscription);
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -182,18 +175,6 @@ internal sealed class CandleStreamBackgroundService(
         }
     }
 
-    // The instruments of Bybit in the catalog, listed or delisted; none when the catalog cannot be read, which is logged.
-    private async Task<IReadOnlyCollection<InstrumentInternal>> InstrumentsAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            return await scopes.SendAsync(new GetInstrumentsQuery(Exchange.Bybit), stoppingToken);
-        }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-        {
-            logger.LogError(exception, "Reading the instruments of Bybit to subscribe to their candles failed.");
-
-            return [];
-        }
-    }
+    // A subscription Bybit took: the symbols of a category it tells the closed candles of.
+    private sealed record CategorySubscription(BybitCategory Category, IReadOnlyCollection<string> Symbols, IAsyncDisposable Subscription);
 }

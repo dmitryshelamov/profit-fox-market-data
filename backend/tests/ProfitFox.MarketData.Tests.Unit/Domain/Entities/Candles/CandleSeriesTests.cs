@@ -113,11 +113,40 @@ public class CandleSeriesTests
         var series = CandleSeries.Create(InstrumentId);
         series.Cover(Minutes(from: 0, until: 100), []);
 
-        series.Settle(Minutes(from: 50, until: 60));
-        series.Settle(Minutes(from: 0, until: 10));
-        series.Settle(Minutes(from: 10, until: 20));
+        series.Settle(Minutes(from: 50, until: 60), []);
+        series.Settle(Minutes(from: 0, until: 10), []);
+        series.Settle(Minutes(from: 10, until: 20), []);
 
         Assert.That(series.Settled, Is.EqualTo(new[] { Minutes(from: 0, until: 20), Minutes(from: 50, until: 60) }));
+    }
+
+    [Test]
+    public void Settle_takes_the_candles_that_got_a_buy_volume_as_new_ones()
+    {
+        var series = CandleSeries.Restore(InstrumentId, covered: [Minutes(from: 0, until: 100)], settled: []);
+        Candle candle = CandleGenerator.Generate(Start.AddMinutes(5), volume: 3m, buyVolume: 2m);
+
+        series.Settle(Minutes(from: 0, until: 10), [candle]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(series.NewCandles, Is.EqualTo(new[] { candle }));
+            Assert.That(series.Settled, Is.EqualTo(new[] { Minutes(from: 0, until: 10) }));
+            Assert.That(series.Covered, Is.EqualTo(new[] { Minutes(from: 0, until: 100) }));
+        });
+    }
+
+    [Test]
+    public void Settle_with_a_candle_outside_the_range_is_rejected_and_nothing_is_taken()
+    {
+        var series = CandleSeries.Restore(InstrumentId, covered: [Minutes(from: 0, until: 100)], settled: []);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(() => series.Settle(Minutes(from: 0, until: 10), [CandleAt(minute: 10)]), Throws.ArgumentException);
+            Assert.That(series.Settled, Is.Empty);
+            Assert.That(series.NewCandles, Is.Empty);
+        });
     }
 
     [Test]
@@ -128,7 +157,7 @@ public class CandleSeriesTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(() => series.Settle(Minutes(from: 5, until: 15)), Throws.ArgumentException);
+            Assert.That(() => series.Settle(Minutes(from: 5, until: 15), []), Throws.ArgumentException);
             Assert.That(series.Settled, Is.Empty);
         });
     }
@@ -170,7 +199,7 @@ public class CandleSeriesTests
     {
         var series = CandleSeries.Create(InstrumentId);
         series.Cover(Minutes(from: 0, until: 100), []);
-        series.Settle(Minutes(from: 20, until: 40));
+        series.Settle(Minutes(from: 20, until: 40), []);
 
         Assert.Multiple(() =>
         {

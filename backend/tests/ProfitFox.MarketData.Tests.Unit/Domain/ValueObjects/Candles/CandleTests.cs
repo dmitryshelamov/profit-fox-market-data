@@ -77,6 +77,33 @@ public class CandleTests
         });
     }
 
+    [Test]
+    public void Trades_that_add_up_to_the_volume_tell_the_buy_volume()
+    {
+        var candle = new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, turnover: 15m);
+
+        Candle told = candle.WithBuyVolume(new TradedVolume(traded: 3m, bought: 2m));
+
+        Assert.That(told, Is.EqualTo(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, turnover: 15m, buyVolume: 2m)));
+    }
+
+    [TestCase(arg: 2.9)]
+    [TestCase(arg: 3.1)]
+    public void Trades_that_do_not_add_up_to_the_volume_leave_the_candle_as_it_is(decimal traded)
+    {
+        var candle = new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m);
+
+        Assert.That(candle.WithBuyVolume(new TradedVolume(traded, bought: 1m)), Is.SameAs(candle));
+    }
+
+    [Test]
+    public void A_candle_without_volume_has_nothing_bought_when_no_trade_was_seen()
+    {
+        var candle = new Candle(OpenTime, open: 5m, high: 5m, low: 5m, close: 5m, volume: 0m);
+
+        Assert.That(candle.WithBuyVolume(TradedVolume.None).BuyVolume, Is.Zero);
+    }
+
     [TestCase(-1)]
     [TestCase(arg: 3.01)]
     public void A_buy_volume_below_zero_or_above_the_volume_is_rejected(decimal buyVolume)

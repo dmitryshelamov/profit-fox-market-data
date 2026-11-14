@@ -9,7 +9,8 @@ namespace ProfitFox.MarketData.Domain.Entities.Candles;
 ///     the time before the instrument started to trade) and is never asked for again. The coverage only grows, and only together with
 ///     the candles of the range it takes. Storage writes <see cref="NewCandles" /> with the coverage in one transaction, so the coverage
 ///     never claims a minute storage does not hold. Apart from that the series tells where the buy volumes of its candles are
-///     <see cref="Settled" />: looked for in the trades of the exchange once, and not again.
+///     <see cref="Settled" />: looked for in the trades of the exchange once, and not again. A range is settled together with its
+///     candles that got a buy volume, so it is never settled without them.
 /// </summary>
 public sealed class CandleSeries : AggregateRoot
 {
@@ -36,7 +37,8 @@ public sealed class CandleSeries : AggregateRoot
     public IReadOnlyList<MinuteRange> Settled => _settled.AsReadOnly();
 
     /// <summary>
-    ///     The candles of the ranges taken since the series was read from storage, which storage writes together with the coverage.
+    ///     The candles of the ranges covered or settled since the series was read from storage, which storage writes together with the
+    ///     ranges.
     /// </summary>
     public IReadOnlyCollection<Candle> NewCandles => _newCandles.AsReadOnly();
 
@@ -72,33 +74,30 @@ public sealed class CandleSeries : AggregateRoot
     /// <exception cref="ArgumentException">A candle opens outside the range.</exception>
     public void Cover(MinuteRange range, IReadOnlyCollection<Candle> candles)
     {
-        // A candle outside the range would be stored without a coverage over it, or would stand for a minute the range was not asked for.
-        foreach (Candle candle in candles)
-        {
-            if (candle.OpenTime < range.From || candle.OpenTime >= range.Until)
-            {
-                throw new ArgumentException(
-                    $"A candle that opens at {candle.OpenTime:O} is outside the range [{range.From:O}, {range.Until:O}).",
-                    nameof(candles));
-            }
-        }
+        EnsureInside(range, candles);
 
         Take(_covered, range);
         _newCandles.AddRange(candles);
     }
 
     /// <summary>
-    ///     Takes a covered range as one whose buy volumes are looked for: its candles that have none stay so.
+    ///     Takes a covered range as one whose buy volumes are looked for, with its <paramref name="candles" /> that got one; the others
+    ///     of the range stay without.
     /// </summary>
-    /// <exception cref="ArgumentException">A part of the range is not covered: candles loaded there later would never get a buy volume.</exception>
-    public void Settle(MinuteRange range)
+    /// <exception cref="ArgumentException">
+    ///     A part of the range is not covered: candles loaded there later would never get a buy volume. Or a candle opens outside the range.
+    /// </exception>
+    public void Settle(MinuteRange range, IReadOnlyCollection<Candle> candles)
     {
         if (Uncovered(range).Count > 0)
         {
             throw new ArgumentException($"The range [{range.From:O}, {range.Until:O}) is not all covered, so its buy volumes cannot be settled.", nameof(range));
         }
 
+        EnsureInside(range, candles);
+
         Take(_settled, range);
+        _newCandles.AddRange(candles);
     }
 
     /// <summary>
@@ -115,6 +114,20 @@ public sealed class CandleSeries : AggregateRoot
     public IReadOnlyList<MinuteRange> Unsettled(MinuteRange range)
     {
         return Outside(_settled, range);
+    }
+
+    // A candle outside the range would be stored without the range over it, or would stand for a minute the range was not asked for.
+    private static void EnsureInside(MinuteRange range, IReadOnlyCollection<Candle> candles)
+    {
+        foreach (Candle candle in candles)
+        {
+            if (candle.OpenTime < range.From || candle.OpenTime >= range.Until)
+            {
+                throw new ArgumentException(
+                    $"A candle that opens at {candle.OpenTime:O} is outside the range [{range.From:O}, {range.Until:O}).",
+                    nameof(candles));
+            }
+        }
     }
 
     // The ranges the new one touches become one range with it; the others stay as they are, oldest first.

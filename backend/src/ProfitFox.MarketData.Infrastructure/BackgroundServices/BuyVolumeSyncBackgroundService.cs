@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using ProfitFox.MarketData.Application.Commands.Candles.LoadBuyVolumes;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
 using ProfitFox.MarketData.Application.Exceptions;
-using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
@@ -49,7 +48,7 @@ internal sealed class BuyVolumeSyncBackgroundService(
     // the idle wait.
     private async Task<bool> SettleRoundAsync(BuyVolumeSyncSettings sync, CancellationToken stoppingToken)
     {
-        IReadOnlyCollection<InstrumentInternal> instruments = await InstrumentsAsync(stoppingToken);
+        IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.Bybit, logger, stoppingToken);
         MinuteRange history = History(sync.HistoryDays);
         var hasMoreDays = 0;
         var unavailable = 0;
@@ -85,21 +84,6 @@ internal sealed class BuyVolumeSyncBackgroundService(
             });
 
         return hasMoreDays != 0 && unavailable == 0;
-    }
-
-    // The instruments of Bybit in the catalog, listed or delisted; none when the catalog cannot be read, which is logged.
-    private async Task<IReadOnlyCollection<InstrumentInternal>> InstrumentsAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            return await scopes.SendAsync(new GetInstrumentsQuery(Exchange.Bybit), stoppingToken);
-        }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-        {
-            logger.LogError(exception, "Reading the instruments of Bybit to load their buy volumes failed.");
-
-            return [];
-        }
     }
 
     // The whole minutes from historyDays back to now.

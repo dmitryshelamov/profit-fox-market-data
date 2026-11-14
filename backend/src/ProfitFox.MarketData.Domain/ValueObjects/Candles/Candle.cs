@@ -77,6 +77,16 @@ public sealed record Candle
         BuyVolume = buyVolume;
     }
 
+    /// <summary>
+    ///     The candle with the buy volume the <paramref name="trades" /> of its minute tell. They tell it only when they add up to
+    ///     <see cref="Volume" />: a sum that does not is a minute whose trades were not all seen, and the candle is given as it is. No
+    ///     trades add up to a candle without volume, which has nothing bought.
+    /// </summary>
+    public Candle WithBuyVolume(TradedVolume trades)
+    {
+        return trades.Traded == Volume ? new Candle(OpenTime, Open, High, Low, Close, Volume, Turnover, trades.Bought) : this;
+    }
+
     // Every trade of the minute is between its lowest and highest: a candle that says otherwise was broken on the way.
     private static void EnsurePricesWithinRange(decimal open, decimal high, decimal low, decimal close)
     {

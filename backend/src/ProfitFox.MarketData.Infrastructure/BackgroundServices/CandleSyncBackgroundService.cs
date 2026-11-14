@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 using ProfitFox.MarketData.Application.Contracts.Instruments;
 using ProfitFox.MarketData.Application.Exceptions;
-using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
@@ -57,7 +56,7 @@ internal sealed class CandleSyncBackgroundService(
     // way after retries of its own, so the exchange is tried again after the idle wait.
     private async Task<bool> LoadRoundAsync(Exchange exchange, int historyDays, CancellationToken stoppingToken)
     {
-        IReadOnlyCollection<InstrumentInternal> instruments = await InstrumentsAsync(exchange, stoppingToken);
+        IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(exchange, logger, stoppingToken);
 
         try
         {
@@ -121,21 +120,6 @@ internal sealed class CandleSyncBackgroundService(
             logger.LogError(exception, "Loading the candles of instrument {InstrumentId} of {Exchange} failed.", instrumentId, exchange);
 
             return LoadCandlesResult.NothingLeft;
-        }
-    }
-
-    // The instruments of the exchange in the catalog, listed or delisted; none when the catalog cannot be read, which is logged.
-    private async Task<IReadOnlyCollection<InstrumentInternal>> InstrumentsAsync(Exchange exchange, CancellationToken stoppingToken)
-    {
-        try
-        {
-            return await scopes.SendAsync(new GetInstrumentsQuery(exchange), stoppingToken);
-        }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-        {
-            logger.LogError(exception, "Reading the instruments of {Exchange} to load candles failed.", exchange);
-
-            return [];
         }
     }
 

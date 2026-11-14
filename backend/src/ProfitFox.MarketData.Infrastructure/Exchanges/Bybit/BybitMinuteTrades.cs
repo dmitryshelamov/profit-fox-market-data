@@ -33,15 +33,18 @@ internal sealed class BybitMinuteTrades
                 return null;
             }
 
-            if (!state.Minutes.TryGetValue(minute, out Sums? sums))
+            TradedVolume trades = state.Minutes.GetValueOrDefault(minute, TradedVolume.None).Add(quantity, bought);
+            state.Minutes[minute] = trades;
+
+            if (state.Closed is not { } late || late.OpenTime != minute)
             {
-                state.Minutes[minute] = sums = new Sums();
+                return null;
             }
 
-            sums.Traded += quantity;
-            sums.Bought += bought ? quantity : 0m;
+            // The kept candle is as Bybit told it, without a buy volume, so it has one only once the trades add up.
+            Candle completed = late.WithBuyVolume(trades);
 
-            return state.Closed is { } late && late.OpenTime == minute && sums.Traded == late.Volume ? WithBuyVolume(late, sums.Bought) : null;
+            return completed.BuyVolume is null ? null : completed;
         }
     }
 
@@ -67,10 +70,8 @@ internal sealed class BybitMinuteTrades
                 }
             }
 
-            state.Minutes.TryGetValue(candle.OpenTime, out Sums? sums);
-
             // A minute nothing is counted for adds up only to no volume at all.
-            return (sums?.Traded ?? 0m) == candle.Volume ? WithBuyVolume(candle, sums?.Bought ?? 0m) : candle;
+            return candle.WithBuyVolume(state.Minutes.GetValueOrDefault(candle.OpenTime, TradedVolume.None));
         }
     }
 
@@ -84,22 +85,10 @@ internal sealed class BybitMinuteTrades
         return state;
     }
 
-    private static Candle WithBuyVolume(Candle candle, decimal buyVolume)
-    {
-        return new Candle(candle.OpenTime, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume, candle.Turnover, buyVolume);
-    }
-
     private sealed class Symbol
     {
-        public Dictionary<DateTimeOffset, Sums> Minutes { get; } = [];
+        public Dictionary<DateTimeOffset, TradedVolume> Minutes { get; } = [];
 
         public Candle? Closed { get; set; }
-    }
-
-    private sealed class Sums
-    {
-        public decimal Traded { get; set; }
-
-        public decimal Bought { get; set; }
     }
 }

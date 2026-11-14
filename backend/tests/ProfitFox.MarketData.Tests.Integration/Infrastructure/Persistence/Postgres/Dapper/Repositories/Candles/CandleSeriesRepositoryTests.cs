@@ -251,11 +251,11 @@ public class CandleSeriesRepositoryTests
     {
         var series = CandleSeries.Create(Linear.Id);
         series.Cover(Range(Start, minutes: 60), []);
-        series.Settle(Range(Start, minutes: 10));
+        series.Settle(Range(Start, minutes: 10), []);
         await _repository.SaveAsync(series, CancellationToken.None);
         CandleSeries stored = (await _repository.GetAsync(Linear.Id, CancellationToken.None))!;
 
-        stored.Settle(Range(Start.AddMinutes(30), minutes: 10));
+        stored.Settle(Range(Start.AddMinutes(30), minutes: 10), []);
         await _repository.SaveAsync(stored, CancellationToken.None);
 
         CandleSeries? grown = await _repository.GetAsync(Linear.Id, CancellationToken.None);

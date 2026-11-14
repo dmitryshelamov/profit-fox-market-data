@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 using MediatR;
 
 using ProfitFox.MarketData.Application.Exceptions;
@@ -12,9 +14,10 @@ using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 namespace ProfitFox.MarketData.Application.Commands.Candles.LoadBuyVolumes;
 
 /// <summary>
-///     Goes through the whole days of the range from the newest back. A day is settled once all of it is covered: its candles without
-///     volume have nothing bought, the others take their buy volume from the archive of trades of the day where it adds up. The day and
-///     its candles are saved together, so a day is never settled without the buy volumes found for it.
+///     Goes through the whole days of the range from the newest back. A day is settled once all of it is covered: its candles take
+///     their buy volume from the trades of their minutes in the archive of the day, where those add up to the volume of the candle. A
+///     day none of whose candles traded needs no archive. The day and its candles are saved together, so a day is never settled without
+///     the buy volumes found for it.
 /// </summary>
 internal sealed class LoadBuyVolumesCommandHandler(
     IInstrumentRepository instruments,
@@ -28,6 +31,8 @@ internal sealed class LoadBuyVolumesCommandHandler(
 
     // A day whose archive is still not there this long after it ended has none.
     private static readonly TimeSpan NoArchive = TimeSpan.FromHours(48);
+
+    private static readonly IReadOnlyDictionary<DateTimeOffset, TradedVolume> NoTrades = ReadOnlyDictionary<DateTimeOffset, TradedVolume>.Empty;
 
     /// <exception cref="InstrumentNotFoundException">The catalog has no instrument of the id.</exception>
     public async Task<LoadBuyVolumesResult> Handle(LoadBuyVolumesCommand request, CancellationToken cancellationToken)
@@ -49,6 +54,7 @@ internal sealed class LoadBuyVolumesCommandHandler(
         }
 
         var listing = (BybitListedInstrument)instrument.Listing;
+        LoadBuyVolumesResult result = LoadBuyVolumesResult.NothingLeft;
         var settledAny = false;
 
         foreach (MinuteRange day in Days(request.Range, request.RequestedAt))
@@ -60,32 +66,26 @@ internal sealed class LoadBuyVolumesCommandHandler(
             }
 
             IReadOnlyList<Candle> without = await series.GetCandlesWithoutBuyVolumeAsync(instrument.Id, day, cancellationToken);
-            Candle[] traded = [.. without.Where(candle => candle.Volume > 0m)];
-            IReadOnlyList<Candle>? fromArchive = traded.Length == 0
-                ? []
-                : await archive.FillBuyVolumesAsync(listing, DateOnly.FromDateTime(day.From.UtcDateTime), traded, cancellationToken);
+            bool needsArchive = without.Any(candle => candle.Volume > 0m);
+            IReadOnlyDictionary<DateTimeOffset, TradedVolume>? trades = needsArchive
+                ? await archive.GetTradesAsync(listing, DateOnly.FromDateTime(day.From.UtcDateTime), cancellationToken)
+                : NoTrades;
 
-            if (fromArchive is null)
+            // The archive may still be published; an older day goes on meanwhile.
+            if (trades is null && request.RequestedAt < day.Until + NoArchive)
             {
-                // The archive may still be published; an older day goes on meanwhile.
-                if (request.RequestedAt < day.Until + NoArchive)
-                {
-                    continue;
-                }
-
-                fromArchive = [];
+                continue;
             }
 
-            stored.Cover(day, [.. without.Where(candle => candle.Volume == 0m).Select(NothingBought), .. fromArchive.Where(candle => candle.BuyVolume is not null)]);
-            stored.Settle(day);
+            stored.Settle(day, WithBuyVolumes(without, trades ?? NoTrades));
             settledAny = true;
 
-            // One archive a command: the others of the series wait for the next one.
-            if (traded.Length > 0)
+            // One archive a command: the other days of the series wait for the next one.
+            if (needsArchive)
             {
-                await series.SaveAsync(stored, cancellationToken);
+                result = LoadBuyVolumesResult.MoreLeft;
 
-                return LoadBuyVolumesResult.MoreLeft;
+                break;
             }
         }
 
@@ -94,7 +94,19 @@ internal sealed class LoadBuyVolumesCommandHandler(
             await series.SaveAsync(stored, cancellationToken);
         }
 
-        return LoadBuyVolumesResult.NothingLeft;
+        return result;
+    }
+
+    // The candles that get a buy volume from the trades of their minutes. A minute without trades adds up only to a candle without
+    // volume, which so has nothing bought.
+    private static Candle[] WithBuyVolumes(IReadOnlyList<Candle> candles, IReadOnlyDictionary<DateTimeOffset, TradedVolume> trades)
+    {
+        return
+        [
+            .. candles
+                .Select(candle => candle.WithBuyVolume(trades.GetValueOrDefault(candle.OpenTime, TradedVolume.None)))
+                .Where(candle => candle.BuyVolume is not null)
+        ];
     }
 
     // The whole UTC days of the range whose archive should be published by now, the newest first.
@@ -112,11 +124,5 @@ internal sealed class LoadBuyVolumesCommandHandler(
     private static DateTimeOffset StartOfDay(DateTimeOffset time)
     {
         return new DateTimeOffset(time.UtcDateTime.Date, TimeSpan.Zero);
-    }
-
-    // No trades, so nothing bought.
-    private static Candle NothingBought(Candle candle)
-    {
-        return new Candle(candle.OpenTime, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume, candle.Turnover, buyVolume: 0m);
     }
 }

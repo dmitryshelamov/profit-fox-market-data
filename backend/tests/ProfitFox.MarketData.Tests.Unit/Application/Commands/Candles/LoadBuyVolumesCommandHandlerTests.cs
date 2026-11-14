@@ -80,17 +80,18 @@ public class LoadBuyVolumesCommandHandlerTests
         _series.GetCandlesWithoutBuyVolumeAsync(Linear.Id, Day(daysAgo), Arg.Any<CancellationToken>()).Returns(candles);
     }
 
-    // The archive of the day tells the buy volume of the candle; null leaves it as it is.
-    private void Archive(int daysAgo, params (Candle Candle, decimal? BuyVolume)[] told)
+    // The archive of the day tells what was traded and bought in each of the minutes.
+    private void Archive(int daysAgo, params (DateTimeOffset Minute, decimal Traded, decimal Bought)[] trades)
     {
-        _archive.FillBuyVolumesAsync((BybitListedInstrument)Linear.Listing, DateOf(daysAgo), Arg.Any<IReadOnlyCollection<Candle>>(), Arg.Any<CancellationToken>())
-            .Returns([.. told.Select(one => CandleGenerator.Generate(one.Candle.OpenTime, volume: one.Candle.Volume, buyVolume: one.BuyVolume))]);
+        IReadOnlyDictionary<DateTimeOffset, TradedVolume> told = trades.ToDictionary(one => one.Minute, one => new TradedVolume(one.Traded, one.Bought));
+
+        _archive.GetTradesAsync((BybitListedInstrument)Linear.Listing, DateOf(daysAgo), Arg.Any<CancellationToken>()).Returns(told);
     }
 
     private void NoArchive(int daysAgo)
     {
-        _archive.FillBuyVolumesAsync(Arg.Any<BybitListedInstrument>(), DateOf(daysAgo), Arg.Any<IReadOnlyCollection<Candle>>(), Arg.Any<CancellationToken>())
-            .Returns((IReadOnlyList<Candle>?)null);
+        _archive.GetTradesAsync(Arg.Any<BybitListedInstrument>(), DateOf(daysAgo), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyDictionary<DateTimeOffset, TradedVolume>?)null);
     }
 
     [Test]
@@ -99,7 +100,7 @@ public class LoadBuyVolumesCommandHandlerTests
         Stored(History);
         Candle candle = CandleGenerator.Generate(Day(daysAgo: 1).From, volume: 3m);
         Without(daysAgo: 1, candle);
-        Archive(daysAgo: 1, (candle, null));
+        Archive(daysAgo: 1, (candle.OpenTime, Traded: 2m, Bought: 2m));
 
         await Load(Linear);
 
@@ -135,7 +136,7 @@ public class LoadBuyVolumesCommandHandlerTests
         Assert.Multiple(async () =>
         {
             Assert.That(_saved?.Settled, Is.EqualTo(new[] { new MinuteRange(Today.AddDays(-3), Today.AddDays(-1)) }));
-            await _archive.DidNotReceiveWithAnyArgs().FillBuyVolumesAsync(default!, default, default!, cancellationToken: default);
+            await _archive.DidNotReceiveWithAnyArgs().GetTradesAsync(default!, default, cancellationToken: default);
         });
     }
 
@@ -148,7 +149,7 @@ public class LoadBuyVolumesCommandHandlerTests
         Without(daysAgo: 1, fresh);
         Without(daysAgo: 2, older);
         NoArchive(daysAgo: 1);
-        Archive(daysAgo: 2, (older, 1m));
+        Archive(daysAgo: 2, (older.OpenTime, Traded: 4m, Bought: 1m));
 
         LoadBuyVolumesResult result = await Load(Linear);
 
@@ -222,7 +223,7 @@ public class LoadBuyVolumesCommandHandlerTests
             Assert.That(_saved?.Settled, Is.EqualTo(new[] { new MinuteRange(Today.AddDays(-3), Today) }));
             Assert.That(_saved?.NewCandles, Is.EqualTo(new[] { CandleGenerator.Generate(quiet.OpenTime, volume: 0m, buyVolume: 0m) }));
             await _series.Received(1).SaveAsync(Arg.Any<CandleSeries>(), Arg.Any<CancellationToken>());
-            await _archive.DidNotReceiveWithAnyArgs().FillBuyVolumesAsync(default!, default, default!, cancellationToken: default);
+            await _archive.DidNotReceiveWithAnyArgs().GetTradesAsync(default!, default, cancellationToken: default);
         });
     }
 
@@ -230,7 +231,7 @@ public class LoadBuyVolumesCommandHandlerTests
     public async Task Settled_days_are_not_looked_at_again()
     {
         CandleSeries series = Stored(History);
-        series.Settle(new MinuteRange(Today.AddDays(-3), Today));
+        series.Settle(new MinuteRange(Today.AddDays(-3), Today), []);
 
         LoadBuyVolumesResult result = await Load(Linear);
 
@@ -249,7 +250,7 @@ public class LoadBuyVolumesCommandHandlerTests
         Candle traded = CandleGenerator.Generate(Day(daysAgo: 1).From, volume: 3m);
         Candle quiet = CandleGenerator.Generate(Day(daysAgo: 1).From.AddMinutes(1), volume: 0m);
         Without(daysAgo: 1, traded, quiet);
-        Archive(daysAgo: 1, (traded, 2m));
+        Archive(daysAgo: 1, (traded.OpenTime, Traded: 3m, Bought: 2m));
 
         LoadBuyVolumesResult result = await Load(Linear);
 
@@ -265,11 +266,7 @@ public class LoadBuyVolumesCommandHandlerTests
                         CandleGenerator.Generate(traded.OpenTime, volume: 3m, buyVolume: 2m),
                         CandleGenerator.Generate(quiet.OpenTime, volume: 0m, buyVolume: 0m)
                     }));
-            await _archive.Received(1).FillBuyVolumesAsync(
-                (BybitListedInstrument)Linear.Listing,
-                DateOf(daysAgo: 1),
-                Arg.Is<IReadOnlyCollection<Candle>>(asked => asked.SequenceEqual(new[] { traded })),
-                Arg.Any<CancellationToken>());
+            await _archive.Received(1).GetTradesAsync((BybitListedInstrument)Linear.Listing, DateOf(daysAgo: 1), Arg.Any<CancellationToken>());
         });
     }
 }

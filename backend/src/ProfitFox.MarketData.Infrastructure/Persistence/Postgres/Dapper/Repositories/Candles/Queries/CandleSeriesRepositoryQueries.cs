@@ -8,8 +8,8 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositori
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Queries;
 
 /// <summary>
-///     A series is a row of <c>candle_series</c>, its covered ranges one multirange; its candles are rows of <c>candles</c>. Arrays go to
-///     Postgres as they are, so the candles of a page, or of many series, are one statement.
+///     A series is a row of <c>candle_series</c>, its covered ranges one multirange and its settled ranges another; its candles are rows
+///     of <c>candles</c>. Arrays go to Postgres as they are, so the candles of a page, or of many series, are one statement.
 /// </summary>
 internal static class CandleSeriesRepositoryQueries
 {

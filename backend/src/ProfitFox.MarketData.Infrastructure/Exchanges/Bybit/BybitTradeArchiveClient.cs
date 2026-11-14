@@ -14,8 +14,7 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 
 /// <summary>
 ///     Reads the daily archives of trades from <c>public.bybit.com</c>: a gzipped CSV a day of an instrument. A file is read as it comes
-///     and summed by minute; nothing of it is kept on disk or in memory but the sums. The trades of a minute in the archive add up to
-///     the volume of its candle exactly, so a candle gets its buy volume only when they do.
+///     and summed by minute; nothing of it is kept on disk or in memory but the sums.
 /// </summary>
 internal sealed class BybitTradeArchiveClient(HttpClient http, ExchangeRetryExecutor retry) : IBybitTradeArchiveClient
 {
@@ -25,31 +24,21 @@ internal sealed class BybitTradeArchiveClient(HttpClient http, ExchangeRetryExec
     // The archive answers 403 to a request that names no client, which HttpClient does not do by itself.
     private static readonly ProductInfoHeaderValue Client = new ProductInfoHeaderValue("market-data", "1.0");
 
-    public async Task<IReadOnlyList<Candle>?> FillBuyVolumesAsync(
+    public Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> GetTradesAsync(
         BybitListedInstrument listing,
         DateOnly day,
-        IReadOnlyCollection<Candle> candles,
         CancellationToken cancellationToken)
     {
-        Dictionary<DateTimeOffset, Sums>? minutes = await retry.ExecuteAsync(token => SumAsync(listing, day, token), cancellationToken);
-
-        if (minutes is null)
-        {
-            return null;
-        }
-
-        return
-        [
-            .. candles.Select(candle => minutes.TryGetValue(candle.OpenTime, out Sums? sums) && sums.Traded == candle.Volume
-                ? new Candle(candle.OpenTime, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume, candle.Turnover, sums.Bought)
-                : candle)
-        ];
+        return retry.ExecuteAsync(token => SumAsync(listing, day, token), cancellationToken);
     }
 
     // The trades of the file summed by the minute they were made in; null when Bybit has no such file. A file that cannot be had or
     // breaks on the way is a transient failure: it is read again from the start. A file laid out in a way not known is not: reading it
     // again would not help.
-    private async Task<Dictionary<DateTimeOffset, Sums>?> SumAsync(BybitListedInstrument listing, DateOnly day, CancellationToken cancellationToken)
+    private async Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> SumAsync(
+        BybitListedInstrument listing,
+        DateOnly day,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -73,7 +62,7 @@ internal sealed class BybitTradeArchiveClient(HttpClient http, ExchangeRetryExec
             using var reader = new StreamReader(unpacked);
 
             var columns = Columns.Of(await reader.ReadLineAsync(cancellationToken) ?? "", listing, day);
-            var minutes = new Dictionary<DateTimeOffset, Sums>();
+            var minutes = new Dictionary<DateTimeOffset, TradedVolume>();
 
             while (await reader.ReadLineAsync(cancellationToken) is { } line)
             {
@@ -102,25 +91,17 @@ internal sealed class BybitTradeArchiveClient(HttpClient http, ExchangeRetryExec
         };
     }
 
-    private static void Count(string line, Columns columns, Dictionary<DateTimeOffset, Sums> minutes)
+    private static void Count(string line, Columns columns, Dictionary<DateTimeOffset, TradedVolume> minutes)
     {
         decimal time = decimal.Parse(Field(line, columns.Time), NumberStyles.Float, CultureInfo.InvariantCulture);
         long milliseconds = time < FirstMillisecondTime ? (long)(time * 1000m) : (long)time;
         DateTimeOffset minute = MinuteRange.StartOfMinute(DateTimeOffset.FromUnixTimeMilliseconds(milliseconds));
         decimal quantity = decimal.Parse(Field(line, columns.Quantity), NumberStyles.Float, CultureInfo.InvariantCulture);
 
-        if (!minutes.TryGetValue(minute, out Sums? sums))
-        {
-            minutes[minute] = sums = new Sums();
-        }
-
-        sums.Traded += quantity;
-
         // The side is that of the taker: a buy is a trade the buyer started.
-        if (Field(line, columns.Side).Equals("buy", StringComparison.OrdinalIgnoreCase))
-        {
-            sums.Bought += quantity;
-        }
+        bool bought = Field(line, columns.Side).Equals("buy", StringComparison.OrdinalIgnoreCase);
+
+        minutes[minute] = minutes.GetValueOrDefault(minute, TradedVolume.None).Add(quantity, bought);
     }
 
     private static ReadOnlySpan<char> Field(ReadOnlySpan<char> line, int index)
@@ -159,12 +140,5 @@ internal sealed class BybitTradeArchiveClient(HttpClient http, ExchangeRetryExec
 
             return new Columns(time, side, quantity);
         }
-    }
-
-    private sealed class Sums
-    {
-        public decimal Traded { get; set; }
-
-        public decimal Bought { get; set; }
     }
 }

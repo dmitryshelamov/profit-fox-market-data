@@ -10,7 +10,6 @@ using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Tests.Integration.Http;
 using ProfitFox.MarketData.Tests.Integration.Time;
-using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
@@ -77,30 +76,14 @@ public class BybitTradeArchiveClientTests
         return $"1,{time.ToUnixTimeMilliseconds()},71462.6,{volume},{side},0";
     }
 
-    private static Candle CandleOf(DateTimeOffset minute, decimal volume)
-    {
-        return CandleGenerator.Generate(minute, volume: volume);
-    }
-
-    [Test]
-    public async Task A_candle_whose_trades_in_the_archive_do_not_add_up_to_its_volume_is_given_back_as_it_is()
-    {
-        _bybit.RespondBytes(Gzip(LinearHeader, LinearTrade(Minute, "Buy", "2")));
-        Candle[] candles = [CandleOf(Minute, volume: 9m), CandleOf(Minute.AddMinutes(1), volume: 1m)];
-
-        IReadOnlyList<Candle>? filled = await _archive.FillBuyVolumesAsync(Linear, Day, candles, CancellationToken.None);
-
-        Assert.That(filled, Is.EqualTo(candles));
-    }
-
     [Test]
     public async Task A_day_Bybit_has_no_archive_of_gives_nothing()
     {
         _bybit.RespondBytes([], HttpStatusCode.NotFound);
 
-        IReadOnlyList<Candle>? filled = await _archive.FillBuyVolumesAsync(Linear, Day, [CandleOf(Minute, volume: 3m)], CancellationToken.None);
+        IReadOnlyDictionary<DateTimeOffset, TradedVolume>? trades = await _archive.GetTradesAsync(Linear, Day, CancellationToken.None);
 
-        Assert.That(filled, Is.Null);
+        Assert.That(trades, Is.Null);
     }
 
     [Test]
@@ -110,7 +93,7 @@ public class BybitTradeArchiveClientTests
 
         Assert.Multiple(() =>
         {
-            Assert.ThrowsAsync<FormatException>(() => _archive.FillBuyVolumesAsync(Linear, Day, [CandleOf(Minute, volume: 3m)], CancellationToken.None));
+            Assert.ThrowsAsync<FormatException>(() => _archive.GetTradesAsync(Linear, Day, CancellationToken.None));
             Assert.That(_bybit.Requests, Has.Count.EqualTo(1));
         });
     }
@@ -120,12 +103,12 @@ public class BybitTradeArchiveClientTests
     {
         _bybit.RespondBytes([], HttpStatusCode.Forbidden).RespondBytes(Gzip(LinearHeader, LinearTrade(Minute, "Buy", "3")));
 
-        Task<IReadOnlyList<Candle>?> filling = _archive.FillBuyVolumesAsync(Linear, Day, [CandleOf(Minute, volume: 3m)], CancellationToken.None);
+        Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> reading = _archive.GetTradesAsync(Linear, Day, CancellationToken.None);
         await _time.PassNextWaitAsync();
 
         Assert.Multiple(async () =>
         {
-            Assert.That((await filling)!.Single().BuyVolume, Is.EqualTo(3m));
+            Assert.That((await reading)![Minute], Is.EqualTo(new TradedVolume(traded: 3m, bought: 3m)));
             Assert.That(_bybit.Requests, Has.Count.EqualTo(2));
         });
     }
@@ -138,18 +121,18 @@ public class BybitTradeArchiveClientTests
             _bybit.RespondBytes([], HttpStatusCode.ServiceUnavailable);
         }
 
-        Task<IReadOnlyList<Candle>?> filling = _archive.FillBuyVolumesAsync(Linear, Day, [CandleOf(Minute, volume: 3m)], CancellationToken.None);
+        Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> reading = _archive.GetTradesAsync(Linear, Day, CancellationToken.None);
 
         for (var retry = 0; retry < 5; retry++)
         {
             await _time.PassNextWaitAsync();
         }
 
-        Assert.ThrowsAsync<TransientExchangeException>(() => filling);
+        Assert.ThrowsAsync<TransientExchangeException>(() => reading);
     }
 
     [Test]
-    public async Task The_candles_of_a_linear_day_get_the_buy_volume_of_the_trades_of_their_minute()
+    public async Task The_trades_of_a_linear_day_are_summed_by_their_minute()
     {
         _bybit.RespondBytes(
             Gzip(
@@ -159,21 +142,18 @@ public class BybitTradeArchiveClientTests
                 LinearTrade(Minute.AddMinutes(1), "Sell", "4"),
                 LinearTrade(Minute.AddMinutes(2), "Buy", "7")));
 
-        IReadOnlyList<Candle>? filled = await _archive.FillBuyVolumesAsync(
-            Linear,
-            Day,
-            [CandleOf(Minute, volume: 3.5m), CandleOf(Minute.AddMinutes(1), volume: 4m)],
-            CancellationToken.None);
+        IReadOnlyDictionary<DateTimeOffset, TradedVolume>? trades = await _archive.GetTradesAsync(Linear, Day, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
             Assert.That(
-                filled,
+                trades,
                 Is.EqualTo(
-                    new[]
+                    new Dictionary<DateTimeOffset, TradedVolume>
                     {
-                        CandleGenerator.Generate(Minute, volume: 3.5m, buyVolume: 2m),
-                        CandleGenerator.Generate(Minute.AddMinutes(1), volume: 4m, buyVolume: 0m)
+                        [Minute] = new TradedVolume(traded: 3.5m, bought: 2m),
+                        [Minute.AddMinutes(1)] = new TradedVolume(traded: 4m, bought: 0m),
+                        [Minute.AddMinutes(2)] = new TradedVolume(traded: 7m, bought: 7m)
                     }));
             Assert.That(_bybit.Requests.Single().AbsolutePath, Is.EqualTo("/trading/BTCUSDT/BTCUSDT2026-11-12.csv.gz"));
 
@@ -183,15 +163,15 @@ public class BybitTradeArchiveClientTests
     }
 
     [Test]
-    public async Task The_candles_of_a_spot_day_get_the_buy_volume_of_the_trades_of_their_minute()
+    public async Task The_trades_of_a_spot_day_are_summed_by_their_minute()
     {
         _bybit.RespondBytes(Gzip(SpotHeader, SpotTrade(Minute, "buy", "0.25"), SpotTrade(Minute.AddSeconds(30), "sell", "0.5")));
 
-        IReadOnlyList<Candle>? filled = await _archive.FillBuyVolumesAsync(Spot, Day, [CandleOf(Minute, volume: 0.75m)], CancellationToken.None);
+        IReadOnlyDictionary<DateTimeOffset, TradedVolume>? trades = await _archive.GetTradesAsync(Spot, Day, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.That(filled, Is.EqualTo(new[] { CandleGenerator.Generate(Minute, volume: 0.75m, buyVolume: 0.25m) }));
+            Assert.That(trades, Is.EqualTo(new Dictionary<DateTimeOffset, TradedVolume> { [Minute] = new TradedVolume(traded: 0.75m, bought: 0.25m) }));
             Assert.That(_bybit.Requests.Single().AbsolutePath, Is.EqualTo("/spot/BTCUSDT/BTCUSDT_2026-11-12.csv.gz"));
         });
     }

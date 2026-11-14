@@ -12,14 +12,13 @@ namespace ProfitFox.MarketData.Application.Ports.Candles;
 public interface IBybitTradeArchiveClient
 {
     /// <summary>
-    ///     The <paramref name="candles" /> of the UTC <paramref name="day" /> of the listing, each with the buy volume the trades of its
-    ///     minute in the archive tell. A candle whose trades there do not add up to its volume is given back as it is. Null when Bybit
-    ///     has no archive of the day: it is not published yet, or the instrument has none.
+    ///     The trades of the UTC <paramref name="day" /> of the listing, summed by the minute they were made in and found by the start of
+    ///     that minute; a minute without trades is not there. Null when Bybit has no archive of the day: it is not published yet, or the
+    ///     instrument has none.
     /// </summary>
     /// <exception cref="TransientExchangeException">The archive cannot be read for now: the retries of a transient failure ran out.</exception>
-    Task<IReadOnlyList<Candle>?> FillBuyVolumesAsync(
+    Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> GetTradesAsync(
         BybitListedInstrument listing,
         DateOnly day,
-        IReadOnlyCollection<Candle> candles,
         CancellationToken cancellationToken);
 }
