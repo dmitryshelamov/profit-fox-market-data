@@ -9,6 +9,7 @@
         <PackageReference Include="Dapper"/>
         <PackageReference Include="FluentMigrator.Runner.Postgres"/>
         <PackageReference Include="Npgsql"/>
+        <PackageReference Include="Polly"/>
         <PackageReference Include="Tinkoff.InvestApi"/>
     </ItemGroup>
 

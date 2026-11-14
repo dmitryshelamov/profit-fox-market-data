@@ -2,10 +2,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-using ProfitFox.MarketData.Application.Ports.Candles;
-using ProfitFox.MarketData.Application.Ports.Instruments;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
+using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 using ProfitFox.MarketData.Infrastructure.Mediatr;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres;
@@ -25,9 +24,8 @@ public static class InfrastructureRegistrar
 
         PostgresRegistrar.Configure(configuration, services);
 
-        services.AddBybit();
-        services.AddScoped<IBybitInstrumentsClient, BybitInstrumentsClient>();
-        services.AddScoped<IBybitCandlesClient, BybitCandlesClient>();
+        services.AddSingleton<ExchangeRetryExecutor>();
+        BybitRegistrar.Configure(configuration, services);
 
         TInvestRegistrar.Configure(configuration, services);
 

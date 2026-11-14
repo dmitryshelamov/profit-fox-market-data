@@ -7,7 +7,9 @@ using Microsoft.Extensions.Options;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
+using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Tests.Integration.Http;
+using ProfitFox.MarketData.Tests.Integration.Settings;
 
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
 
@@ -20,22 +22,29 @@ public class BybitInstrumentsClientTests
         _bybit = new StubHttpHandler();
 
         // The rate limiter of the SDK is off: it would wait in real time.
+        _gate = new BybitRequestGate(
+            new FixedOptionsMonitor<BybitApiSettings>(new BybitApiSettings()),
+            new ExchangeRetryExecutor(TimeProvider.System),
+            TimeProvider.System);
         _instruments = new BybitInstrumentsClient(
             new BybitRestClient(
                 new HttpClient(_bybit),
                 NullLoggerFactory.Instance,
-                Options.Create(new BybitRestOptions { RateLimiterEnabled = false })));
+                Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
+            _gate);
     }
 
     [TearDown]
     public void TearDown()
     {
         _bybit.Dispose();
+        _gate.Dispose();
     }
 
     private static readonly DateTimeOffset LaunchTime = new DateTimeOffset(year: 2020, month: 3, day: 30, hour: 0, minute: 0, second: 0, TimeSpan.Zero);
 
     private StubHttpHandler _bybit = null!;
+    private BybitRequestGate _gate = null!;
     private BybitInstrumentsClient _instruments = null!;
 
     [TestCase("Settling", "LinearPerpetual")]

@@ -27,6 +27,7 @@ internal static class TInvestRegistrar
             .Validate(
                 tinvest => Uri.TryCreate(tinvest.Endpoint, UriKind.Absolute, out Uri? endpoint) && endpoint.Scheme == Uri.UriSchemeHttps,
                 "TInvestApi:Endpoint must be an https address.")
+            .Validate(tinvest => tinvest.MarketDataRequestsPerMinute > 0, "TInvestApi:MarketDataRequestsPerMinute must be above zero.")
             .ValidateOnStart();
 
         // The server is trusted by the root of TInvestCertificates. A call cancelled by its token is an OperationCanceledException, as
@@ -44,6 +45,7 @@ internal static class TInvestRegistrar
         services.AddSingleton(provider => new InstrumentsService.InstrumentsServiceClient(provider.GetRequiredService<GrpcChannel>()));
         services.AddSingleton(provider => new MarketDataService.MarketDataServiceClient(provider.GetRequiredService<GrpcChannel>()));
         services.AddScoped<ITInvestSharesClient, TInvestSharesClient>();
+        services.AddSingleton<TInvestRequestLimiter>();
         services.AddScoped<ITInvestCandlesClient, TInvestCandlesClient>();
     }
 }

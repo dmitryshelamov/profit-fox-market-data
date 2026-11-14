@@ -2,8 +2,6 @@ using Bybit.Net.Enums;
 using Bybit.Net.Interfaces.Clients;
 using Bybit.Net.Objects.Models.V5;
 
-using CryptoExchange.Net.Objects;
-
 using ProfitFox.MarketData.Application.Ports.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
@@ -14,7 +12,7 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 /// <summary>
 ///     Reads the instruments of spot and linear from the public API of Bybit. Bybit lists only the instruments that trade now.
 /// </summary>
-internal sealed class BybitInstrumentsClient(IBybitRestClient bybit) : IBybitInstrumentsClient
+internal sealed class BybitInstrumentsClient(IBybitRestClient bybit, BybitRequestGate gate) : IBybitInstrumentsClient
 {
     // The largest page of linear instruments Bybit gives.
     private const int PageSize = 1000;
@@ -37,10 +35,11 @@ internal sealed class BybitInstrumentsClient(IBybitRestClient bybit) : IBybitIns
     // Bybit gives every spot pair in one answer.
     private async Task<IReadOnlyList<BybitListedInstrument>> ListSpotAsync(CancellationToken cancellationToken)
     {
-        HttpResult<BybitResponse<BybitSpotSymbol>> response = await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: cancellationToken);
-        ThrowIfFailed(response, BybitCategory.Spot);
+        BybitResponse<BybitSpotSymbol> response = await gate.SendAsync(
+            async token => BybitResponses.DataOf(await bybit.V5Api.ExchangeData.GetSpotSymbolsAsync(ct: token), NotListed(BybitCategory.Spot)),
+            cancellationToken);
 
-        return response.Data!.List.Select(symbol => symbol.ToDomain()).ToList();
+        return response.List.Select(symbol => symbol.ToDomain()).ToList();
     }
 
     // Bybit gives linear contracts page by page: each page has the cursor of the next one, the last page has none.
@@ -51,16 +50,16 @@ internal sealed class BybitInstrumentsClient(IBybitRestClient bybit) : IBybitIns
 
         while (true)
         {
-            HttpResult<BybitResponse<BybitLinearInverseSymbol>> response = await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(
-                Category.Linear,
-                limit: PageSize,
-                cursor: cursor,
-                ct: cancellationToken);
-            ThrowIfFailed(response, BybitCategory.Linear);
+            string? pageCursor = cursor;
+            BybitResponse<BybitLinearInverseSymbol> response = await gate.SendAsync(
+                async token => BybitResponses.DataOf(
+                    await bybit.V5Api.ExchangeData.GetLinearInverseSymbolsAsync(Category.Linear, limit: PageSize, cursor: pageCursor, ct: token),
+                    NotListed(BybitCategory.Linear)),
+                cancellationToken);
 
-            instruments.AddRange(response.Data!.List.Select(symbol => symbol.ToDomain()));
+            instruments.AddRange(response.List.Select(symbol => symbol.ToDomain()));
 
-            cursor = response.Data.NextPageCursor;
+            cursor = response.NextPageCursor;
 
             if (string.IsNullOrEmpty(cursor))
             {
@@ -70,11 +69,8 @@ internal sealed class BybitInstrumentsClient(IBybitRestClient bybit) : IBybitIns
     }
 
     // A failed page fails the whole list: a list cut short would delist the instruments it misses.
-    private static void ThrowIfFailed<T>(HttpResult<T> response, BybitCategory category)
+    private static string NotListed(BybitCategory category)
     {
-        if (!response.Success)
-        {
-            throw new HttpRequestException($"Bybit did not list {category} instruments: {response.Error}", inner: null, response.ResponseStatusCode);
-        }
+        return $"Bybit did not list {category} instruments";
     }
 }

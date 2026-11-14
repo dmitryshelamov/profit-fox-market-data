@@ -6,6 +6,8 @@ using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Infrastructure.Exchanges;
+using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 using ProfitFox.MarketData.Tests.Integration.Grpc;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
@@ -52,10 +54,13 @@ public class TInvestCandlesClientTests
             .Build();
         _services = new ServiceCollection().Configure<TInvestApiSettings>(configuration).BuildServiceProvider();
 
+        IOptionsMonitor<TInvestApiSettings> settings = _services.GetRequiredService<IOptionsMonitor<TInvestApiSettings>>();
+
         return new TInvestCandlesClient(
             new MarketDataService.MarketDataServiceClient(_api),
             new InstrumentsService.InstrumentsServiceClient(_api),
-            _services.GetRequiredService<IOptionsMonitor<TInvestApiSettings>>(),
+            new TInvestRequestLimiter(settings, new ExchangeRetryExecutor(TimeProvider.System), TimeProvider.System),
+            settings,
             TimeProvider.System);
     }
 
@@ -67,11 +72,19 @@ public class TInvestCandlesClientTests
     [Test]
     public void A_failed_call_fails()
     {
-        _api.Fail("GetCandles", StatusCode.ResourceExhausted);
+        _api.Fail("GetCandles", StatusCode.InvalidArgument);
 
         RpcException? failure = Assert.ThrowsAsync<RpcException>(() => _candles.GetAsync(Sber, Day(), CancellationToken.None));
 
-        Assert.That(failure!.StatusCode, Is.EqualTo(StatusCode.ResourceExhausted));
+        Assert.That(failure!.StatusCode, Is.EqualTo(StatusCode.InvalidArgument));
+    }
+
+    [Test]
+    public void A_limit_of_T_Invest_pauses_the_requests_of_candles()
+    {
+        _api.Fail("GetCandles", StatusCode.ResourceExhausted);
+
+        Assert.ThrowsAsync<ExchangePausedException>(() => _candles.GetAsync(Sber, Day(), CancellationToken.None));
     }
 
     [Test]

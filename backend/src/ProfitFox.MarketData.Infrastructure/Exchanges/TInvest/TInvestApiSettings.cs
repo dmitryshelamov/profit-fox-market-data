@@ -20,5 +20,10 @@ internal sealed class TInvestApiSettings
     /// </summary>
     public string AppName { get; init; } = "profit-fox-market-data";
 
+    /// <summary>
+    ///     How many requests of market data (candles) the app sends in any minute; T-Invest counts them per token and service.
+    /// </summary>
+    public int MarketDataRequestsPerMinute { get; init; } = 100;
+
     public bool HasToken => !string.IsNullOrWhiteSpace(Token);
 }

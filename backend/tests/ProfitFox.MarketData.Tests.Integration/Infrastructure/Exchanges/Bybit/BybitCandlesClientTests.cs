@@ -1,3 +1,5 @@
+using System.Net;
+
 using Bybit.Net.Clients;
 using Bybit.Net.Objects.Options;
 
@@ -7,8 +9,12 @@ using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
+using ProfitFox.MarketData.Infrastructure.Exchanges;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
+using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Tests.Integration.Http;
+using ProfitFox.MarketData.Tests.Integration.Settings;
+using ProfitFox.MarketData.Tests.Integration.Time;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
 namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
@@ -22,18 +28,25 @@ public class BybitCandlesClientTests
         _bybit = new StubHttpHandler();
 
         // The rate limiter of the SDK is off: it would wait in real time.
+        _time = new FakeTimeProvider(Now);
+        _gate = new BybitRequestGate(
+            new FixedOptionsMonitor<BybitApiSettings>(new BybitApiSettings()),
+            new ExchangeRetryExecutor(_time),
+            _time);
         _candles = new BybitCandlesClient(
             new BybitRestClient(
                 new HttpClient(_bybit),
                 NullLoggerFactory.Instance,
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
-            new FakeTimeProvider(Now));
+            _gate,
+            _time);
     }
 
     [TearDown]
     public void TearDown()
     {
         _bybit.Dispose();
+        _gate.Dispose();
     }
 
     private static readonly DateTimeOffset Now = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 30, TimeSpan.Zero);
@@ -47,12 +60,37 @@ public class BybitCandlesClientTests
 
     private static readonly BybitListedInstrument Spot = BybitListedInstrumentGenerator.GenerateSpot();
 
+    private FakeTimeProvider _time = null!;
+    private BybitRequestGate _gate = null!;
     private StubHttpHandler _bybit = null!;
     private BybitCandlesClient _candles = null!;
 
     private static MinuteRange Minutes(int from, int until)
     {
         return new MinuteRange(Start.AddMinutes(from), Start.AddMinutes(until));
+    }
+
+    [TestCase(HttpStatusCode.TooManyRequests)]
+    [TestCase(HttpStatusCode.OK)]
+    public void A_limit_of_Bybit_pauses_the_requests(HttpStatusCode status)
+    {
+        _bybit.RespondJson(BybitAnswers.Error(code: 10006, "Too many visits!"), status);
+
+        ExchangePausedException? paused =
+            Assert.ThrowsAsync<ExchangePausedException>(() => _candles.GetAsync(Linear, Minutes(from: 0, until: 60), CancellationToken.None));
+
+        Assert.That(paused!.Until, Is.EqualTo(Now.AddSeconds(30)));
+    }
+
+    [Test]
+    public void A_ban_of_the_IP_pauses_the_requests_for_the_ban_pause()
+    {
+        _bybit.RespondJson("", HttpStatusCode.Forbidden);
+
+        ExchangePausedException? paused =
+            Assert.ThrowsAsync<ExchangePausedException>(() => _candles.GetAsync(Linear, Minutes(from: 0, until: 60), CancellationToken.None));
+
+        Assert.That(paused!.Until, Is.EqualTo(Now.AddMinutes(10)));
     }
 
     [Test]
@@ -89,6 +127,23 @@ public class BybitCandlesClientTests
                 [.. Enumerable.Range(start: 0, count: 1000).Select(day => BybitAnswers.Kline(Today.AddDays(-day), "1", "1", "1", "1", "1", "1"))]));
 
         Assert.That(await _candles.GetTradingStartAsync(Spot, Start.AddDays(-2000), CancellationToken.None), Is.Null);
+    }
+
+    [Test]
+    public async Task A_server_error_of_Bybit_is_retried()
+    {
+        _bybit
+            .RespondJson("", HttpStatusCode.BadGateway)
+            .RespondJson(BybitAnswers.Klines("linear", Linear.Symbol, BybitAnswers.Kline(Start, "1", "1", "1", "1", "1", "1")));
+
+        Task<IReadOnlyList<Candle>> loading = _candles.GetAsync(Linear, Minutes(from: 0, until: 60), CancellationToken.None);
+        await _time.AdvanceUntilDoneAsync(loading, TimeSpan.FromSeconds(1));
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That((await loading).Select(candle => candle.OpenTime), Is.EqualTo(new[] { Start }));
+            Assert.That(_bybit.Requests, Has.Count.EqualTo(2));
+        });
     }
 
     [Test]

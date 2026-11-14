@@ -1,5 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
 
+using Grpc.Core;
+
 using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Ports.Candles;
@@ -21,6 +23,7 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 internal sealed class TInvestCandlesClient(
     MarketDataService.MarketDataServiceClient marketData,
     InstrumentsService.InstrumentsServiceClient instruments,
+    TInvestRequestLimiter limiter,
     IOptionsMonitor<TInvestApiSettings> settings,
     TimeProvider time) : ITInvestCandlesClient
 {
@@ -38,10 +41,9 @@ internal sealed class TInvestCandlesClient(
             CandleSourceType = GetCandlesRequest.Types.CandleSource.Exchange
         };
 
-        GetCandlesResponse response = await marketData.GetCandlesAsync(
-            request,
-            TInvestMetadata.Of(settings.CurrentValue, $"No candles of {share.Ticker} are read"),
-            Deadline(),
+        Metadata headers = TInvestMetadata.Of(settings.CurrentValue, $"No candles of {share.Ticker} are read");
+        GetCandlesResponse response = await limiter.SendAsync(
+            async token => await marketData.GetCandlesAsync(request, headers, Deadline(), token),
             cancellationToken);
 
         // A candle of a minute still open is not complete; one outside the range is left out too.
