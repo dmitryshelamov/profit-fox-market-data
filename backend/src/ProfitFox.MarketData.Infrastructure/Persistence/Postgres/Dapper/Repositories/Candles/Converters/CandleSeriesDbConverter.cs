@@ -40,6 +40,12 @@ internal static class CandleSeriesDbConverter
         return new Candle(row.OpenTime, row.Open, row.High, row.Low, row.Close, row.Volume, row.Turnover, row.BuyVolume);
     }
 
+    // The candles of many instruments, each under its instrument.
+    internal static ILookup<Guid, Candle> ToDomain(IEnumerable<CandleDb> rows)
+    {
+        return rows.ToLookup(row => row.InstrumentId, ToDomain);
+    }
+
     internal static CandlesDb CandlesFromDomain(IReadOnlyCollection<CandleSeries> series)
     {
         (Guid InstrumentId, Candle Candle)[] candles =

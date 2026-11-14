@@ -43,9 +43,10 @@ jobs:
       - name: Verify format
         run: sh ../scripts/verify-format.sh ProfitFox.MarketData.sln
 
+      # Only the code people write: the build puts generated code, such as the gRPC classes of Protos/*.proto, under obj/.
       - name: Verify XML doc summaries
         run: |
-          if grep -rnE --include='*.cs' '/// <summary>.+</summary>' src tests; then
+          if grep -rnE --include='*.cs' --exclude-dir=obj --exclude-dir=bin '/// <summary>.+</summary>' src tests; then
             echo "One-line <summary>; write it on three lines."
             exit 1
           fi

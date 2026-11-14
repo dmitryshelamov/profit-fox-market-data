@@ -30,7 +30,8 @@ public interface ICandleSeriesRepository
     Task SaveAsync(CandleSeries series, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Writes several series as one is written, all of them together or none.
+    ///     Writes several series as one is written, all of them together or none. Gives the new candles of each as storage holds them
+    ///     now, by instrument: one saved without a buy volume has the buy volume its minute already had.
     /// </summary>
-    Task SaveAsync(IReadOnlyCollection<CandleSeries> series, CancellationToken cancellationToken);
+    Task<ILookup<Guid, Candle>> SaveAsync(IReadOnlyCollection<CandleSeries> series, CancellationToken cancellationToken);
 }

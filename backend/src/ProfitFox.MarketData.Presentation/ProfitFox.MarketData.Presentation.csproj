@@ -4,9 +4,15 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Grpc.AspNetCore"/>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi"/>
         <PackageReference Include="Serilog.AspNetCore"/>
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The client is generated too: the tests subscribe with it, and a consumer copies the proto and generates its own. -->
+        <Protobuf Include="Protos\candle_feed.proto" GrpcServices="Both"/>
     </ItemGroup>
 
     <ItemGroup>

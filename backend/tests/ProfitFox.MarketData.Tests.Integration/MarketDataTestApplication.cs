@@ -48,6 +48,7 @@ internal sealed class MarketDataTestApplication(string tinvestToken = "test-toke
         // The background sync and loading are left out, so nothing they would do needs a token at start.
         builder.UseSetting("InstrumentSync:TInvest:Enabled", "false");
         builder.UseSetting("CandleSync:TInvest:Enabled", "false");
+        builder.UseSetting("CandleStream:TInvest:Enabled", "false");
 
         builder.ConfigureTestServices(services =>
         {

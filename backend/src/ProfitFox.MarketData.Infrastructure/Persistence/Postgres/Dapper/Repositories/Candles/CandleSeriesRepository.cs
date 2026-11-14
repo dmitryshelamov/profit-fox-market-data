@@ -48,26 +48,29 @@ internal sealed class CandleSeriesRepository(
     }
 
     // The candles and the coverage go together even outside a command, so the coverage never claims a minute storage does not hold.
-    public async Task SaveAsync(IReadOnlyCollection<CandleSeries> series, CancellationToken cancellationToken)
+    public async Task<ILookup<Guid, Candle>> SaveAsync(IReadOnlyCollection<CandleSeries> series, CancellationToken cancellationToken)
     {
         if (series.Count == 0)
         {
-            return;
+            return CandleSeriesDbConverter.ToDomain([]);
         }
 
         CandleSeriesDb row = CandleSeriesDbConverter.FromDomain(series);
         CandlesDb candles = CandleSeriesDbConverter.CandlesFromDomain(series);
 
-        await transactionExecutor.ExecuteAsync(
+        IEnumerable<CandleDb> stored = await transactionExecutor.ExecuteAsync(
             async () =>
             {
-                if (candles.OpenTimes.Length > 0)
-                {
-                    await connection.ExecuteAsync(CandleSeriesRepositoryQueries.UpsertCandles(candles, transactions.Current, cancellationToken));
-                }
+                IEnumerable<CandleDb> written = candles.OpenTimes.Length > 0
+                    ? await connection.QueryAsync<CandleDb>(CandleSeriesRepositoryQueries.UpsertCandles(candles, transactions.Current, cancellationToken))
+                    : [];
 
                 await connection.ExecuteAsync(CandleSeriesRepositoryQueries.UpsertSeries(row, transactions.Current, cancellationToken));
+
+                return written;
             },
             cancellationToken);
+
+        return CandleSeriesDbConverter.ToDomain(stored);
     }
 }

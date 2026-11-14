@@ -17,7 +17,7 @@ internal static class TInvestRegistrar
 {
     /// <summary>
     ///     One gRPC channel to T-Invest for the process, opened on the first call and trusting the server by
-    ///     <see cref="TInvestCertificates" />, and the clients of its instruments and market data over it; a test host
+    ///     <see cref="TInvestCertificates" />, and the clients of its instruments, market data and candle stream over it; a test host
     ///     replaces the clients to answer the calls itself.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
@@ -47,5 +47,7 @@ internal static class TInvestRegistrar
         services.AddScoped<ITInvestSharesClient, TInvestSharesClient>();
         services.AddSingleton<TInvestRequestGate>();
         services.AddScoped<IExchangeCandlesClient, TInvestCandlesClient>();
+        services.AddSingleton(provider => new MarketDataStreamService.MarketDataStreamServiceClient(provider.GetRequiredService<GrpcChannel>()));
+        services.AddSingleton<ITInvestCandleStreamClient, TInvestCandleStreamClient>();
     }
 }

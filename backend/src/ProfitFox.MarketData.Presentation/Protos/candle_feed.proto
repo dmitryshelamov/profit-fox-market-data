@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
+
+// The minute candles of the catalog as they come.
+service CandleFeed {
+  // Tells every minute candle of the exchanges asked for that the stream of its exchange told, once it closes and is
+  // stored, as it is stored, until the caller ends the call. With `since`, the stored candles that opened at or after
+  // it come first, oldest first, and the live ones follow with none left out. A candle may come again, such as with
+  // its buy volume once a late trade completed it: the caller replaces the one it has by instrument and open time.
+  // The response headers come once the subscription is in place.
+  //
+  // Live candles are only those of the streams. A minute a stream did not tell, as while its connection was lost, is
+  // loaded and stored later, and so is a buy volume found later; neither is told live. A caller that needs them
+  // subscribes again with `since`.
+  //
+  // With `forming`, the candle of the minute that goes on comes too, with `closed` false: at most once a second for an
+  // instrument and only when it traded; on Bybit it comes once more when the minute before closes, which tells where
+  // it opens. The closed candle of that minute follows and replaces it, except for an instrument whose candles are
+  // not stored yet, as in the first minutes after it is listed or the service first starts: its minutes get no closed
+  // candle until then. A forming candle is not stored and is not part of the catch-up; a caller that falls behind
+  // stops getting them until it caught up.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up, or an exchange asked for is not one of
+  // `Exchange` or is EXCHANGE_UNSPECIFIED.
+  // RESOURCE_EXHAUSTED: the caller read slower than the closed candles came and is cut off; it subscribes again with
+  // `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeRequest) returns (stream CandleUpdate);
+}
+
+enum Exchange {
+  EXCHANGE_UNSPECIFIED = 0;
+  EXCHANGE_BYBIT = 1;
+  EXCHANGE_TINVEST = 2;
+}
+
+message SubscribeRequest {
+  // The exchanges whose candles are wanted; none means all.
+  repeated Exchange exchanges = 1;
+
+  // Where to catch up from; absent means live candles only.
+  google.protobuf.Timestamp since = 2;
+
+  // Whether the candle of the minute that goes on is wanted too.
+  bool forming = 3;
+}
+
+// A minute candle. Prices and volumes are decimal numbers as text, exactly as stored: "0.00001234".
+message CandleUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  Exchange exchange = 2;
+  google.protobuf.Timestamp open_time = 3;
+  string open = 4;
+  string high = 5;
+  string low = 6;
+  string close = 7;
+
+  // What was traded: the base asset on Bybit, shares on T-Invest.
+  string volume = 8;
+
+  // What the trades were worth in the quote asset; absent where the exchange does not tell it.
+  optional string turnover = 9;
+
+  // The part of the volume traded in trades the buyer started; absent where it is not known.
+  optional string buy_volume = 10;
+
+  // Whether the minute is closed. A candle not closed is the forming one, as far as the trades of its minute went.
+  bool closed = 11;
+}

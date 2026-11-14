@@ -6,6 +6,7 @@ using Bybit.Net.Objects.Options;
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
@@ -30,8 +31,11 @@ public class BybitCandleStreamClientTests
                     SocketIndividualSubscriptionCombineTarget = 100
                 }),
             NullLoggerFactory.Instance);
-        _stream = new BybitCandleStreamClient(_socket, NullLogger<BybitCandleStreamClient>.Instance);
+        // Half a minute before the minute of the tests: that minute is watched from its start.
+        _time = new FakeTimeProvider(Minute.AddSeconds(-30));
+        _stream = new BybitCandleStreamClient(_socket, _time, NullLogger<BybitCandleStreamClient>.Instance);
         _closed = Channel.CreateUnbounded<(string Symbol, Candle Candle)>();
+        _forming = Channel.CreateUnbounded<(string Symbol, Candle Candle)>();
     }
 
     [TearDown]
@@ -51,12 +55,42 @@ public class BybitCandleStreamClientTests
 
     private FakeBybitSocketServer _server = null!;
     private BybitSocketClient _socket = null!;
+    private FakeTimeProvider _time = null!;
     private BybitCandleStreamClient _stream = null!;
     private Channel<(string Symbol, Candle Candle)> _closed = null!;
+    private Channel<(string Symbol, Candle Candle)> _forming = null!;
 
     private Task<IAsyncDisposable> SubscribeAsync(BybitCategory category, params string[] symbols)
     {
-        return _stream.SubscribeAsync(category, symbols, (symbol, candle) => _closed.Writer.TryWrite((symbol, candle)), CancellationToken.None);
+        return _stream.SubscribeAsync(
+            category,
+            symbols,
+            (symbol, candle) => _closed.Writer.TryWrite((symbol, candle)),
+            (symbol, candle) => _forming.Writer.TryWrite((symbol, candle)),
+            CancellationToken.None);
+    }
+
+    // The next forming candle: the seconds pass until the trades pushed have come through the socket and one of them tells it.
+    private async Task<(string Symbol, Candle Candle)> FormingAsync()
+    {
+        DateTime until = DateTime.UtcNow + Patience;
+
+        while (true)
+        {
+            _time.Advance(TimeSpan.FromSeconds(1));
+
+            if (_forming.Reader.TryRead(out (string Symbol, Candle Candle) forming))
+            {
+                return forming;
+            }
+
+            if (DateTime.UtcNow > until)
+            {
+                throw new TimeoutException("No forming candle came.");
+            }
+
+            await Task.Delay(20);
+        }
     }
 
     private async Task<(string Symbol, Candle Candle)> ClosedAsync()
@@ -169,6 +203,31 @@ public class BybitCandleStreamClientTests
         {
             Assert.That(closed.Symbol, Is.EqualTo("BTCUSDT"));
             Assert.That(closed.Candle, Is.EqualTo(new Candle(Minute, open: 5m, high: 8m, low: 4m, close: 7m, volume: 3m, turnover: 18m, buyVolume: 2m)));
+        });
+    }
+
+    [Test]
+    public async Task The_forming_candle_of_a_minute_seen_from_its_start_is_told_from_its_trades_and_not_one_seen_in_part()
+    {
+        // The stream starts ten seconds into the minute: that minute is seen in part, the next one from its start.
+        _time.SetUtcNow(Minute.AddSeconds(10));
+        await SubscribeAsync(BybitCategory.Linear, "BTCUSDT");
+
+        await _server.PushAsync(
+            Linear,
+            "publicTrade.BTCUSDT",
+            FakeBybitSocketServer.Trade("BTCUSDT", Minute.AddSeconds(20), "Buy", quantity: 9m, price: 50m),
+            FakeBybitSocketServer.Trade("BTCUSDT", Minute.AddMinutes(1), "Buy", quantity: 2m, price: 100m),
+            FakeBybitSocketServer.Trade("BTCUSDT", Minute.AddMinutes(1).AddSeconds(1), "Sell", quantity: 1m, price: 103m));
+
+        (string Symbol, Candle Candle) forming = await FormingAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(forming.Symbol, Is.EqualTo("BTCUSDT"));
+            Assert.That(
+                forming.Candle,
+                Is.EqualTo(new Candle(Minute.AddMinutes(1), open: 100m, high: 103m, low: 100m, close: 103m, volume: 3m, turnover: 303m, buyVolume: 2m)));
+            Assert.That(_forming.Reader.TryRead(out _), Is.False);
         });
     }
 

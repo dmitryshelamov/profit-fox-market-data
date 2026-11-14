@@ -1,3 +1,5 @@
+using Google.Protobuf.WellKnownTypes;
+
 using Tinkoff.InvestApi.V1;
 
 // The SDK has a Candle of its own, the one of its stream.
@@ -13,20 +15,39 @@ internal static class TInvestCandleConverter
 {
     internal static Candle ToDomain(HistoricCandle candle, decimal lot)
     {
-        return new Candle(
-            candle.Time.ToDateTimeOffset(),
-            candle.Open.ToDecimal(),
-            candle.High.ToDecimal(),
-            candle.Low.ToDecimal(),
-            candle.Close.ToDecimal(),
-            candle.Volume * lot,
-            buyVolume: TellsSides(candle) ? candle.VolumeBuy * lot : null);
+        return ToDomain(candle.Time, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume, candle.VolumeBuy, candle.VolumeSell, lot);
     }
 
-    // T-Invest tells the sides of the trades from 26 August 2025: a candle before that has nothing bought and nothing sold whatever its
-    // volume, which is not a minute of sells only.
-    private static bool TellsSides(HistoricCandle candle)
+    /// <summary>
+    ///     A candle of the stream, closed or forming: the same values as a candle of the history.
+    /// </summary>
+    internal static Candle ToDomain(Tinkoff.InvestApi.V1.Candle candle, decimal lot)
     {
-        return candle.VolumeBuy + candle.VolumeSell == candle.Volume;
+        return ToDomain(candle.Time, candle.Open, candle.High, candle.Low, candle.Close, candle.Volume, candle.VolumeBuy, candle.VolumeSell, lot);
+    }
+
+    private static Candle ToDomain(
+        Timestamp time,
+        Quotation open,
+        Quotation high,
+        Quotation low,
+        Quotation close,
+        long lots,
+        long lotsBought,
+        long lotsSold,
+        decimal lot)
+    {
+        // T-Invest tells the sides of the trades from 26 August 2025: a candle before that has nothing bought and nothing sold whatever
+        // its volume, which is not a minute of sells only.
+        bool tellsSides = lotsBought + lotsSold == lots;
+
+        return new Candle(
+            time.ToDateTimeOffset(),
+            open.ToDecimal(),
+            high.ToDecimal(),
+            low.ToDecimal(),
+            close.ToDecimal(),
+            lots * lot,
+            buyVolume: tellsSides ? lotsBought * lot : null);
     }
 }

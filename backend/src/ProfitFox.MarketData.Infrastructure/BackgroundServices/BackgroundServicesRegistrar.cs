@@ -49,7 +49,11 @@ internal static class BackgroundServicesRegistrar
             .Bind(configuration.GetSection(CandleStreamSettings.Section))
             .Validate(stream => stream.RefreshSeconds > 0, "CandleStream:RefreshSeconds must be above zero.")
             .Validate(stream => stream.BatchSeconds > 0, "CandleStream:BatchSeconds must be above zero.")
+            .Validate<IOptionsMonitor<TInvestApiSettings>>(
+                (stream, tinvest) => !stream.TInvest.Enabled || tinvest.CurrentValue.HasToken,
+                "CandleStream:TInvest needs TInvestApi:Token while it is enabled.")
             .ValidateOnStart();
+        services.AddSingleton<ILiveCandleFeed, LiveCandleFeed>();
         services.AddHostedService<CandleStreamBackgroundService>();
 
         services.AddOptions<BuyVolumeSyncSettings>()

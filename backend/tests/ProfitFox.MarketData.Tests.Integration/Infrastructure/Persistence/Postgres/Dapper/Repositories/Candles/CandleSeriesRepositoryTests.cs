@@ -268,6 +268,25 @@ public class CandleSeriesRepositoryTests
     }
 
     [Test]
+    public async Task Saving_series_gives_their_new_candles_as_storage_holds_them()
+    {
+        await SaveAsync(Range(Start, minutes: 1), CandleGenerator.Generate(Start, close: 5m, volume: 3m, buyVolume: 2m));
+        var linear = CandleSeries.Create(Linear.Id);
+        linear.Cover(Range(Start, minutes: 1), [CandleGenerator.Generate(Start, close: 6m, volume: 3m)]);
+        var spot = CandleSeries.Create(Spot.Id);
+        spot.Cover(Range(Start, minutes: 1), [CandleAt(Start, close: 7m)]);
+
+        ILookup<Guid, Candle> stored = await _repository.SaveAsync([linear, spot], CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            // The minute kept the buy volume it was saved with before.
+            Assert.That(stored[Linear.Id], Is.EqualTo(new[] { CandleGenerator.Generate(Start, close: 6m, volume: 3m, buyVolume: 2m) }));
+            Assert.That(stored[Spot.Id], Is.EqualTo(new[] { CandleAt(Start, close: 7m) }));
+        });
+    }
+
+    [Test]
     public async Task Several_series_are_saved_together_each_with_its_own_candles_and_ranges()
     {
         var linear = CandleSeries.Create(Linear.Id);

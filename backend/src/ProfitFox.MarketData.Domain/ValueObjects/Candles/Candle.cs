@@ -1,9 +1,10 @@
 namespace ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
 /// <summary>
-///     The trades of an instrument over one closed minute that opens at <see cref="OpenTime" />, as its exchange told them: the prices of
-///     the first, highest, lowest and last trades, what was traded, for how much and how much of it the buyers took. Candles of an instrument belong to its
-///     <see cref="Entities.Candles.CandleSeries" />.
+///     The trades of an instrument over the minute that opens at <see cref="OpenTime" />, as its exchange told them: the prices of
+///     the first, highest, lowest and last trades, what was traded, for how much and how much of it the buyers took. The candles of
+///     closed minutes belong to the <see cref="Entities.Candles.CandleSeries" /> of the instrument; one of the minute that still goes on
+///     tells its trades so far and is never stored.
 /// </summary>
 public sealed record Candle
 {

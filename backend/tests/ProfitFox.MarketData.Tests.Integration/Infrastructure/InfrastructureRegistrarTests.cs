@@ -20,6 +20,17 @@ public class InfrastructureRegistrarTests
     }
 
     [Test]
+    public void A_stream_of_shares_without_a_token_is_refused()
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["CandleStream:TInvest:Enabled"] = "true" })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<CandleStreamSettings>>().Value);
+    }
+
+    [Test]
     public void A_sync_of_bybit_without_categories_is_refused()
     {
         Assert.Throws<OptionsValidationException>(() => SyncSettings(
