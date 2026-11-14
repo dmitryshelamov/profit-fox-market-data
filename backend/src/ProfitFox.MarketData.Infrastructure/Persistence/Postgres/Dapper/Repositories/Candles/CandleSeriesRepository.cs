@@ -4,6 +4,7 @@ using Npgsql;
 
 using ProfitFox.MarketData.Domain.Entities.Candles;
 using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Contracts;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Converters;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles.Queries;
@@ -27,10 +28,18 @@ internal sealed class CandleSeriesRepository(
 
     public async Task<IReadOnlyCollection<CandleSeries>> GetAsync(IReadOnlyCollection<Guid> instrumentIds, CancellationToken cancellationToken)
     {
-        IEnumerable<CoveredRangeDb> rows = await connection.QueryAsync<CoveredRangeDb>(
-            CandleSeriesRepositoryQueries.Covered(instrumentIds, transactions.Current, cancellationToken));
+        IEnumerable<SeriesRangeDb> rows = await connection.QueryAsync<SeriesRangeDb>(
+            CandleSeriesRepositoryQueries.Ranges(instrumentIds, transactions.Current, cancellationToken));
 
         return [.. rows.GroupBy(row => row.InstrumentId).Select(series => CandleSeriesDbConverter.ToDomain(series.Key, series))];
+    }
+
+    public async Task<IReadOnlyList<Candle>> GetCandlesWithoutBuyVolumeAsync(Guid instrumentId, MinuteRange range, CancellationToken cancellationToken)
+    {
+        IEnumerable<CandleDb> rows = await connection.QueryAsync<CandleDb>(
+            CandleSeriesRepositoryQueries.CandlesWithoutBuyVolume(instrumentId, range, transactions.Current, cancellationToken));
+
+        return [.. rows.Select(CandleSeriesDbConverter.ToDomain)];
     }
 
     public Task SaveAsync(CandleSeries series, CancellationToken cancellationToken)

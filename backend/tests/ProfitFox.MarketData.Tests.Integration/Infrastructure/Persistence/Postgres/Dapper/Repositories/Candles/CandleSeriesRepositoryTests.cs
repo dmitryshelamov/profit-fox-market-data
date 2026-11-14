@@ -221,6 +221,21 @@ public class CandleSeriesRepositoryTests
     }
 
     [Test]
+    public async Task Candles_without_a_buy_volume_of_a_range_come_oldest_first()
+    {
+        await SaveAsync(
+            Range(Start, minutes: 10),
+            CandleGenerator.Generate(Start.AddMinutes(3), close: 6m),
+            CandleGenerator.Generate(Start.AddMinutes(1), volume: 3m, buyVolume: 2m),
+            CandleGenerator.Generate(Start, volume: 0m),
+            CandleGenerator.Generate(Start.AddMinutes(5)));
+
+        IReadOnlyList<Candle> without = await _repository.GetCandlesWithoutBuyVolumeAsync(Linear.Id, Range(Start, minutes: 5), CancellationToken.None);
+
+        Assert.That(without, Is.EqualTo(new[] { CandleGenerator.Generate(Start, volume: 0m), CandleGenerator.Generate(Start.AddMinutes(3), close: 6m) }));
+    }
+
+    [Test]
     public async Task Candles_are_stored_exactly_as_the_exchange_gave_them()
     {
         var bybit = new Candle(Start, open: 0.00001234m, high: 0.00001240m, low: 0.00001230m, close: 0.00001238m, volume: 1234567.89m, turnover: 15.2771m);
@@ -229,6 +244,27 @@ public class CandleSeriesRepositoryTests
         await SaveAsync(Range(Start, minutes: 2), bybit, tinvest);
 
         Assert.That(await StoredCandlesAsync(), Is.EqualTo(new[] { StoredCandle.Of(bybit), StoredCandle.Of(tinvest) }));
+    }
+
+    [Test]
+    public async Task Settled_ranges_are_stored_apart_from_the_covered_and_grow_with_every_save()
+    {
+        var series = CandleSeries.Create(Linear.Id);
+        series.Cover(Range(Start, minutes: 60), []);
+        series.Settle(Range(Start, minutes: 10));
+        await _repository.SaveAsync(series, CancellationToken.None);
+        CandleSeries stored = (await _repository.GetAsync(Linear.Id, CancellationToken.None))!;
+
+        stored.Settle(Range(Start.AddMinutes(30), minutes: 10));
+        await _repository.SaveAsync(stored, CancellationToken.None);
+
+        CandleSeries? grown = await _repository.GetAsync(Linear.Id, CancellationToken.None);
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.Settled, Is.EqualTo(new[] { Range(Start, minutes: 10), Range(Start.AddMinutes(30), minutes: 10) }));
+            Assert.That(grown?.Settled, Is.EqualTo(new[] { Range(Start, minutes: 10), Range(Start.AddMinutes(30), minutes: 10) }));
+            Assert.That(grown?.Covered, Is.EqualTo(new[] { Range(Start, minutes: 60) }));
+        });
     }
 
     [Test]

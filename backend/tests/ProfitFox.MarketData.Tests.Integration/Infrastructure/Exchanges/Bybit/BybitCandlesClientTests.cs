@@ -159,7 +159,7 @@ public class BybitCandlesClientTests
     }
 
     [Test]
-    public async Task Candles_of_a_range_come_oldest_first_as_Bybit_gave_them()
+    public async Task Candles_of_a_range_come_oldest_first_as_Bybit_gave_them_and_one_without_volume_has_nothing_bought()
     {
         _bybit.RespondJson(
             BybitAnswers.Klines(
@@ -177,7 +177,7 @@ public class BybitCandlesClientTests
                 Is.EqualTo(
                     new[]
                     {
-                        new Candle(Start, open: 100m, high: 100.5m, low: 99.5m, close: 100.5m, volume: 0m, turnover: 0m),
+                        new Candle(Start, open: 100m, high: 100.5m, low: 99.5m, close: 100.5m, volume: 0m, turnover: 0m, buyVolume: 0m),
                         new Candle(Start.AddMinutes(1), open: 100.5m, high: 101m, low: 100m, close: 100.75m, volume: 12.345m, turnover: 1243.98m)
                     }));
             Assert.That(

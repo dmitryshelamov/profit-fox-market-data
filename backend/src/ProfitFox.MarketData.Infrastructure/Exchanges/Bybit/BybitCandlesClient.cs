@@ -12,7 +12,8 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 
 /// <summary>
 ///     Reads the minute candles of spot and linear from the public API of Bybit, one request a call. Bybit gives the volume in the base
-///     asset and the turnover in the quote asset.
+///     asset and the turnover in the quote asset, and no sides of the trades: only a candle without volume is known to have nothing
+///     bought.
 /// </summary>
 internal sealed class BybitCandlesClient(IBybitRestClient bybit, BybitRequestGate gate, TimeProvider time) : IExchangeCandlesClient
 {
@@ -94,7 +95,8 @@ internal sealed class BybitCandlesClient(IBybitRestClient bybit, BybitRequestGat
             kline.LowPrice,
             kline.ClosePrice,
             kline.Volume,
-            kline.QuoteVolume);
+            kline.QuoteVolume,
+            kline.Volume == 0m ? 0m : null);
     }
 
     private static DateTimeOffset Utc(DateTime time)

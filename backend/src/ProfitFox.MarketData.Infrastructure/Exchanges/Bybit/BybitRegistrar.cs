@@ -12,9 +12,11 @@ internal static class BybitRegistrar
     // about eight times as many by the length of their names.
     private const int StreamTopicsPerConnection = 100;
 
+    private static readonly Uri TradeArchiveAddress = new Uri("https://public.bybit.com/");
+
     /// <summary>
-    ///     The public API and the public streams of Bybit and one gate for the process, which every client of Bybit sends its requests
-    ///     through; an app with a broken BybitApi section stops at start.
+    ///     The public API, the public streams and the public archive of trades of Bybit and one gate for the process, which every client
+    ///     of its API sends its requests through; an app with a broken BybitApi section stops at start.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -30,5 +32,6 @@ internal static class BybitRegistrar
         services.AddScoped<IBybitInstrumentsClient, BybitInstrumentsClient>();
         services.AddScoped<IExchangeCandlesClient, BybitCandlesClient>();
         services.AddSingleton<IBybitCandleStreamClient, BybitCandleStreamClient>();
+        services.AddHttpClient<IBybitTradeArchiveClient, BybitTradeArchiveClient>(http => http.BaseAddress = TradeArchiveAddress);
     }
 }

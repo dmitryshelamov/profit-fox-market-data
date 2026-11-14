@@ -10,22 +10,34 @@ internal static class CandleSeriesDbConverter
     {
         (Guid InstrumentId, MinuteRange Range)[] covered =
             [.. series.SelectMany(one => one.Covered.Select(range => (one.InstrumentId, range)))];
+        (Guid InstrumentId, MinuteRange Range)[] settled =
+            [.. series.SelectMany(one => one.Settled.Select(range => (one.InstrumentId, range)))];
 
         return new CandleSeriesDb
         {
             InstrumentIds = [.. series.Select(one => one.InstrumentId)],
             CoveredInstrumentIds = [.. covered.Select(range => range.InstrumentId)],
             CoveredFroms = [.. covered.Select(range => range.Range.From.ToUniversalTime())],
-            CoveredUntils = [.. covered.Select(range => range.Range.Until.ToUniversalTime())]
+            CoveredUntils = [.. covered.Select(range => range.Range.Until.ToUniversalTime())],
+            SettledInstrumentIds = [.. settled.Select(range => range.InstrumentId)],
+            SettledFroms = [.. settled.Select(range => range.Range.From.ToUniversalTime())],
+            SettledUntils = [.. settled.Select(range => range.Range.Until.ToUniversalTime())]
         };
     }
 
-    // The rows of one series; a series that covers nothing comes as one row with both ends null.
-    internal static CandleSeries ToDomain(Guid instrumentId, IEnumerable<CoveredRangeDb> rows)
+    // The rows of one series, oldest first; a series that covers nothing comes as one row with both ends null.
+    internal static CandleSeries ToDomain(Guid instrumentId, IEnumerable<SeriesRangeDb> rows)
     {
-        return CandleSeries.Restore(
-            instrumentId,
-            rows.Where(row => row.From is not null).Select(row => new MinuteRange(row.From!.Value, row.Until!.Value)));
+        ILookup<bool, MinuteRange> ranges = rows
+            .Where(row => row.From is not null)
+            .ToLookup(row => row.Settled, row => new MinuteRange(row.From!.Value, row.Until!.Value));
+
+        return CandleSeries.Restore(instrumentId, covered: ranges[false], settled: ranges[true]);
+    }
+
+    internal static Candle ToDomain(CandleDb row)
+    {
+        return new Candle(row.OpenTime, row.Open, row.High, row.Low, row.Close, row.Volume, row.Turnover, row.BuyVolume);
     }
 
     internal static CandlesDb CandlesFromDomain(IReadOnlyCollection<CandleSeries> series)

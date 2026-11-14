@@ -22,7 +22,7 @@ namespace ProfitFox.MarketData.Tests.Integration;
 ///     The whole app in memory for a test: the Testing environment (appsettings.Testing.json), the database of the test container and
 ///     Bybit and T-Invest answered by <see cref="Bybit" /> and <see cref="TInvest" />, so no request reaches a real exchange. T-Invest goes
 ///     with <paramref name="tinvestToken" />; an empty one is an app without a token. The background sync of the catalog, the loading of
-///     candles and the stream of closed candles are left out.
+///     candles, the stream of closed candles and the filling of buy volumes are left out.
 /// </summary>
 internal sealed class MarketDataTestApplication(string tinvestToken = "test-token") : WebApplicationFactory<Program>
 {
@@ -63,8 +63,9 @@ internal sealed class MarketDataTestApplication(string tinvestToken = "test-toke
             services.Remove(services.Single(service => service.ImplementationType == typeof(InstrumentSyncBackgroundService)));
             services.Remove(services.Single(service => service.ImplementationType == typeof(CandleSyncBackgroundService)));
 
-            // The stream would connect to the real Bybit.
+            // The stream would connect to the real Bybit, and the filling of buy volumes would read its archive.
             services.Remove(services.Single(service => service.ImplementationType == typeof(CandleStreamBackgroundService)));
+            services.Remove(services.Single(service => service.ImplementationType == typeof(BuyVolumeSyncBackgroundService)));
         });
     }
 

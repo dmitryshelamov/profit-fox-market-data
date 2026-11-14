@@ -1,9 +1,10 @@
 using ProfitFox.MarketData.Domain.Entities.Candles;
+using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 
 namespace ProfitFox.MarketData.Domain.Repositories;
 
 /// <summary>
-///     Stores the candle series of the instruments: the covered ranges of each and its candles.
+///     Stores the candle series of the instruments: the covered and the settled ranges of each and its candles.
 /// </summary>
 public interface ICandleSeriesRepository
 {
@@ -18,8 +19,13 @@ public interface ICandleSeriesRepository
     Task<IReadOnlyCollection<CandleSeries>> GetAsync(IReadOnlyCollection<Guid> instrumentIds, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Writes the covered ranges of the series and its new candles together. A stored candle of the same minute takes the new values,
-    ///     but keeps its buy volume when the new candle knows none.
+    ///     The stored candles of the instrument that open inside <paramref name="range" /> and have no buy volume, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<Candle>> GetCandlesWithoutBuyVolumeAsync(Guid instrumentId, MinuteRange range, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Writes the covered and the settled ranges of the series and its new candles together. A stored candle of the same minute takes
+    ///     the new values, but keeps its buy volume when the new candle knows none.
     /// </summary>
     Task SaveAsync(CandleSeries series, CancellationToken cancellationToken);
 
