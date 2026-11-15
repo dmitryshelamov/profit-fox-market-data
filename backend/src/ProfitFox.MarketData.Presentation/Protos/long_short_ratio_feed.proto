@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
+
+// The long/short ratio of the catalog as it is loaded.
+service LongShortRatioFeed {
+  // Tells every new point of the long/short ratio once it is stored, as it is stored, until the caller ends the call.
+  // With `since`, the stored ones of a time at or after it come first, oldest first, of every instrument, and the live
+  // ones follow with none left out. One may come twice on the way from the stored ones to the live ones: the caller
+  // takes them as one, by instrument and time. The response headers come once the subscription is in place.
+  //
+  // The exchange has no live source of the ratio: its points are loaded from its history, a contract a request, in a
+  // round of the market about once an hour. So the points of a contract come in a batch, the five-minute steps since
+  // the round before, up to an hour after their time, and the contracts of a round come one after another.
+  //
+  // A live point is one loaded after the stored ones of its instrument. The history of an instrument, loaded back to
+  // a year, is not told live. A caller that needs it subscribes again with `since`, or asks
+  // GET api/instruments/{id}/long-short-ratio.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeLongShortRatioRequest) returns (stream LongShortRatioUpdate);
+}
+
+message SubscribeLongShortRatioRequest {
+  // Where to catch up from; absent means live ones only.
+  google.protobuf.Timestamp since = 1;
+}
+
+// The long/short ratio of an instrument at a time: of the accounts that held a position in it, the share that was net
+// long and the share that was net short. It counts accounts, not the size of their positions. A share is a decimal
+// number as text, exactly as stored, a fraction and not a percent: "0.7302" is 73.02%.
+message LongShortRatioUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  google.protobuf.Timestamp time = 2;
+
+  // The share of the accounts that were net long.
+  string long = 3;
+
+  // The share of the accounts that were net short.
+  string short = 4;
+}

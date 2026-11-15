@@ -30,7 +30,7 @@ using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instrumen
 namespace ProfitFox.MarketData.Tests.Integration.Presentation.GrpcServices;
 
 /// <summary>
-///     The feed of open interest, and with it what the three feeds of points do the same way: the catch-up, a caller that fell behind,
+///     The feed of open interest, and with it what the feeds of points do the same way: the catch-up, a caller that fell behind,
 ///     the stop of the app.
 /// </summary>
 [TestFixture]
@@ -135,6 +135,8 @@ public class OpenInterestFeedServiceTests
     [TestCase("OpenInterestFeed")]
     [TestCase("FundingRateFeed")]
     [TestCase("FundingPaymentFeed")]
+    [TestCase("LiquidationFeed")]
+    [TestCase("LongShortRatioFeed")]
     public async Task An_app_whose_feed_catches_up_on_no_time_does_not_start(string feed)
     {
         await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting($"{feed}:MaxCatchUpHours", "0"));

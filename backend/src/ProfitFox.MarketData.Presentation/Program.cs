@@ -87,6 +87,8 @@ public class Program
             app.MapGrpcService<OpenInterestFeedService>();
             app.MapGrpcService<FundingRateFeedService>();
             app.MapGrpcService<FundingPaymentFeedService>();
+            app.MapGrpcService<LiquidationFeedService>();
+            app.MapGrpcService<LongShortRatioFeedService>();
 
             app.Run();
 

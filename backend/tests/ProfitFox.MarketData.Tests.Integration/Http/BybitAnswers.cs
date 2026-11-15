@@ -78,6 +78,24 @@ internal static class BybitAnswers
                  """;
     }
 
+    /// <summary>
+    ///     A point of the history of the long/short ratio as Bybit writes it: the shares of the accounts net long and net short and the
+    ///     time it is of.
+    /// </summary>
+    public static string LongShortRatioPoint(string buyRatio, string sellRatio, DateTimeOffset time, string symbol = "BTCUSDT")
+    {
+        return $$"""
+                 {"symbol":"{{symbol}}","buyRatio":"{{buyRatio}}","sellRatio":"{{sellRatio}}","timestamp":"{{time.ToUnixTimeMilliseconds()}}"}
+                 """;
+    }
+
+    public static string LongShortRatioHistory(params string[] points)
+    {
+        return $$"""
+                 {"retCode":0,"retMsg":"OK","result":{"list":[{{string.Join(",", points)}}],"nextPageCursor":""},"retExtInfo":{},"time":0}
+                 """;
+    }
+
     public static string Tickers(string category, params string[] tickers)
     {
         return $$"""

@@ -17,7 +17,8 @@ namespace ProfitFox.MarketData.Tests.Integration.Sockets;
 
 /// <summary>
 ///     The public streams of Bybit v5 on a local port, <c>/v5/public/spot</c> and <c>/v5/public/linear</c>. It answers <c>subscribe</c>,
-///     <c>unsubscribe</c> and <c>ping</c> as Bybit does, pushes the messages a test gives it and tells what clients subscribed to.
+///     <c>unsubscribe</c> and <c>ping</c> as Bybit does, pushes the messages a test gives it, tells what clients subscribed to and
+///     breaks their connections when a test asks.
 /// </summary>
 internal sealed class FakeBybitSocketServer : IAsyncDisposable
 {
@@ -105,6 +106,17 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
     }
 
     /// <summary>
+    ///     Breaks every connection, as a network that failed does: the clients find theirs lost and connect anew.
+    /// </summary>
+    public void BreakConnections()
+    {
+        foreach (WebSocket socket in _connections.Keys)
+        {
+            socket.Abort();
+        }
+    }
+
+    /// <summary>
     ///     Pushes the data of a topic to every client subscribed to it on <paramref name="path" />.
     /// </summary>
     public async Task PushAsync(string path, string topic, params JsonObject[] data)
@@ -168,6 +180,22 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
             ["i"] = Guid.NewGuid().ToString(),
             ["BT"] = false,
             ["seq"] = 1
+        };
+    }
+
+    /// <summary>
+    ///     A liquidation of the topic <c>allLiquidation</c>; <paramref name="side" /> is the side of the liquidated position,
+    ///     <c>Buy</c> for a long one or <c>Sell</c>.
+    /// </summary>
+    public static JsonObject Liquidation(string symbol, DateTimeOffset time, string side, decimal size, decimal price)
+    {
+        return new JsonObject
+        {
+            ["T"] = time.ToUnixTimeMilliseconds(),
+            ["s"] = symbol,
+            ["S"] = side,
+            ["v"] = Text(size),
+            ["p"] = Text(price)
         };
     }
 
