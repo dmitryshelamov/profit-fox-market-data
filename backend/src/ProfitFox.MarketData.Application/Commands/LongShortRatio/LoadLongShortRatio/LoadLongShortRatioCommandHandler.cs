@@ -1,6 +1,7 @@
 using MediatR;
 
 using ProfitFox.MarketData.Application.Contracts.LongShortRatio;
+using ProfitFox.MarketData.Application.Contracts.LongShortRatio.Converters;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.LongShortRatio;
@@ -72,7 +73,7 @@ internal sealed class LoadLongShortRatioCommandHandler(
 
         if (afterCoverage && points.Length > 0)
         {
-            feed.Publish([.. points.Select(point => new InstrumentLongShortRatioInternal(point.InstrumentId, point.Time, point.Long, point.Short))]);
+            feed.Publish([.. points.Select(point => point.ToInternal())]);
         }
 
         return Page(current, from, until) is null ? LoadLongShortRatioResult.NothingLeft : LoadLongShortRatioResult.MoreLeft;
