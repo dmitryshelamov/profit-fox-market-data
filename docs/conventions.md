@@ -112,6 +112,8 @@ and this file is silent, ask which to follow.
   `ProfitFox.MarketData.Presentation.Protos`; `GrpcServices` holds their implementations, named `<Service>Service`
   (`CandleFeedService`). A contract speaks of what a consumer needs to know and names no type of the code. gRPC needs HTTP/2,
   which has an endpoint of its own in the `Kestrel` section of `appsettings.json`.
+- `/health` is the health checks of the app (`MapHealthChecks`): it answers once the migrations are done, and only while the
+  database answers (`PostgresHealthCheck`). The deploy and the healthcheck of Docker wait for it (README, "Production").
 - Decimal numbers go over gRPC as text, exactly as stored: protobuf has no decimal type.
 - Every kind of market data the service holds is given two ways: a gRPC feed, through which other services get it in real time,
   and a request for its history over a period, REST by instrument until a consumer needs more than pages give. A new kind brings
