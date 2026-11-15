@@ -90,6 +90,11 @@ and this file is silent, ask which to follow.
   its PascalCase name (`CreateInstrumentsTableMigration`). It derives from `Migration` and undoes itself in `Down()`.
 - Names of constraints are snake_case: `<table>_pk`, `<table>_<columns>_unique`.
 - Enums are stored as `text` with the names of their members, not as Postgres `ENUM` types.
+- `Observability` pushes the metrics over OTLP to the Prometheus of profit-fox (`MetricsRegistrar`, the `Metrics` section). A
+  metric of an exchange keeps the meter, name and tags profit-fox gives it (`ProfitFox.Bybit`, `profitfox.bybit.rest.requests`),
+  so one dashboard sums the load of both services on the IP they share; the service is told apart by its `job`. It is recorded where
+  every call passes: a handler on every client of the HTTP factory for Bybit (`BybitRestMetricsHandler`), an interceptor of the gRPC
+  channel for T-Invest (`TInvestMetricsInterceptor`).
 - The failures the application tells by an exception are answered in one place, `ApplicationExceptionHandler` of Presentation
   (404 for an unknown instrument, 503 for an exchange that holds the requests or is unavailable); a controller catches only what
   means something of its own there.
