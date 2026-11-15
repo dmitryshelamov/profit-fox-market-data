@@ -20,7 +20,8 @@ internal sealed class LoadOpenInterestCommandHandler(
     IOpenInterestSeriesRepository series,
     IBybitOpenInterestClient bybit) : IRequestHandler<LoadOpenInterestCommand, LoadOpenInterestResult>
 {
-    // Bybit tells the point of a step a minute or two after the step starts; covered before that, the step would stay without it.
+    // Bybit tells the point of a step a minute or two after the step starts; covered before that, the step would stay without it. The
+    // same wait, for the same reason, as the Settling of LoadCandlesCommandHandler and the Publishing of LoadFundingPaymentsCommandHandler.
     private static readonly TimeSpan Publishing = TimeSpan.FromMinutes(3);
 
     /// <exception cref="InstrumentNotFoundException">The catalog has no instrument of the id.</exception>
@@ -38,8 +39,8 @@ internal sealed class LoadOpenInterestCommandHandler(
         var listing = (BybitListedInstrument)instrument.Listing;
 
         // The step that starts last among those told by now is inside the range, the one after it is not.
-        DateTimeOffset until = StartOfStep(request.RequestedAt - Publishing) + OpenInterestSeries.Step;
-        DateTimeOffset from = From(request.From, listing);
+        DateTimeOffset until = OpenInterestSeries.StartOfStep(request.RequestedAt - Publishing) + OpenInterestSeries.Step;
+        DateTimeOffset from = FirstStep(request.From, listing);
 
         if (listing.Category != BybitCategory.Linear || until <= from)
         {
@@ -91,7 +92,7 @@ internal sealed class LoadOpenInterestCommandHandler(
     {
         bool afterCoverage = stored is not null && from >= stored.CoveredUntil;
 
-        if (afterCoverage && await series.CountPointsAsync(instrumentId, from, until, cancellationToken) == (until - from) / OpenInterestSeries.Step)
+        if (afterCoverage && await series.CountPointsAsync(instrumentId, from, until, cancellationToken) == OpenInterestSeries.StepsIn(from, until))
         {
             return [];
         }
@@ -118,18 +119,13 @@ internal sealed class LoadOpenInterestCommandHandler(
         return stored;
     }
 
-    // Where the range starts: the first step at or after the asked time, and not before the step the contract was launched in.
-    private static DateTimeOffset From(DateTimeOffset asked, BybitListedInstrument listing)
+    // The first step of the range: the first one at or after the asked time, and not before the step the contract was launched in.
+    private static DateTimeOffset FirstStep(DateTimeOffset asked, BybitListedInstrument listing)
     {
-        DateTimeOffset start = StartOfStep(asked);
-        DateTimeOffset from = start < asked ? start + OpenInterestSeries.Step : start;
+        DateTimeOffset start = OpenInterestSeries.StartOfStep(asked);
+        DateTimeOffset first = start < asked ? start + OpenInterestSeries.Step : start;
 
-        return listing.LaunchTime is { } launchTime ? Later(from, StartOfStep(launchTime)) : from;
-    }
-
-    private static DateTimeOffset StartOfStep(DateTimeOffset time)
-    {
-        return new DateTimeOffset(time.UtcTicks - (time.UtcTicks % OpenInterestSeries.Step.Ticks), TimeSpan.Zero);
+        return listing.LaunchTime is { } launchTime ? Later(first, OpenInterestSeries.StartOfStep(launchTime)) : first;
     }
 
     private static DateTimeOffset Later(DateTimeOffset left, DateTimeOffset right)

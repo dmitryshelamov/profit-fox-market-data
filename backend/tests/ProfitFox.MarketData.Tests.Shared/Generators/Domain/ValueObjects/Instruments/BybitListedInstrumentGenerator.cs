@@ -13,7 +13,7 @@ public static class BybitListedInstrumentGenerator
 
     private static readonly DateTimeOffset LaunchTime = new DateTimeOffset(year: 2020, month: 3, day: 30, hour: 0, minute: 0, second: 0, TimeSpan.Zero);
 
-    public static BybitListedInstrument GenerateLinear(string baseAsset = "BTC", decimal tickSize = 0.1m)
+    public static BybitListedInstrument GenerateLinear(string baseAsset = "BTC", decimal tickSize = 0.1m, DateTimeOffset? launchTime = null)
     {
         return new BybitListedInstrument(
             BybitCategory.Linear,
@@ -23,7 +23,7 @@ public static class BybitListedInstrumentGenerator
             BybitInstrumentStatus.Trading,
             new InstrumentRules(tickSize, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
             BybitContractType.LinearPerpetual,
-            LaunchTime);
+            launchTime ?? LaunchTime);
     }
 
     /// <summary>

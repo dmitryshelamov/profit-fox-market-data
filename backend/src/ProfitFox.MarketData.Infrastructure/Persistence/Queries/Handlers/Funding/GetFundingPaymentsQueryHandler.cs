@@ -27,6 +27,7 @@ internal sealed class GetFundingPaymentsQueryHandler(
     /// <exception cref="InstrumentNotFoundException">The catalog has no instrument of the id.</exception>
     public async Task<FundingPaymentsInternal> Handle(GetFundingPaymentsQuery request, CancellationToken cancellationToken)
     {
+        // The coverage is read before the payments, for the reason GetOpenInterestQueryHandler gives.
         FundingPaymentSeries? stored = await series.GetAsync(request.InstrumentId, cancellationToken);
 
         // Only an instrument of the catalog has a series, so the catalog is asked only when there is none.

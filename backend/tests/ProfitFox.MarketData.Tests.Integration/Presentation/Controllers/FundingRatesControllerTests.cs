@@ -74,18 +74,18 @@ public class FundingRatesControllerTests
     [Test]
     public async Task A_window_that_holds_more_than_an_answer_gives_tells_where_to_continue_from()
     {
-        await StoreAsync([.. Enumerable.Range(start: 0, count: 1001).Select(minute => new FundingRatePoint(Linear.Id, Hour.AddMinutes(minute), rate: minute))]);
+        await StoreAsync([.. Enumerable.Range(start: 0, count: 1001).Select(step => new FundingRatePoint(Linear.Id, Hour.AddMinutes(5 * step), rate: step))]);
 
-        JsonElement first = await _client.GetFromJsonAsync<JsonElement>(Url(Linear.Id, Hour, Hour.AddDays(1)), Json);
+        JsonElement first = await _client.GetFromJsonAsync<JsonElement>(Url(Linear.Id, Hour, Hour.AddDays(4)), Json);
         FundingRatePointsInternal? rest = await _client.GetFromJsonAsync<FundingRatePointsInternal>(
-            Url(Linear.Id, first.GetProperty("continueFrom").GetDateTimeOffset(), Hour.AddDays(1)),
+            Url(Linear.Id, first.GetProperty("continueFrom").GetDateTimeOffset(), Hour.AddDays(4)),
             Json);
 
         Assert.Multiple(() =>
         {
             Assert.That(first.GetProperty("points").GetArrayLength(), Is.EqualTo(1000));
-            Assert.That(first.GetProperty("continueFrom").GetDateTimeOffset(), Is.EqualTo(Hour.AddMinutes(1000)));
-            Assert.That(rest!.Points, Is.EqualTo(new[] { new FundingRatePointInternal(Hour.AddMinutes(1000), 1000m) }));
+            Assert.That(first.GetProperty("continueFrom").GetDateTimeOffset(), Is.EqualTo(Hour.AddMinutes(5 * 1000)));
+            Assert.That(rest!.Points, Is.EqualTo(new[] { new FundingRatePointInternal(Hour.AddMinutes(5 * 1000), 1000m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -123,10 +123,10 @@ public class FundingRatesControllerTests
     [Test]
     public async Task The_stored_points_of_the_window_come_with_their_times_without_asking_the_exchange()
     {
-        // The minutes between the points were not collected; nothing is filled in for them.
+        // The steps between the points were not collected; nothing is filled in for them.
         await StoreAsync(
             new FundingRatePoint(Linear.Id, Hour, rate: -0.00012m),
-            new FundingRatePoint(Linear.Id, Hour.AddMinutes(7), rate: 0.00000331m),
+            new FundingRatePoint(Linear.Id, Hour.AddMinutes(35), rate: 0.00000331m),
             new FundingRatePoint(Linear.Id, Hour.AddHours(1), rate: 9m));
 
         HttpResponseMessage response = await _client.GetAsync(Url(Linear.Id, Hour, Hour.AddHours(1)));
@@ -138,7 +138,7 @@ public class FundingRatesControllerTests
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(
                 points!.Points,
-                Is.EqualTo(new[] { new FundingRatePointInternal(Hour, -0.00012m), new FundingRatePointInternal(Hour.AddMinutes(7), 0.00000331m) }));
+                Is.EqualTo(new[] { new FundingRatePointInternal(Hour, -0.00012m), new FundingRatePointInternal(Hour.AddMinutes(35), 0.00000331m) }));
             Assert.That(points.ContinueFrom, Is.Null);
 
             // The names of the contract and the value exactly as stored, not in the notation of a float.

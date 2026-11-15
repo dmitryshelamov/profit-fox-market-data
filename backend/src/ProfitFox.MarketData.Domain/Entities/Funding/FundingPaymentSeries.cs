@@ -9,7 +9,9 @@ namespace ProfitFox.MarketData.Domain.Entities.Funding;
 ///     before the instrument was listed, the hours between two payments) and is never asked for again. Storage writes
 ///     <see cref="NewPayments" /> with the coverage in one transaction, so the coverage never claims a time storage does not hold.
 ///     The coverage is one stretch of time. A loaded range that touches it widens it; a newer range apart from it takes its place, and the
-///     series is loaded back from there again, so no hole hides inside the coverage.
+///     series is loaded back from there again, so no hole hides inside the coverage. That is unlike an
+///     <see cref="OpenInterest.OpenInterestSeries" />: a page of payments is a number of them, the newest of a range, so after a long
+///     downtime the time next to the coverage cannot be asked for first.
 /// </summary>
 public sealed class FundingPaymentSeries : AggregateRoot
 {

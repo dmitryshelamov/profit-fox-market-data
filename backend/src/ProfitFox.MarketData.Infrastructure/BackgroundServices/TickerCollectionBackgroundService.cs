@@ -31,10 +31,10 @@ internal sealed class TickerCollectionBackgroundService(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            // The boundary is counted from the clock every time, so the snapshots do not drift and a boundary that passed while a
-            // snapshot was taken is skipped, not caught up with.
+            // The boundary is where the step after the one that goes on starts. It is counted from the clock every time, so the
+            // snapshots do not drift and a boundary that passed while a snapshot was taken is skipped, not caught up with.
             DateTimeOffset now = time.GetUtcNow();
-            DateTimeOffset boundary = NextBoundary(now);
+            DateTimeOffset boundary = OpenInterestSeries.StartOfStep(now) + OpenInterestSeries.Step;
 
             // A timer may fire a moment before its boundary by the clock: the boundary just served is not served again.
             if (boundary <= served)
@@ -52,12 +52,6 @@ internal sealed class TickerCollectionBackgroundService(
                 await CollectAsync(boundary, TimeSpan.FromSeconds(collection.DeadlineSeconds), stoppingToken);
             }
         }
-    }
-
-    // Where the step after the one that goes on starts.
-    private static DateTimeOffset NextBoundary(DateTimeOffset now)
-    {
-        return new DateTimeOffset(now.UtcTicks - (now.UtcTicks % OpenInterestSeries.Step.Ticks), TimeSpan.Zero) + OpenInterestSeries.Step;
     }
 
     // The snapshot of one boundary, in a scope of its own. Whatever keeps it from being saved in time is logged and skips the step; an

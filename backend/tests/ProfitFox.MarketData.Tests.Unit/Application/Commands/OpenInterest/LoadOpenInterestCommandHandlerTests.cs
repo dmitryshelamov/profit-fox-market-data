@@ -5,7 +5,6 @@ using ProfitFox.MarketData.Application.Commands.OpenInterest.LoadOpenInterest;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.OpenInterest;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
-using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Entities.OpenInterest;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
@@ -88,16 +87,7 @@ public class LoadOpenInterestCommandHandlerTests
     public async Task A_contract_is_not_asked_for_the_time_before_it_was_launched()
     {
         // Launched twelve minutes ago, inside the step of 11:55: the range starts at that step, not a year back.
-        Instrument young = InstrumentGenerator.Generate(
-            new BybitListedInstrument(
-                BybitCategory.Linear,
-                "NEWUSDT",
-                "NEW",
-                "USDT",
-                BybitInstrumentStatus.Trading,
-                BybitListedInstrumentGenerator.GenerateLinear().Rules,
-                BybitContractType.LinearPerpetual,
-                RequestedAt.AddMinutes(-12)));
+        Instrument young = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("NEW", launchTime: RequestedAt.AddMinutes(-12)));
         _instruments.GetAsync(young.Id, Arg.Any<CancellationToken>()).Returns(young);
         BybitHas(Until.AddMinutes(-15), Until);
 
@@ -160,6 +150,22 @@ public class LoadOpenInterestCommandHandlerTests
             Assert.That(result, Is.EqualTo(LoadOpenInterestResult.NothingLeft));
             Assert.That(_saved!.CoveredUntil, Is.EqualTo(Until));
             Assert.That(_saved.NewPoints.Select(point => point.Time), Is.EqualTo(told.Select(point => point.Time)));
+        });
+    }
+
+    [Test]
+    public async Task A_request_told_in_another_time_zone_asks_for_the_same_page()
+    {
+        // The same moments, told at +03:00: the steps are counted in UTC.
+        var moscow = TimeSpan.FromHours(3);
+        BybitHas(Until - Page, Until);
+
+        await Load(from: From.ToOffset(moscow), requestedAt: RequestedAt.ToOffset(moscow));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_saved!.CoveredFrom, Is.EqualTo(Until - Page));
+            Assert.That(_saved.CoveredUntil, Is.EqualTo(Until));
         });
     }
 

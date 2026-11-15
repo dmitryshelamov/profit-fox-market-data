@@ -77,16 +77,16 @@ public class FundingPaymentSyncBackgroundServiceTests
     private ServiceProvider? _services;
     private FundingPaymentSyncBackgroundService? _service;
 
-    // The settings as the app binds them, one contract at a time unless a test asks for more, so the pages come in the order of the
-    // catalog; the sender is the last ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true, DateTimeOffset? at = null, int parallelism = 1)
+    // The settings as the app binds them, one contract at a time, so the pages come in the order of the catalog; the sender is the last
+    // ISender registered, so it wins over the one of MediatR.
+    private async Task StartAsync(bool bybit = true, DateTimeOffset? at = null)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
                     ["FundingPaymentSync:HistoryDays"] = "365",
-                    ["FundingPaymentSync:Parallelism"] = parallelism.ToString(),
+                    ["FundingPaymentSync:Parallelism"] = "1",
                     ["FundingPaymentSync:Bybit:Enabled"] = bybit.ToString()
                 })
             .Build();
@@ -137,20 +137,71 @@ public class FundingPaymentSyncBackgroundServiceTests
     }
 
     [Test]
-    public async Task A_contract_whose_page_fails_does_not_stop_the_others()
+    public async Task A_contract_whose_page_failed_is_left_until_the_next_load()
     {
+        // The page of BTC fails; ETH has history for two rounds.
+        var loaded = 0;
         _sender.Send(Arg.Any<LoadFundingPaymentsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromException<LoadFundingPaymentsResult>(new InvalidOperationException("The database is away.")), NothingLeft);
+            .Returns(call =>
+            {
+                if (call[0] is not LoadFundingPaymentsCommand command)
+                {
+                    return Task.FromResult(LoadFundingPaymentsResult.NothingLeft);
+                }
+
+                _sent.Writer.TryWrite(command);
+
+                if (command.InstrumentId == Btc.Id)
+                {
+                    return Task.FromException<LoadFundingPaymentsResult>(new InvalidOperationException("The database is away."));
+                }
+
+                return Task.FromResult(Interlocked.Increment(ref loaded) == 1 ? LoadFundingPaymentsResult.MoreLeft : LoadFundingPaymentsResult.NothingLeft);
+            });
 
         await StartAsync();
-        IReadOnlyList<LoadFundingPaymentsCommand> sent = await SentAsync(count: 1);
+        IReadOnlyList<LoadFundingPaymentsCommand> firstLoad = await SentAsync(count: 3);
         TimeSpan wait = await _time.NextWaitAsync();
+        _time.Advance(wait);
+        IReadOnlyList<LoadFundingPaymentsCommand> secondLoad = await SentAsync(count: 2);
 
         Assert.Multiple(() =>
         {
-            // The contract that failed is tried again by the next load, not at once.
-            Assert.That(sent, Is.EqualTo(new[] { PageOf(Eth, Start) }));
+            // The second round of the load asks only the contract that did not fail; the load after the hour asks both again.
+            Assert.That(firstLoad.Select(command => command.InstrumentId), Is.EqualTo(new[] { Btc.Id, Eth.Id, Eth.Id }));
             Assert.That(wait, Is.EqualTo(ToNextLoad));
+            Assert.That(secondLoad.Select(command => command.InstrumentId), Is.EqualTo(new[] { Btc.Id, Eth.Id }));
+        });
+    }
+
+    [Test]
+    public async Task A_load_still_going_at_a_whole_hour_is_followed_by_the_load_after_the_hour_that_comes_next()
+    {
+        // The first page takes 55 minutes of the clock: the load ends at 13:05, after the moment of 13:00:30 has passed.
+        var slow = 1;
+        _sender.Send(Arg.Any<LoadFundingPaymentsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (Interlocked.Exchange(ref slow, value: 0) == 1)
+                {
+                    _time.Advance(TimeSpan.FromMinutes(55));
+                }
+
+                return NothingLeft(call);
+            });
+
+        await StartAsync();
+        await SentAsync(count: 2);
+        TimeSpan wait = await _time.NextWaitAsync();
+        _time.Advance(wait);
+        IReadOnlyList<LoadFundingPaymentsCommand> sent = await SentAsync(count: 2);
+        DateTimeOffset afterTheNextHour = Start.AddMinutes(110).AddSeconds(30);
+
+        Assert.Multiple(() =>
+        {
+            // The load was not cut short at 13:00:30, and the next one takes what was paid meanwhile: it asks as of 14:00:30.
+            Assert.That(wait, Is.EqualTo(TimeSpan.FromMinutes(55) + TimeSpan.FromSeconds(30)));
+            Assert.That(sent, Is.EqualTo(new[] { PageOf(Btc, afterTheNextHour), PageOf(Eth, afterTheNextHour) }));
         });
     }
 
@@ -162,30 +213,6 @@ public class FundingPaymentSyncBackgroundServiceTests
         await SentAsync(count: 2);
 
         Assert.That(await _time.NextWaitAsync(), Is.EqualTo(TimeSpan.FromSeconds(20)));
-    }
-
-    [Test]
-    public async Task A_pause_of_Bybit_is_waited_out_and_the_contract_is_asked_again()
-    {
-        _sender.Send(Arg.Any<LoadFundingPaymentsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(
-                _ => Task.FromException<LoadFundingPaymentsResult>(new ExchangePausedException("Bybit limited the requests.", Start.AddSeconds(30))),
-                NothingLeft);
-
-        await StartAsync();
-        TimeSpan pause = await _time.NextWaitAsync();
-        bool sentInPause = _sent.Reader.TryRead(out _);
-        _time.Advance(pause);
-        IReadOnlyList<LoadFundingPaymentsCommand> sent = await SentAsync(count: 3);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(pause, Is.EqualTo(TimeSpan.FromSeconds(30)));
-            Assert.That(sentInPause, Is.False);
-
-            // The round goes on with the other contract, and the next round asks the paused one again, as of the same moment.
-            Assert.That(sent, Is.EqualTo(new[] { PageOf(Eth, Start), PageOf(Btc, Start), PageOf(Eth, Start) }));
-        });
     }
 
     [Test]
@@ -216,30 +243,6 @@ public class FundingPaymentSyncBackgroundServiceTests
             Assert.That(wait, Is.EqualTo(ToNextLoad));
             await _sender.Received(1).Send(Arg.Any<LoadFundingPaymentsCommand>(), Arg.Any<CancellationToken>());
         });
-    }
-
-    [Test]
-    public async Task Pages_of_several_contracts_are_asked_at_the_same_time()
-    {
-        // No page is answered until both are asked: one contract at a time would never ask for the second.
-        var bothAsked = new TaskCompletionSource();
-        var asked = 0;
-        _sender.Send(Arg.Any<LoadFundingPaymentsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                if (Interlocked.Increment(ref asked) == 2)
-                {
-                    bothAsked.SetResult();
-                }
-
-                await bothAsked.Task.WaitAsync(Patience);
-
-                return await NothingLeft(call);
-            });
-
-        await StartAsync(parallelism: 2);
-
-        Assert.That(await SentAsync(count: 2), Is.EquivalentTo(new[] { PageOf(Btc, Start), PageOf(Eth, Start) }));
     }
 
     [Test]

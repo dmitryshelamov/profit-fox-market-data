@@ -25,8 +25,6 @@ public class LoadFundingPaymentsCommandHandlerTests
         _bybit = Substitute.For<IBybitFundingPaymentsClient>();
         _saved = null;
 
-        // A page of three payments, so a test tells a full page with a few of them.
-        _bybit.PageSize.Returns(3);
         _instruments.GetAsync(Btc.Id, Arg.Any<CancellationToken>()).Returns(Btc);
         _series.SaveAsync(Arg.Do<FundingPaymentSeries>(series => _saved = series), Arg.Any<CancellationToken>());
 
@@ -66,9 +64,11 @@ public class LoadFundingPaymentsCommandHandlerTests
         _series.GetAsync(Btc.Id, Arg.Any<CancellationToken>()).Returns(FundingPaymentSeries.Restore(Btc.Id, coveredFrom, coveredUntil));
     }
 
-    private void BybitPaid(DateTimeOffset from, DateTimeOffset until, params FundingPayment[] payments)
+    // What Bybit gives of the range: every payment of it, or with full its newest ones, older ones perhaps left.
+    private void BybitPaid(DateTimeOffset from, DateTimeOffset until, bool full, params FundingPayment[] payments)
     {
-        _bybit.GetAsync(Arg.Any<BybitListedInstrument>(), from, until, Arg.Any<CancellationToken>()).Returns(payments);
+        _bybit.GetAsync(Arg.Any<BybitListedInstrument>(), from, until, Arg.Any<CancellationToken>())
+            .Returns(new BybitFundingPaymentsPage(payments, full));
     }
 
     private Task BybitWasNotAsked()
@@ -80,7 +80,7 @@ public class LoadFundingPaymentsCommandHandlerTests
     public async Task A_contract_loaded_for_the_first_time_asks_for_the_whole_range_and_covers_it_when_the_page_is_not_full()
     {
         FundingPayment[] payments = [PaidAt(Hour.AddHours(-8)), PaidAt(Hour)];
-        BybitPaid(From, Until, payments);
+        BybitPaid(From, Until, full: false, payments);
 
         LoadFundingPaymentsResult result = await Load();
 
@@ -111,10 +111,23 @@ public class LoadFundingPaymentsCommandHandlerTests
     }
 
     [Test]
+    public void A_full_page_with_no_payment_of_the_range_is_refused_and_nothing_is_saved()
+    {
+        // Bybit cut the page and what it gave is of another time: nothing tells how far the range is whole.
+        BybitPaid(From, Until, full: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(() => Load(), Throws.InvalidOperationException);
+            Assert.That(_saved, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task A_full_page_covers_only_the_time_from_its_oldest_payment_and_leaves_more_to_load()
     {
         FundingPayment[] payments = [PaidAt(Hour.AddHours(-16)), PaidAt(Hour.AddHours(-8)), PaidAt(Hour)];
-        BybitPaid(From, Until, payments);
+        BybitPaid(From, Until, full: true, payments);
 
         LoadFundingPaymentsResult result = await Load();
 
@@ -128,11 +141,30 @@ public class LoadFundingPaymentsCommandHandlerTests
     }
 
     [Test]
+    public async Task A_request_told_in_another_time_zone_asks_for_the_same_range()
+    {
+        // The same moments, told at +03:00.
+        var moscow = TimeSpan.FromHours(3);
+        BybitPaid(From, Until, full: false, PaidAt(Hour));
+
+        LoadFundingPaymentsResult result = await _handler.Handle(
+            new LoadFundingPaymentsCommand(Btc.Id, From.ToOffset(moscow), RequestedAt.ToOffset(moscow)),
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.EqualTo(LoadFundingPaymentsResult.NothingLeft));
+            Assert.That(_saved!.CoveredFrom, Is.EqualTo(From));
+            Assert.That(_saved.CoveredUntil, Is.EqualTo(Until));
+        });
+    }
+
+    [Test]
     public async Task A_series_covered_up_to_now_loads_the_history_before_it_the_newest_page_first()
     {
         Stored(Hour.AddDays(-30), Until);
         FundingPayment[] payments = [PaidAt(Hour.AddDays(-32)), PaidAt(Hour.AddDays(-31)), PaidAt(Hour.AddDays(-30).AddHours(-8))];
-        BybitPaid(From, Hour.AddDays(-30), payments);
+        BybitPaid(From, Hour.AddDays(-30), full: true, payments);
 
         LoadFundingPaymentsResult result = await Load();
 
@@ -210,7 +242,7 @@ public class LoadFundingPaymentsCommandHandlerTests
     {
         Stored(From, Hour.AddDays(-10));
         FundingPayment[] payments = [PaidAt(Hour.AddHours(-16)), PaidAt(Hour.AddHours(-8)), PaidAt(Hour)];
-        BybitPaid(Hour.AddDays(-10), Until, payments);
+        BybitPaid(Hour.AddDays(-10), Until, full: true, payments);
 
         LoadFundingPaymentsResult result = await Load();
 
@@ -227,7 +259,7 @@ public class LoadFundingPaymentsCommandHandlerTests
     public async Task The_last_page_of_the_history_covers_the_series_down_to_the_start_of_the_range()
     {
         Stored(Hour.AddDays(-30), Until);
-        BybitPaid(From, Hour.AddDays(-30), PaidAt(Hour.AddDays(-31)));
+        BybitPaid(From, Hour.AddDays(-30), full: false, PaidAt(Hour.AddDays(-31)));
 
         LoadFundingPaymentsResult result = await Load();
 
@@ -243,7 +275,7 @@ public class LoadFundingPaymentsCommandHandlerTests
     public async Task What_was_paid_since_the_coverage_ended_is_loaded_before_the_history()
     {
         Stored(Hour.AddDays(-30), Hour.AddHours(-1).AddSeconds(15));
-        BybitPaid(Hour.AddHours(-1).AddSeconds(15), Until, PaidAt(Hour));
+        BybitPaid(Hour.AddHours(-1).AddSeconds(15), Until, full: false, PaidAt(Hour));
 
         LoadFundingPaymentsResult result = await Load();
 

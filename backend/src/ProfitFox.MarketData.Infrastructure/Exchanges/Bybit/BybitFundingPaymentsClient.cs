@@ -15,9 +15,9 @@ namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 internal sealed class BybitFundingPaymentsClient(IBybitRestClient bybit, BybitRequestGate gate) : IBybitFundingPaymentsClient
 {
     // The largest page of funding payments Bybit gives.
-    public int PageSize => 200;
+    private const int PageSize = 200;
 
-    public async Task<IReadOnlyList<FundingPayment>> GetAsync(
+    public async Task<BybitFundingPaymentsPage> GetAsync(
         BybitListedInstrument listing,
         DateTimeOffset from,
         DateTimeOffset until,
@@ -36,13 +36,15 @@ internal sealed class BybitFundingPaymentsClient(IBybitRestClient bybit, BybitRe
                 $"Bybit gave no funding payments of {listing.Symbol}"),
             cancellationToken);
 
-        // Bybit gives the newest first; a payment outside the range is left out.
-        return
-        [
-            .. response.List
-                .Select(payment => new FundingPayment(new DateTimeOffset(DateTime.SpecifyKind(payment.Timestamp, DateTimeKind.Utc)), payment.FundingRate))
-                .Where(payment => payment.Time >= from && payment.Time < until)
-                .OrderBy(payment => payment.Time)
-        ];
+        // Bybit gives the newest first; a payment outside the range is left out. The page is full by what Bybit gave, not by what is
+        // left of it: a payment dropped here must not make a cut page look whole.
+        return new BybitFundingPaymentsPage(
+            [
+                .. response.List
+                    .Select(payment => new FundingPayment(new DateTimeOffset(DateTime.SpecifyKind(payment.Timestamp, DateTimeKind.Utc)), payment.FundingRate))
+                    .Where(payment => payment.Time >= from && payment.Time < until)
+                    .OrderBy(payment => payment.Time)
+            ],
+            Full: response.List.Count() >= PageSize);
     }
 }

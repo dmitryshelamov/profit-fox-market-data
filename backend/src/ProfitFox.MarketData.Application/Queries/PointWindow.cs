@@ -1,8 +1,8 @@
 namespace ProfitFox.MarketData.Application.Queries;
 
 /// <summary>
-///     What a read of a series of points asks for, the open interest or the funding rates alike: the stored points in
-///     <c>[From, To)</c>, at most <see cref="MaxPoints" /> of them an answer.
+///     What a read of a series of points asks for, the open interest, the funding rates and the funding payments alike: the stored
+///     points in <c>[From, To)</c>, at most <see cref="MaxPoints" /> of them an answer.
 /// </summary>
 public sealed record PointWindow
 {

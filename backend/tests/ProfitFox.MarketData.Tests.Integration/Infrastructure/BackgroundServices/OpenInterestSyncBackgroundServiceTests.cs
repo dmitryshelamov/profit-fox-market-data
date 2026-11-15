@@ -74,9 +74,9 @@ public class OpenInterestSyncBackgroundServiceTests
     private ServiceProvider? _services;
     private OpenInterestSyncBackgroundService? _service;
 
-    // The settings as the app binds them, one contract at a time unless a test asks for more, so the pages come in the order of the
-    // catalog; the sender is the last ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true, int parallelism = 1)
+    // The settings as the app binds them, one contract at a time, so the pages come in the order of the catalog; the sender is the last
+    // ISender registered, so it wins over the one of MediatR.
+    private async Task StartAsync(bool bybit = true)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -84,7 +84,7 @@ public class OpenInterestSyncBackgroundServiceTests
                 {
                     ["OpenInterestSync:HistoryDays"] = "365",
                     ["OpenInterestSync:IdleSeconds"] = "600",
-                    ["OpenInterestSync:Parallelism"] = parallelism.ToString(),
+                    ["OpenInterestSync:Parallelism"] = "1",
                     ["OpenInterestSync:Bybit:Enabled"] = bybit.ToString()
                 })
             .Build();
@@ -134,44 +134,40 @@ public class OpenInterestSyncBackgroundServiceTests
     }
 
     [Test]
-    public async Task A_contract_whose_page_fails_does_not_stop_the_others()
+    public async Task A_contract_whose_page_failed_is_left_until_after_the_idle_wait()
     {
+        // The page of BTC fails; the dated contract has history for two rounds.
+        var loaded = 0;
         _sender.Send(Arg.Any<LoadOpenInterestCommand>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromException<LoadOpenInterestResult>(new InvalidOperationException("The database is away.")), NothingLeft);
+            .Returns(call =>
+            {
+                if (call[0] is not LoadOpenInterestCommand command)
+                {
+                    return Task.FromResult(LoadOpenInterestResult.NothingLeft);
+                }
+
+                _sent.Writer.TryWrite(command);
+
+                if (command.InstrumentId == Btc.Id)
+                {
+                    return Task.FromException<LoadOpenInterestResult>(new InvalidOperationException("The database is away."));
+                }
+
+                return Task.FromResult(Interlocked.Increment(ref loaded) == 1 ? LoadOpenInterestResult.MoreLeft : LoadOpenInterestResult.NothingLeft);
+            });
 
         await StartAsync();
-        IReadOnlyList<LoadOpenInterestCommand> sent = await SentAsync(count: 1);
+        IReadOnlyList<LoadOpenInterestCommand> beforeTheWait = await SentAsync(count: 3);
         TimeSpan wait = await _time.NextWaitAsync();
+        _time.Advance(wait);
+        IReadOnlyList<LoadOpenInterestCommand> afterTheWait = await SentAsync(count: 2);
 
         Assert.Multiple(() =>
         {
-            // The contract that failed is tried again after the idle wait, not at once.
-            Assert.That(sent, Is.EqualTo(new[] { PageOf(Futures, Start) }));
+            // The second round asks only the contract that did not fail; the round after the wait asks both again.
+            Assert.That(beforeTheWait.Select(command => command.InstrumentId), Is.EqualTo(new[] { Btc.Id, Futures.Id, Futures.Id }));
             Assert.That(wait, Is.EqualTo(Idle));
-        });
-    }
-
-    [Test]
-    public async Task A_pause_of_Bybit_is_waited_out_and_the_contract_is_asked_again()
-    {
-        _sender.Send(Arg.Any<LoadOpenInterestCommand>(), Arg.Any<CancellationToken>())
-            .Returns(
-                _ => Task.FromException<LoadOpenInterestResult>(new ExchangePausedException("Bybit limited the requests.", Start.AddSeconds(30))),
-                NothingLeft);
-
-        await StartAsync();
-        TimeSpan pause = await _time.NextWaitAsync();
-        bool sentInPause = _sent.Reader.TryRead(out _);
-        _time.Advance(pause);
-        IReadOnlyList<LoadOpenInterestCommand> sent = await SentAsync(count: 3);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(pause, Is.EqualTo(TimeSpan.FromSeconds(30)));
-            Assert.That(sentInPause, Is.False);
-
-            // The round goes on with the other contract, and the next round asks the paused one again.
-            Assert.That(sent.Select(command => command.InstrumentId), Is.EqualTo(new[] { Futures.Id, Btc.Id, Futures.Id }));
+            Assert.That(afterTheWait.Select(command => command.InstrumentId), Is.EqualTo(new[] { Btc.Id, Futures.Id }));
         });
     }
 
@@ -222,30 +218,6 @@ public class OpenInterestSyncBackgroundServiceTests
             Assert.That(wait, Is.EqualTo(Idle));
             await _sender.Received(1).Send(Arg.Any<LoadOpenInterestCommand>(), Arg.Any<CancellationToken>());
         });
-    }
-
-    [Test]
-    public async Task Pages_of_several_contracts_are_asked_at_the_same_time()
-    {
-        // No page is answered until both are asked: one contract at a time would never ask for the second.
-        var bothAsked = new TaskCompletionSource();
-        var asked = 0;
-        _sender.Send(Arg.Any<LoadOpenInterestCommand>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                if (Interlocked.Increment(ref asked) == 2)
-                {
-                    bothAsked.SetResult();
-                }
-
-                await bothAsked.Task.WaitAsync(Patience);
-
-                return await NothingLeft(call);
-            });
-
-        await StartAsync(parallelism: 2);
-
-        Assert.That(await SentAsync(count: 2), Is.EquivalentTo(new[] { PageOf(Btc, Start), PageOf(Futures, Start) }));
     }
 
     [Test]

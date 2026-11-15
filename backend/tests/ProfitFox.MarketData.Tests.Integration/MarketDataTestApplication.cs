@@ -69,7 +69,7 @@ internal sealed class MarketDataTestApplication(string tinvestToken = "test-toke
             services.Remove(services.Single(service => service.ImplementationType == typeof(CandleStreamBackgroundService)));
             services.Remove(services.Single(service => service.ImplementationType == typeof(BuyVolumeSyncBackgroundService)));
 
-            // The collection of tickers would ask Bybit every minute of real time.
+            // The collection of tickers would ask Bybit every five minutes of real time.
             services.Remove(services.Single(service => service.ImplementationType == typeof(TickerCollectionBackgroundService)));
 
             // The loading of funding payments would ask Bybit for every contract of the catalog once the app starts.

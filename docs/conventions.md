@@ -38,6 +38,8 @@ and this file is silent, ask which to follow.
   never changes state or raises an event.
 - A value object is a `sealed record` with get-only properties; its constructor checks what can really come wrong from the
   exchange (blank strings, a contract type of another category), not enum values out of range or nulls the compiler already rules out.
+- A value object saved apart from a series carries its instrument (`OpenInterestPoint`, `FundingRatePoint`); one that only a series
+  holds does not (`Candle`, `FundingPayment`).
 - An exchange gets its own types (`BybitListedInstrument`, `BybitCategory`, `BybitInstrumentStatus`); a common base appears only
   when a second exchange brings a second type to extract it from. What the exchanges share is `ListedInstrument.Exchange`: code
   that must tell the exchanges apart reads it and does not test the type of a listing, except where it maps a listing to its own
@@ -56,14 +58,17 @@ and this file is silent, ask which to follow.
   hosted service, not asked by a handler: a subscription outlives any request. What an exchange gives for several areas of the
   domain at once has an area of its own in Application, named after it: `Tickers` (`Ports/Tickers`, `Commands/Tickers`), as one ticker
   of Bybit tells both the open interest and the funding rate. What a port gives that the domain does not keep is a record next to the
-  port (`BybitLinearTicker`, `LiveCandle`).
+  port (`BybitLinearTicker`, `LiveCandle`); so is what an adapter cannot give as the domain keeps it (`BybitOpenInterestPoint`: the
+  point of the domain carries its instrument, which the adapter does not know) or gives with more than the domain keeps
+  (`BybitFundingPaymentsPage`: the payments and whether the page was full).
 - A query whose answer is too large to hold is an `IStreamRequest` (`GetClosedCandlesQuery`), read with `ISender.CreateStream`;
   its handler reads storage row by row.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
   `InstrumentNotFoundException`); a failure only an adapter sees stays in Infrastructure.
 - No request runs in a transaction of the MediatR pipeline: a handler asks an exchange, which no open transaction should wait
   for. A handler saves through one call of a repository, and the repository makes that call whole in a transaction of its own
-  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it.
+  (`PostgresTransactionExecutor`). A handler that must save through two calls together asks the executor for it. Series that are
+  read apart are saved by calls of their own, each whole, with no executor (`CollectBybitTickersCommandHandler`).
 - A command gives a named result (`LoadCandlesResult.MoreLeft`), not a bare `bool`.
 - `Queries/<Area>` holds a query with what it asks by (`CandleWindow`, `CandleInterval`); a rule of the input is checked there, not
   in the controller. What the queries of several areas ask by the same way lives in `Queries` itself (`PointWindow`). A query
@@ -86,7 +91,8 @@ and this file is silent, ask which to follow.
   `appsettings.json`), bound with `AddOptions().Bind().Validate().ValidateOnStart()` and read through `IOptionsMonitor` before every
   run, so a saved change applies from the next run without a restart; a broken change is logged and the last valid settings stay
   (`CurrentOrLastValid`). Each request goes in a scope of its own through `ISender` (`scopes.SendAsync`); a failure is logged and
-  the service goes on. `BackgroundServicesRegistrar` registers the services with the checks of their sections; an exchange is
+  the service goes on. A service that loads history page by page for many instruments goes in rounds of `Loading`, which holds
+  what such loadings share: the parallelism, the pause of an exchange, an exchange that is unavailable, an instrument that failed. `BackgroundServicesRegistrar` registers the services with the checks of their sections; an exchange is
   switched by `ExchangeSyncSettings`. `MarketDataTestApplication` leaves the services out.
 
 ## Presentation (`ProfitFox.MarketData.Presentation`)

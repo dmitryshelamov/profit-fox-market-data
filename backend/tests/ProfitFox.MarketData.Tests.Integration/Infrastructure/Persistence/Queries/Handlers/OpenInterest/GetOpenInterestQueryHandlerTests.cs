@@ -54,18 +54,18 @@ public class GetOpenInterestQueryHandlerTests
         return _scope.ServiceProvider.GetRequiredService<IOpenInterestRepository>().SaveAsync(points, CancellationToken.None);
     }
 
-    // A point a minute of the instrument from the hour on, each with the number of its minute.
-    private Task StoreMinutesAsync(int count)
+    // A point a step of the instrument from the hour on, five minutes apart, each with the number of its step.
+    private Task StoreStepsAsync(int count)
     {
-        return StoreAsync([.. Enumerable.Range(start: 0, count).Select(minute => new OpenInterestPoint(Btc.Id, Hour.AddMinutes(minute), value: minute))]);
+        return StoreAsync([.. Enumerable.Range(start: 0, count).Select(step => new OpenInterestPoint(Btc.Id, Hour.AddMinutes(5 * step), value: step))]);
     }
 
     [Test]
     public async Task A_window_of_1000_points_gives_them_all_and_nothing_to_continue_from()
     {
-        await StoreMinutesAsync(count: 1000);
+        await StoreStepsAsync(count: 1000);
 
-        OpenInterestPointsInternal points = await ReadAsync(Btc.Id, Hour, Hour.AddDays(1));
+        OpenInterestPointsInternal points = await ReadAsync(Btc.Id, Hour, Hour.AddDays(4));
 
         Assert.Multiple(() =>
         {
@@ -77,18 +77,18 @@ public class GetOpenInterestQueryHandlerTests
     [Test]
     public async Task A_window_of_more_than_1000_points_is_cut_and_tells_where_the_rest_starts()
     {
-        await StoreMinutesAsync(count: 1001);
+        await StoreStepsAsync(count: 1001);
 
-        OpenInterestPointsInternal first = await ReadAsync(Btc.Id, Hour, Hour.AddDays(1));
-        OpenInterestPointsInternal rest = await ReadAsync(Btc.Id, first.ContinueFrom!.Value, Hour.AddDays(1));
+        OpenInterestPointsInternal first = await ReadAsync(Btc.Id, Hour, Hour.AddDays(4));
+        OpenInterestPointsInternal rest = await ReadAsync(Btc.Id, first.ContinueFrom!.Value, Hour.AddDays(4));
 
         Assert.Multiple(() =>
         {
             Assert.That(first.Points, Has.Count.EqualTo(1000));
             Assert.That(first.Points[0], Is.EqualTo(new OpenInterestPointInternal(Hour, 0m)));
-            Assert.That(first.Points[^1], Is.EqualTo(new OpenInterestPointInternal(Hour.AddMinutes(999), 999m)));
-            Assert.That(first.ContinueFrom, Is.EqualTo(Hour.AddMinutes(1000)));
-            Assert.That(rest.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour.AddMinutes(1000), 1000m) }));
+            Assert.That(first.Points[^1], Is.EqualTo(new OpenInterestPointInternal(Hour.AddMinutes(5 * 999), 999m)));
+            Assert.That(first.ContinueFrom, Is.EqualTo(Hour.AddMinutes(5 * 1000)));
+            Assert.That(rest.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour.AddMinutes(5 * 1000), 1000m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -132,17 +132,17 @@ public class GetOpenInterestQueryHandlerTests
     [Test]
     public async Task The_points_of_the_window_come_oldest_first_as_they_are_stored()
     {
-        // A point before the window, one at its end and one of another instrument are not of it; the minutes 10:02 to 10:04 were not
+        // A point before the window, one at its end and one of another instrument are not of it; the steps between them were not
         // collected, and nothing stands in for them.
         await StoreAsync(
-            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(5), value: 0.00000331m),
-            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(-1), value: 1m),
+            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(25), value: 0.00000331m),
+            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(-5), value: 1m),
             new OpenInterestPoint(Btc.Id, Hour, value: 2m),
-            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(1), value: 3m),
-            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(10), value: 4m),
-            new OpenInterestPoint(Eth.Id, Hour.AddMinutes(1), value: 5m));
+            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(5), value: 3m),
+            new OpenInterestPoint(Btc.Id, Hour.AddMinutes(50), value: 4m),
+            new OpenInterestPoint(Eth.Id, Hour.AddMinutes(5), value: 5m));
 
-        OpenInterestPointsInternal points = await ReadAsync(Btc.Id, Hour, Hour.AddMinutes(10));
+        OpenInterestPointsInternal points = await ReadAsync(Btc.Id, Hour, Hour.AddMinutes(50));
 
         Assert.Multiple(() =>
         {
@@ -152,8 +152,8 @@ public class GetOpenInterestQueryHandlerTests
                     new[]
                     {
                         new OpenInterestPointInternal(Hour, 2m),
-                        new OpenInterestPointInternal(Hour.AddMinutes(1), 3m),
-                        new OpenInterestPointInternal(Hour.AddMinutes(5), 0.00000331m)
+                        new OpenInterestPointInternal(Hour.AddMinutes(5), 3m),
+                        new OpenInterestPointInternal(Hour.AddMinutes(25), 0.00000331m)
                     }));
             Assert.That(points.ContinueFrom, Is.Null);
         });

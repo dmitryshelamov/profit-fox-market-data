@@ -11,8 +11,8 @@ using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     What every background service does the same way: it sends each request in a scope of its own, reads the catalog and reads its
-///     settings again before each run.
+///     What every background service does the same way: it sends each request in a scope of its own, reads the catalog, waits on the
+///     clock of the app and reads its settings again before each run.
 /// </summary>
 internal static class BackgroundServiceExtensions
 {
@@ -56,6 +56,19 @@ internal static class BackgroundServiceExtensions
             logger.LogError(exception, "Reading the instruments of {Exchange} failed.", exchange);
 
             return [];
+        }
+    }
+
+    /// <summary>
+    ///     Waits on the clock of the app until <paramref name="until" />; not at all when that moment has passed.
+    /// </summary>
+    public static async Task DelayUntilAsync(this TimeProvider time, DateTimeOffset until, CancellationToken cancellationToken)
+    {
+        TimeSpan wait = until - time.GetUtcNow();
+
+        if (wait > TimeSpan.Zero)
+        {
+            await Task.Delay(wait, time, cancellationToken);
         }
     }
 

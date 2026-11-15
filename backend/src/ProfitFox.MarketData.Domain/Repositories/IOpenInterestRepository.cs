@@ -8,7 +8,9 @@ namespace ProfitFox.MarketData.Domain.Repositories;
 public interface IOpenInterestRepository
 {
     /// <summary>
-    ///     Writes the points, all of them together or none. A stored point of the same instrument and time takes the new value.
+    ///     Writes the points, all of them together or none. A stored point of the same instrument and time takes the new value, one
+    ///     loaded from the history too: the collected value is the exact one. No coverage is touched: the loading covers these steps
+    ///     later, counting them (<see cref="IOpenInterestSeriesRepository.CountPointsAsync" />).
     /// </summary>
     Task SaveAsync(IReadOnlyCollection<OpenInterestPoint> points, CancellationToken cancellationToken);
 }

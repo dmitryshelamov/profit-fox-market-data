@@ -126,4 +126,27 @@ public class OpenInterestSeriesTests
             Assert.That(OpenInterestSeries.StartsStep(Noon.ToOffset(TimeSpan.FromHours(7))), Is.True);
         });
     }
+
+    [Test]
+    public void The_start_of_a_step_is_the_five_minute_boundary_at_or_before_the_time_in_UTC()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenInterestSeries.StartOfStep(Noon), Is.EqualTo(Noon));
+            Assert.That(OpenInterestSeries.StartOfStep(Noon.AddMinutes(4).AddSeconds(59)), Is.EqualTo(Noon));
+            Assert.That(OpenInterestSeries.StartOfStep(Noon.AddMinutes(5)), Is.EqualTo(Noon.AddMinutes(5)));
+            Assert.That(OpenInterestSeries.StartOfStep(Noon.AddMinutes(7).ToOffset(TimeSpan.FromHours(7))), Is.EqualTo(Noon.AddMinutes(5)));
+        });
+    }
+
+    [Test]
+    public void The_steps_of_a_range_are_counted_its_end_left_out()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenInterestSeries.StepsIn(Noon, Noon.AddMinutes(5)), Is.EqualTo(1));
+            Assert.That(OpenInterestSeries.StepsIn(Noon, Noon.AddMinutes(1000)), Is.EqualTo(200));
+            Assert.That(OpenInterestSeries.StepsIn(Noon, Noon), Is.Zero);
+        });
+    }
 }

@@ -10,7 +10,8 @@ internal sealed class TickerCollectionSettings
 
     /// <summary>
     ///     Seconds after the boundary of a step by which its snapshot must be taken and saved; a later one would no longer tell that
-    ///     moment, so the step is skipped. Below 60: a snapshot stands for its boundary only while it is taken close to it.
+    ///     moment, so the step is skipped. Below 60, whatever the step: a value taken a minute after a boundary is not the value of
+    ///     that boundary, and the history of the exchange would tell another one.
     /// </summary>
     public int DeadlineSeconds { get; init; } = 10;
 

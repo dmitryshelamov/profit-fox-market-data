@@ -35,7 +35,8 @@ public class BybitOpenInterestClientTests
                 new HttpClient(_bybit),
                 NullLoggerFactory.Instance,
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
-            _gate);
+            _gate,
+            NullLogger<BybitOpenInterestClient>.Instance);
     }
 
     [TearDown]
@@ -101,6 +102,25 @@ public class BybitOpenInterestClientTests
                 _bybit.Requests.Single().Query,
                 Does.Contain($"startTime={Noon.AddMinutes(-10).ToUnixTimeMilliseconds()}").And.Contain($"endTime={Noon.ToUnixTimeMilliseconds() - 1}"));
         });
+    }
+
+    [Test]
+    public async Task A_point_that_cannot_be_one_is_left_out_and_the_rest_of_the_page_is_told()
+    {
+        // An open interest below zero, and a point between two steps: either would stop the loading of the contract at this page.
+        _bybit.RespondJson(
+            BybitAnswers.OpenInterestHistory(
+                "BTCUSDT",
+                BybitAnswers.OpenInterestPoint("70002", Noon.AddMinutes(-5)),
+                BybitAnswers.OpenInterestPoint("70009", Noon.AddMinutes(-7)),
+                BybitAnswers.OpenInterestPoint("-1", Noon.AddMinutes(-10)),
+                BybitAnswers.OpenInterestPoint("70000", Noon.AddMinutes(-15))));
+
+        IReadOnlyList<BybitOpenInterestPoint> points = await _openInterest.GetAsync(Btc, Noon.AddMinutes(-15), Noon, CancellationToken.None);
+
+        Assert.That(
+            points,
+            Is.EqualTo(new[] { new BybitOpenInterestPoint(Noon.AddMinutes(-15), Value: 70000m), new BybitOpenInterestPoint(Noon.AddMinutes(-5), Value: 70002m) }));
     }
 
     [Test]

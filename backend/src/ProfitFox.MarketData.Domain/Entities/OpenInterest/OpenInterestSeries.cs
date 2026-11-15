@@ -9,7 +9,9 @@ namespace ProfitFox.MarketData.Domain.Entities.OpenInterest;
 ///     of the same time. From <see cref="CoveredFrom" /> up to <see cref="CoveredUntil" /> every point the exchange has is stored, so a
 ///     step without a point there has none (the time before the instrument was listed) and is never asked for again. Storage writes
 ///     <see cref="NewPoints" /> with the coverage in one transaction, so the coverage never claims a time storage does not hold. The
-///     coverage is one stretch of time and grows only by a range that touches it, so no hole hides inside it.
+///     coverage is one stretch of time and grows only by a range that touches it, so no hole hides inside it. A range apart from it
+///     is refused, unlike in a <see cref="Funding.FundingPaymentSeries" />: a page of open interest is a stretch of time, so the time
+///     after the coverage can always be loaded from the coverage on.
 /// </summary>
 public sealed class OpenInterestSeries : AggregateRoot
 {
@@ -76,6 +78,22 @@ public sealed class OpenInterestSeries : AggregateRoot
     public static bool StartsStep(DateTimeOffset time)
     {
         return time.UtcTicks % Step.Ticks == 0;
+    }
+
+    /// <summary>
+    ///     Where the step that holds the time starts.
+    /// </summary>
+    public static DateTimeOffset StartOfStep(DateTimeOffset time)
+    {
+        return new DateTimeOffset(time.UtcTicks - (time.UtcTicks % Step.Ticks), TimeSpan.Zero);
+    }
+
+    /// <summary>
+    ///     How many steps start in <c>[from, until)</c>, both where a step starts: how many points a whole range has.
+    /// </summary>
+    public static int StepsIn(DateTimeOffset from, DateTimeOffset until)
+    {
+        return (int)((until - from).Ticks / Step.Ticks);
     }
 
     /// <summary>

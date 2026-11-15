@@ -27,13 +27,16 @@ internal sealed class GetOpenInterestQueryHandler(
     /// <exception cref="InstrumentNotFoundException">The catalog has no instrument of the id.</exception>
     public async Task<OpenInterestPointsInternal> Handle(GetOpenInterestQuery request, CancellationToken cancellationToken)
     {
+        // The coverage is read before the points: it only grows, so the points read after it hold every step it tells of. Read
+        // after them, it could tell of a step loaded in between that the answer does not have.
+        OpenInterestSeries? stored = await series.GetAsync(request.InstrumentId, cancellationToken);
+
         // One point over the limit tells that the window holds more, and is where the rest starts.
         OpenInterestPointDb[] rows =
         [
             .. await connection.QueryAsync<OpenInterestPointDb>(
                 GetOpenInterestQueries.Points(request.InstrumentId, request.Window, PointWindow.MaxPoints + 1, cancellationToken))
         ];
-        OpenInterestSeries? stored = await series.GetAsync(request.InstrumentId, cancellationToken);
 
         // Only an instrument of the catalog has points or a series, so the catalog is asked only when it has neither.
         if (rows.Length == 0 && stored is null && await instruments.GetAsync(request.InstrumentId, cancellationToken) is null)

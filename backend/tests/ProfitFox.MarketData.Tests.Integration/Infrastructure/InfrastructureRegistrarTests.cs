@@ -21,7 +21,7 @@ public class InfrastructureRegistrarTests
 
     [TestCase("0")]
     [TestCase("60")]
-    public void A_deadline_of_the_tickers_outside_their_minute_is_refused(string seconds)
+    public void A_deadline_of_the_tickers_of_no_time_or_of_a_minute_and_more_is_refused(string seconds)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["TickerCollection:DeadlineSeconds"] = seconds })

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Ports.Funding;
 using ProfitFox.MarketData.Domain.ValueObjects.Funding;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
@@ -58,9 +59,13 @@ public class BybitFundingPaymentsClientTests
     {
         _bybit.RespondJson(BybitAnswers.FundingPayments());
 
-        IReadOnlyList<FundingPayment> payments = await _payments.GetAsync(Btc, Hour.AddDays(-1), Hour, CancellationToken.None);
+        BybitFundingPaymentsPage page = await _payments.GetAsync(Btc, Hour.AddDays(-1), Hour, CancellationToken.None);
 
-        Assert.That(payments, Is.Empty);
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.Payments, Is.Empty);
+            Assert.That(page.Full, Is.False);
+        });
     }
 
     [Test]
@@ -72,14 +77,34 @@ public class BybitFundingPaymentsClientTests
                 BybitAnswers.FundingPayment("BTCUSDT", "0.0002", Hour),
                 BybitAnswers.FundingPayment("BTCUSDT", "0.0001", Hour.AddHours(-8))));
 
-        IReadOnlyList<FundingPayment> payments = await _payments.GetAsync(Btc, Hour.AddHours(-8), Hour, CancellationToken.None);
+        BybitFundingPaymentsPage page = await _payments.GetAsync(Btc, Hour.AddHours(-8), Hour, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.That(payments, Is.EqualTo(new[] { new FundingPayment(Hour.AddHours(-8), rate: 0.0001m) }));
+            Assert.That(page.Payments, Is.EqualTo(new[] { new FundingPayment(Hour.AddHours(-8), rate: 0.0001m) }));
             Assert.That(
                 _bybit.Requests.Single().Query,
                 Does.Contain($"startTime={Hour.AddHours(-8).ToUnixTimeMilliseconds()}").And.Contain($"endTime={Hour.ToUnixTimeMilliseconds() - 1}"));
+        });
+    }
+
+    [Test]
+    public async Task A_page_of_two_hundred_payments_is_full_whatever_of_it_is_inside_the_range()
+    {
+        // Bybit gave all it gives at once, so older payments may be left; that one of them is outside the range does not make the page whole.
+        _bybit.RespondJson(
+            BybitAnswers.FundingPayments(
+                [.. Enumerable.Range(start: 0, count: 200).Select(index => BybitAnswers.FundingPayment("BTCUSDT", "0.0001", Hour.AddHours(-8 * index)))]));
+
+        BybitFundingPaymentsPage page = await _payments.GetAsync(Btc, Hour.AddDays(-365), Hour, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.Full, Is.True);
+
+            // The payment of the hour itself is at the end of the range, outside it.
+            Assert.That(page.Payments, Has.Count.EqualTo(199));
+            Assert.That(page.Payments[0].Time, Is.EqualTo(Hour.AddHours(-8 * 199)));
         });
     }
 
@@ -106,7 +131,7 @@ public class BybitFundingPaymentsClientTests
     }
 
     [Test]
-    public async Task The_payments_of_a_contract_come_in_one_request_of_a_full_page_oldest_first_exactly_as_Bybit_gave_them()
+    public async Task The_payments_of_a_contract_come_in_one_request_oldest_first_exactly_as_Bybit_gave_them()
     {
         // Bybit gives the newest first.
         _bybit.RespondJson(
@@ -114,18 +139,16 @@ public class BybitFundingPaymentsClientTests
                 BybitAnswers.FundingPayment("BTCUSDT", "-0.00118658", Hour.AddHours(-8)),
                 BybitAnswers.FundingPayment("BTCUSDT", "0.00000819", Hour.AddHours(-16))));
 
-        IReadOnlyList<FundingPayment> payments = await _payments.GetAsync(Btc, Hour.AddDays(-1), Hour, CancellationToken.None);
+        BybitFundingPaymentsPage page = await _payments.GetAsync(Btc, Hour.AddDays(-1), Hour, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
             Assert.That(
-                payments,
+                page.Payments,
                 Is.EqualTo(new[] { new FundingPayment(Hour.AddHours(-16), rate: 0.00000819m), new FundingPayment(Hour.AddHours(-8), rate: -0.00118658m) }));
+            Assert.That(page.Full, Is.False);
             Assert.That(_bybit.Requests.Single().AbsolutePath, Is.EqualTo("/v5/market/funding/history"));
-            Assert.That(
-                _bybit.Requests.Single().Query,
-                Does.Contain("category=linear").And.Contain("symbol=BTCUSDT").And.Contain($"limit={_payments.PageSize}"));
-            Assert.That(_payments.PageSize, Is.EqualTo(200));
+            Assert.That(_bybit.Requests.Single().Query, Does.Contain("category=linear").And.Contain("symbol=BTCUSDT").And.Contain("limit=200"));
         });
     }
 }
