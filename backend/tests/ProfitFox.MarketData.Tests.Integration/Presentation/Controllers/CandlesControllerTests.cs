@@ -74,31 +74,16 @@ public class CandlesControllerTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Test]
-    public async Task A_window_of_an_exchange_that_holds_the_requests_is_loading()
+    private async Task StoreAsync(Instrument instrument, MinuteRange covered, params Candle[] candles)
     {
-        // An app of its own: the pause of Bybit stays in its gate.
-        await using var app = new MarketDataTestApplication();
-        using HttpClient client = app.CreateClient();
-        app.Bybit.RespondJson("", HttpStatusCode.Forbidden);
-
-        HttpResponseMessage response = await client.GetAsync(Url(Linear.Id, "1h", Hour, Hour.AddHours(1)));
-        CandlesInternal? candles = await response.Content.ReadFromJsonAsync<CandlesInternal>(Json);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
-            Assert.That(candles!.Loading, Is.True);
-            Assert.That(candles.Covered, Is.Empty);
-        });
+        var series = CandleSeries.Create(instrument.Id);
+        series.Cover(covered, candles);
+        await _services.GetRequiredService<ICandleSeriesRepository>().SaveAsync(series, CancellationToken.None);
     }
 
-    [Test]
-    public async Task An_instrument_the_catalog_does_not_have_is_not_found()
+    private static string Url(Guid instrumentId, string interval, DateTimeOffset from, DateTimeOffset to)
     {
-        HttpResponseMessage response = await _client.GetAsync(Url(Guid.NewGuid(), "1h", Hour, Hour.AddHours(1)));
-
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        return $"api/instruments/{instrumentId}/candles?interval={interval}&from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
     }
 
     [Test]
@@ -116,11 +101,14 @@ public class CandlesControllerTests
         Assert.Multiple(() =>
         {
             Assert.That(candles!.Loading, Is.False);
-            Assert.That(candles.Candles, Is.EqualTo(new[]
-            {
-                new CandleInternal(Hour, Open: 5m, High: 8m, Low: 4m, Close: 7m, Volume: 3m, Turnover: 19m, BuyVolume: 1.75m),
-                new CandleInternal(Hour.AddHours(1), Open: 7m, High: 7m, Low: 7m, Close: 7m, Volume: 3m, Turnover: 21m, BuyVolume: null)
-            }));
+            Assert.That(
+                candles.Candles,
+                Is.EqualTo(
+                    new[]
+                    {
+                        new CandleInternal(Hour, Open: 5m, High: 8m, Low: 4m, Close: 7m, Volume: 3m, Turnover: 19m, BuyVolume: 1.75m),
+                        new CandleInternal(Hour.AddHours(1), Open: 7m, High: 7m, Low: 7m, Close: 7m, Volume: 3m, Turnover: 21m, BuyVolume: null)
+                    }));
             Assert.That(candles.Covered, Is.EqualTo(new[] { new MinuteRangeInternal(Hour, Hour.AddHours(2)) }));
             Assert.That(_app.Bybit.Requests, Is.Empty);
         });
@@ -138,6 +126,25 @@ public class CandlesControllerTests
         CandlesInternal? candles = await _client.GetFromJsonAsync<CandlesInternal>(Url(Share.Id, "1h", Hour, Hour.AddHours(1)), Json);
 
         Assert.That(candles!.Candles.Single().Turnover, Is.EqualTo(30m));
+    }
+
+    [Test]
+    public async Task A_window_of_an_exchange_that_holds_the_requests_is_loading()
+    {
+        // An app of its own: the pause of Bybit stays in its gate.
+        await using var app = new MarketDataTestApplication();
+        using HttpClient client = app.CreateClient();
+        app.Bybit.RespondJson("", HttpStatusCode.Forbidden);
+
+        HttpResponseMessage response = await client.GetAsync(Url(Linear.Id, "1h", Hour, Hour.AddHours(1)));
+        CandlesInternal? candles = await response.Content.ReadFromJsonAsync<CandlesInternal>(Json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Accepted));
+            Assert.That(candles!.Loading, Is.True);
+            Assert.That(candles.Covered, Is.Empty);
+        });
     }
 
     [Test]
@@ -162,13 +169,22 @@ public class CandlesControllerTests
     }
 
     [Test]
+    public async Task An_instrument_the_catalog_does_not_have_is_not_found()
+    {
+        HttpResponseMessage response = await _client.GetAsync(Url(Guid.NewGuid(), "1h", Hour, Hour.AddHours(1)));
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
     public async Task Minutes_storage_does_not_hold_are_loaded_from_the_exchange_first()
     {
-        _app.Bybit.RespondJson(BybitAnswers.Klines(
-            "linear",
-            "BTCUSDT",
-            BybitAnswers.Kline(Hour.AddMinutes(1), "101", "102", "100", "101.5", "2", "203"),
-            BybitAnswers.Kline(Hour, "100", "101", "99", "101", "1", "100")));
+        _app.Bybit.RespondJson(
+            BybitAnswers.Klines(
+                "linear",
+                "BTCUSDT",
+                BybitAnswers.Kline(Hour.AddMinutes(1), "101", "102", "100", "101.5", "2", "203"),
+                BybitAnswers.Kline(Hour, "100", "101", "99", "101", "1", "100")));
 
         CandlesInternal? candles = await _client.GetFromJsonAsync<CandlesInternal>(Url(Linear.Id, "1h", Hour, Hour.AddHours(1)), Json);
 
@@ -180,17 +196,5 @@ public class CandlesControllerTests
             Assert.That(candles.Covered, Is.EqualTo(new[] { new MinuteRangeInternal(Hour, Hour.AddHours(1)) }));
             Assert.That(_app.Bybit.Requests, Has.Count.EqualTo(1));
         });
-    }
-
-    private async Task StoreAsync(Instrument instrument, MinuteRange covered, params Candle[] candles)
-    {
-        var series = CandleSeries.Create(instrument.Id);
-        series.Cover(covered, candles);
-        await _services.GetRequiredService<ICandleSeriesRepository>().SaveAsync(series, CancellationToken.None);
-    }
-
-    private static string Url(Guid instrumentId, string interval, DateTimeOffset from, DateTimeOffset to)
-    {
-        return $"api/instruments/{instrumentId}/candles?interval={interval}&from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
     }
 }

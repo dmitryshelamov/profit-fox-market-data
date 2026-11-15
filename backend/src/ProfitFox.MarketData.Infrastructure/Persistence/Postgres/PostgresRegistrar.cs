@@ -7,7 +7,9 @@ using Npgsql;
 
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Candles;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Funding;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Instruments;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.OpenInterest;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Transactions;
 
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres;
@@ -26,6 +28,10 @@ internal static class PostgresRegistrar
         services.AddScoped<PostgresTransactionExecutor>();
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
         services.AddScoped<ICandleSeriesRepository, CandleSeriesRepository>();
+        services.AddScoped<IOpenInterestRepository, OpenInterestRepository>();
+        services.AddScoped<IOpenInterestSeriesRepository, OpenInterestSeriesRepository>();
+        services.AddScoped<IFundingRateRepository, FundingRateRepository>();
+        services.AddScoped<IFundingPaymentSeriesRepository, FundingPaymentSeriesRepository>();
 
         services
             .AddFluentMigratorCore()

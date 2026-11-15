@@ -22,6 +22,19 @@ public class BybitMinuteTradesTests
         return CandleGenerator.Generate(minute, volume: volume);
     }
 
+    [TestCase(arg: 3)]
+    [TestCase(arg: 1.5)]
+    public void Trades_that_do_not_add_up_to_the_volume_do_not_tell_how_much_was_bought(decimal volume)
+    {
+        _trades.Add("BTCUSDT", Minute, quantity: 2m, price: 5m, bought: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_trades.Close("BTCUSDT", CandleOf(Minute, volume)).BuyVolume, Is.Null);
+            Assert.That(_trades.Close("ETHUSDT", CandleOf(Minute, volume)).BuyVolume, Is.Null);
+        });
+    }
+
     [Test]
     public void A_candle_told_again_has_its_buy_volume_still()
     {
@@ -95,18 +108,6 @@ public class BybitMinuteTradesTests
     }
 
     [Test]
-    public void A_minute_without_trades_and_without_volume_has_nothing_bought()
-    {
-        _trades.Add("BTCUSDT", Minute.AddMinutes(-1), quantity: 2m, price: 5m, bought: true);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(_trades.Close("BTCUSDT", CandleOf(Minute, volume: 0m)).BuyVolume, Is.Zero);
-            Assert.That(_trades.Close("ETHUSDT", CandleOf(Minute, volume: 0m)).BuyVolume, Is.Zero);
-        });
-    }
-
-    [Test]
     public void A_minute_not_watched_from_its_start_or_closed_already_gives_no_forming_candle()
     {
         _trades.Watch(["BTCUSDT"], Minute.AddSeconds(10));
@@ -126,6 +127,18 @@ public class BybitMinuteTradesTests
 
             // The minute that closed meanwhile gives none either: only the one that goes on.
             Assert.That(watched.Select(forming => forming.Candle.OpenTime), Is.EqualTo(new[] { Minute.AddMinutes(2) }));
+        });
+    }
+
+    [Test]
+    public void A_minute_without_trades_and_without_volume_has_nothing_bought()
+    {
+        _trades.Add("BTCUSDT", Minute.AddMinutes(-1), quantity: 2m, price: 5m, bought: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_trades.Close("BTCUSDT", CandleOf(Minute, volume: 0m)).BuyVolume, Is.Zero);
+            Assert.That(_trades.Close("ETHUSDT", CandleOf(Minute, volume: 0m)).BuyVolume, Is.Zero);
         });
     }
 
@@ -173,19 +186,6 @@ public class BybitMinuteTradesTests
             Assert.That(_trades.Close("BTCUSDT", CandleOf(Minute, volume: 2m)).BuyVolume, Is.EqualTo(2m));
             Assert.That(_trades.Close("BTCUSDT", CandleOf(Minute.AddMinutes(1), volume: 4m)).BuyVolume, Is.Zero);
             Assert.That(_trades.Close("ETHUSDT", CandleOf(Minute, volume: 7m)).BuyVolume, Is.EqualTo(7m));
-        });
-    }
-
-    [TestCase(arg: 3)]
-    [TestCase(arg: 1.5)]
-    public void Trades_that_do_not_add_up_to_the_volume_do_not_tell_how_much_was_bought(decimal volume)
-    {
-        _trades.Add("BTCUSDT", Minute, quantity: 2m, price: 5m, bought: true);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(_trades.Close("BTCUSDT", CandleOf(Minute, volume)).BuyVolume, Is.Null);
-            Assert.That(_trades.Close("ETHUSDT", CandleOf(Minute, volume)).BuyVolume, Is.Null);
         });
     }
 }

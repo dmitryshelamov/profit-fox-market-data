@@ -122,6 +122,33 @@ public class CandleFeedServiceTests
         return new Candle(openTime, open: 5m, high: 10m, low: 1m, close, volume: 1m);
     }
 
+    private static async IAsyncEnumerable<LiveCandle> FallBehind()
+    {
+        await Task.Yield();
+
+        throw new SubscriberFellBehindException();
+#pragma warning disable CS0162 // Unreachable code: the compiler needs a yield to make this an iterator.
+        yield break;
+#pragma warning restore CS0162
+    }
+
+    [Test]
+    public async Task A_caller_gets_the_candles_of_the_exchanges_it_asked_for_and_of_all_when_it_named_none()
+    {
+        using AsyncServerStreamingCall<CandleUpdate> all = await SubscribeAsync(new SubscribeRequest());
+        using AsyncServerStreamingCall<CandleUpdate> shares = await SubscribeAsync(new SubscribeRequest { Exchanges = { ProtoExchange.Tinvest } });
+
+        Publish(Closed(Exchange.Bybit, Linear, CandleAt(HourAgo)), Closed(Exchange.TInvest, Share, CandleAt(HourAgo)));
+
+        IReadOnlyList<CandleUpdate> ofAll = await TakeAsync(all, count: 2);
+        IReadOnlyList<CandleUpdate> ofShares = await TakeAsync(shares, count: 1);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ofAll.Select(update => update.Exchange), Is.EqualTo(new[] { ProtoExchange.Bybit, ProtoExchange.Tinvest }));
+            Assert.That(ofShares.Single().InstrumentId, Is.EqualTo(Share.Id.ToString()));
+        });
+    }
+
     [Test]
     public async Task A_candle_comes_with_its_values_as_text_and_without_what_is_not_known()
     {
@@ -168,23 +195,6 @@ public class CandleFeedServiceTests
     }
 
     [Test]
-    public async Task A_caller_gets_the_candles_of_the_exchanges_it_asked_for_and_of_all_when_it_named_none()
-    {
-        using AsyncServerStreamingCall<CandleUpdate> all = await SubscribeAsync(new SubscribeRequest());
-        using AsyncServerStreamingCall<CandleUpdate> shares = await SubscribeAsync(new SubscribeRequest { Exchanges = { ProtoExchange.Tinvest } });
-
-        Publish(Closed(Exchange.Bybit, Linear, CandleAt(HourAgo)), Closed(Exchange.TInvest, Share, CandleAt(HourAgo)));
-
-        IReadOnlyList<CandleUpdate> ofAll = await TakeAsync(all, count: 2);
-        IReadOnlyList<CandleUpdate> ofShares = await TakeAsync(shares, count: 1);
-        Assert.Multiple(() =>
-        {
-            Assert.That(ofAll.Select(update => update.Exchange), Is.EqualTo(new[] { ProtoExchange.Bybit, ProtoExchange.Tinvest }));
-            Assert.That(ofShares.Single().InstrumentId, Is.EqualTo(Share.Id.ToString()));
-        });
-    }
-
-    [Test]
     public async Task A_forming_candle_comes_not_closed_and_only_to_a_caller_that_asked_for_them()
     {
         using AsyncServerStreamingCall<CandleUpdate> withForming = await SubscribeAsync(new SubscribeRequest { Forming = true });
@@ -220,6 +230,24 @@ public class CandleFeedServiceTests
     }
 
     [Test]
+    public async Task A_subscription_ends_with_unavailable_when_the_app_stops()
+    {
+        // An app of its own: the one of the other tests goes on.
+        await using var app = new MarketDataTestApplication();
+        using GrpcChannel channel = Channel(app);
+        using AsyncServerStreamingCall<CandleUpdate> call = new CandleFeed.CandleFeedClient(channel).Subscribe(new SubscribeRequest());
+        await call.ResponseHeadersAsync.WaitAsync(Patience);
+
+        app.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+
+        // Awaited, not blocked on: this code goes on where the client told the headers, and the client reads the end of the call only
+        // once it has that thread back.
+        await Assert.ThatAsync(
+            () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
+            Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.Unavailable));
+    }
+
+    [Test]
     public void A_subscription_from_further_back_than_a_day_is_refused()
     {
         using AsyncServerStreamingCall<CandleUpdate> call = _client.Subscribe(
@@ -236,24 +264,6 @@ public class CandleFeedServiceTests
 
         RpcException? failure = Assert.ThrowsAsync<RpcException>(async () => await call.ResponseStream.MoveNext(CancellationToken.None));
         Assert.That(failure!.StatusCode, Is.EqualTo(StatusCode.InvalidArgument));
-    }
-
-    [Test]
-    public async Task A_subscription_ends_with_unavailable_when_the_app_stops()
-    {
-        // An app of its own: the one of the other tests goes on.
-        await using var app = new MarketDataTestApplication();
-        using GrpcChannel channel = Channel(app);
-        using AsyncServerStreamingCall<CandleUpdate> call = new CandleFeed.CandleFeedClient(channel).Subscribe(new SubscribeRequest());
-        await call.ResponseHeadersAsync.WaitAsync(Patience);
-
-        app.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
-
-        // Awaited, not blocked on: this code goes on where the client told the headers, and the client reads the end of the call only
-        // once it has that thread back.
-        await Assert.ThatAsync(
-            () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
-            Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.Unavailable));
     }
 
     [Test]
@@ -283,15 +293,5 @@ public class CandleFeedServiceTests
             Assert.That(updates.Select(update => update.Close), Is.EqualTo(new[] { "6", "7", "8" }));
             Assert.That(updates.Select(update => update.InstrumentId), Is.All.EqualTo(Linear.Id.ToString()));
         });
-    }
-
-    private static async IAsyncEnumerable<LiveCandle> FallBehind()
-    {
-        await Task.Yield();
-
-        throw new SubscriberFellBehindException();
-#pragma warning disable CS0162 // Unreachable code: the compiler needs a yield to make this an iterator.
-        yield break;
-#pragma warning restore CS0162
     }
 }

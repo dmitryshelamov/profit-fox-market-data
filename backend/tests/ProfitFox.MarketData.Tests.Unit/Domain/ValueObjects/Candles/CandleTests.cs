@@ -36,6 +36,41 @@ public class CandleTests
         Assert.Throws<ArgumentException>(() => new Candle(OpenTime, open, high: 10m, low: 1m, close, volume: 1m));
     }
 
+    [TestCase(arg: 2.9)]
+    [TestCase(arg: 3.1)]
+    public void Trades_that_do_not_add_up_to_the_volume_leave_the_candle_as_it_is(decimal traded)
+    {
+        var candle = new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m);
+
+        Assert.That(candle.WithBuyVolume(new TradedVolume(traded, bought: 1m)), Is.SameAs(candle));
+    }
+
+    [TestCase(-1)]
+    [TestCase(arg: 3.01)]
+    public void A_buy_volume_below_zero_or_above_the_volume_is_rejected(decimal buyVolume)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: buyVolume));
+    }
+
+    [Test]
+    public void A_buy_volume_is_any_part_of_the_volume()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: 0m).BuyVolume, Is.Zero);
+            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: 3m).BuyVolume, Is.EqualTo(3m));
+            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m).BuyVolume, Is.Null);
+        });
+    }
+
+    [Test]
+    public void A_candle_without_volume_has_nothing_bought_when_no_trade_was_seen()
+    {
+        var candle = new Candle(OpenTime, open: 5m, high: 5m, low: 5m, close: 5m, volume: 0m);
+
+        Assert.That(candle.WithBuyVolume(TradedVolume.None).BuyVolume, Is.Zero);
+    }
+
     [Test]
     public void A_low_above_the_high_is_rejected()
     {
@@ -67,17 +102,6 @@ public class CandleTests
     }
 
     [Test]
-    public void A_buy_volume_is_any_part_of_the_volume()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: 0m).BuyVolume, Is.Zero);
-            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: 3m).BuyVolume, Is.EqualTo(3m));
-            Assert.That(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m).BuyVolume, Is.Null);
-        });
-    }
-
-    [Test]
     public void Trades_that_add_up_to_the_volume_tell_the_buy_volume()
     {
         var candle = new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, turnover: 15m);
@@ -85,29 +109,5 @@ public class CandleTests
         Candle told = candle.WithBuyVolume(new TradedVolume(traded: 3m, bought: 2m));
 
         Assert.That(told, Is.EqualTo(new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, turnover: 15m, buyVolume: 2m)));
-    }
-
-    [TestCase(arg: 2.9)]
-    [TestCase(arg: 3.1)]
-    public void Trades_that_do_not_add_up_to_the_volume_leave_the_candle_as_it_is(decimal traded)
-    {
-        var candle = new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m);
-
-        Assert.That(candle.WithBuyVolume(new TradedVolume(traded, bought: 1m)), Is.SameAs(candle));
-    }
-
-    [Test]
-    public void A_candle_without_volume_has_nothing_bought_when_no_trade_was_seen()
-    {
-        var candle = new Candle(OpenTime, open: 5m, high: 5m, low: 5m, close: 5m, volume: 0m);
-
-        Assert.That(candle.WithBuyVolume(TradedVolume.None).BuyVolume, Is.Zero);
-    }
-
-    [TestCase(-1)]
-    [TestCase(arg: 3.01)]
-    public void A_buy_volume_below_zero_or_above_the_volume_is_rejected(decimal buyVolume)
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new Candle(OpenTime, open: 5m, high: 10m, low: 1m, close: 5m, volume: 3m, buyVolume: buyVolume));
     }
 }

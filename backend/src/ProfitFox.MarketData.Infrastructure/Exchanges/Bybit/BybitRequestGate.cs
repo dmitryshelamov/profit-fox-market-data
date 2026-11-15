@@ -6,10 +6,11 @@ using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 
 /// <summary>
-///     The one way of the requests of the app to Bybit, the catalog and the candles alike, as Bybit limits them per IP: at most
-///     <see cref="BybitApiSettings.RequestsPerSecond" /> attempts a second, the retries of a transient failure, and none at all for a pause
-///     after Bybit limited them. A request during a pause fails at once with <see cref="ExchangePausedException" />, so it does not wait
-///     inside a command. What a failed answer of Bybit means is told by <see cref="BybitResponses" />, where the answer is unwrapped.
+///     The one way of the requests of the app to Bybit, the catalog, the candles, the tickers, the funding payments and the open
+///     interest alike, as Bybit limits them per IP: at most <see cref="BybitApiSettings.RequestsPerSecond" /> attempts a second, the
+///     retries of a transient failure, and none at all for a pause after Bybit limited them. A request during a pause fails at once
+///     with <see cref="ExchangePausedException" />, so it does not wait inside a command. What a failed answer of Bybit means is told
+///     by <see cref="BybitResponses" />, where the answer is unwrapped.
 /// </summary>
 internal sealed class BybitRequestGate : IDisposable
 {
@@ -40,9 +41,15 @@ internal sealed class BybitRequestGate : IDisposable
                     _tokens.Release(missing);
                 }
             },
-            null,
+            state: null,
             TimeSpan.FromSeconds(1),
             TimeSpan.FromSeconds(1));
+    }
+
+    public void Dispose()
+    {
+        _refill.Dispose();
+        _tokens.Dispose();
     }
 
     /// <exception cref="ExchangePausedException">Bybit limited the requests, now or before the pause ended.</exception>
@@ -76,12 +83,6 @@ internal sealed class BybitRequestGate : IDisposable
                 }
             },
             cancellationToken);
-    }
-
-    public void Dispose()
-    {
-        _refill.Dispose();
-        _tokens.Dispose();
     }
 
     // A ban pauses for the ban pause. The first answer about the limit pauses for the limit pause, each next one in a row twice as long, up

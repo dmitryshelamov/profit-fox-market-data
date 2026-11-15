@@ -22,15 +22,15 @@ internal sealed class StubGrpcStream<TRequest, TResponse>(string method, Metadat
 
     private TaskCompletionSource _read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public TResponse Current { get; private set; } = null!;
+
+    public WriteOptions? WriteOptions { get; set; }
+
     public string Method { get; } = method;
 
     public Metadata Headers { get; } = headers;
 
     public bool Closed { get; private set; }
-
-    public WriteOptions? WriteOptions { get; set; }
-
-    public TResponse Current { get; private set; } = null!;
 
     public IReadOnlyList<object> Sent
     {
@@ -41,6 +41,48 @@ internal sealed class StubGrpcStream<TRequest, TResponse>(string method, Metadat
                 return [.. _sent];
             }
         }
+    }
+
+    public async Task<bool> MoveNext(CancellationToken cancellationToken)
+    {
+        // Asking for the next message with none waiting means the code is done with all it was told.
+        lock (_lock)
+        {
+            if (!_responses.Reader.TryPeek(out _))
+            {
+                _read.TrySetResult();
+            }
+        }
+
+        if (!await _responses.Reader.WaitToReadAsync(cancellationToken))
+        {
+            return false;
+        }
+
+        _responses.Reader.TryRead(out TResponse? response);
+        Current = response!;
+
+        return true;
+    }
+
+    public Task WriteAsync(TRequest message)
+    {
+        lock (_lock)
+        {
+            _sent.Add(message);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task WriteAsync(TRequest message, CancellationToken cancellationToken)
+    {
+        return WriteAsync(message);
+    }
+
+    public Task CompleteAsync()
+    {
+        return Task.CompletedTask;
     }
 
     public void Tell(object response)
@@ -88,48 +130,6 @@ internal sealed class StubGrpcStream<TRequest, TResponse>(string method, Metadat
         }
 
         await read.WaitAsync(Patience);
-    }
-
-    public Task WriteAsync(TRequest message)
-    {
-        lock (_lock)
-        {
-            _sent.Add(message);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task WriteAsync(TRequest message, CancellationToken cancellationToken)
-    {
-        return WriteAsync(message);
-    }
-
-    public Task CompleteAsync()
-    {
-        return Task.CompletedTask;
-    }
-
-    public async Task<bool> MoveNext(CancellationToken cancellationToken)
-    {
-        // Asking for the next message with none waiting means the code is done with all it was told.
-        lock (_lock)
-        {
-            if (!_responses.Reader.TryPeek(out _))
-            {
-                _read.TrySetResult();
-            }
-        }
-
-        if (!await _responses.Reader.WaitToReadAsync(cancellationToken))
-        {
-            return false;
-        }
-
-        _responses.Reader.TryRead(out TResponse? response);
-        Current = response!;
-
-        return true;
     }
 
     public void Close()

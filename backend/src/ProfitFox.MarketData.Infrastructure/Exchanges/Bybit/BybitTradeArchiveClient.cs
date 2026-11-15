@@ -93,10 +93,10 @@ internal sealed class BybitTradeArchiveClient(HttpClient http, ExchangeRetryExec
 
     private static void Count(string line, Columns columns, Dictionary<DateTimeOffset, TradedVolume> minutes)
     {
-        decimal time = decimal.Parse(Field(line, columns.Time), NumberStyles.Float, CultureInfo.InvariantCulture);
+        var time = decimal.Parse(Field(line, columns.Time), NumberStyles.Float, CultureInfo.InvariantCulture);
         long milliseconds = time < FirstMillisecondTime ? (long)(time * 1000m) : (long)time;
         DateTimeOffset minute = MinuteRange.StartOfMinute(DateTimeOffset.FromUnixTimeMilliseconds(milliseconds));
-        decimal quantity = decimal.Parse(Field(line, columns.Quantity), NumberStyles.Float, CultureInfo.InvariantCulture);
+        var quantity = decimal.Parse(Field(line, columns.Quantity), NumberStyles.Float, CultureInfo.InvariantCulture);
 
         // The side is that of the taker: a buy is a trade the buyer started.
         bool bought = Field(line, columns.Side).Equals("buy", StringComparison.OrdinalIgnoreCase);

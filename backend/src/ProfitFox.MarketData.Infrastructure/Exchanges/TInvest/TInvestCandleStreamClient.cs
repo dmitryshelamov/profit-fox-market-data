@@ -75,17 +75,6 @@ internal sealed class TInvestCandleStreamClient(
 
         private ITimer? _timer;
 
-        public void Start()
-        {
-            foreach (string[] uids in lotsByUid.Keys.Chunk(SharesPerStream))
-            {
-                _streams.Add(RunAsync(uids, waitingClose: true));
-                _streams.Add(RunAsync(uids, waitingClose: false));
-            }
-
-            _timer = time.CreateTimer(_ => TellForming(), state: null, FormingPeriod, FormingPeriod);
-        }
-
         public async ValueTask DisposeAsync()
         {
             await _stop.CancelAsync();
@@ -97,6 +86,17 @@ internal sealed class TInvestCandleStreamClient(
 
             await Task.WhenAll(_streams);
             _stop.Dispose();
+        }
+
+        public void Start()
+        {
+            foreach (string[] uids in lotsByUid.Keys.Chunk(SharesPerStream))
+            {
+                _streams.Add(RunAsync(uids, waitingClose: true));
+                _streams.Add(RunAsync(uids, waitingClose: false));
+            }
+
+            _timer = time.CreateTimer(_ => TellForming(), state: null, FormingPeriod, FormingPeriod);
         }
 
         // One stream of the shares, opened again whenever it is lost, until the subscription ends.

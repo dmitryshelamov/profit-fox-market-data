@@ -246,6 +246,20 @@ public class TInvestCandleStreamClientTests
     }
 
     [Test]
+    public async Task A_stream_that_is_silent_too_long_is_opened_again()
+    {
+        await SubscribeAsync();
+        (IStubGrpcStream closed, IStubGrpcStream forming) = await StreamsAsync();
+        await closed.ReadAsync();
+        await forming.ReadAsync();
+
+        _time.Advance(TInvestCandleStreamClient.Silence);
+        IStubGrpcStream[] again = [await ReopenedAsync(), await ReopenedAsync()];
+
+        Assert.That(again.Select(stream => Asked(stream).WaitingClose), Is.EquivalentTo(new[] { true, false }));
+    }
+
+    [Test]
     public async Task A_stream_that_keeps_breaking_is_opened_again_after_longer_pauses_until_it_tells_something()
     {
         await SubscribeAsync();
@@ -277,20 +291,6 @@ public class TInvestCandleStreamClientTests
             Assert.That(pauses, Is.EqualTo(new[] { 1d, 2d, 5d, 10d, 30d, 30d }));
             Assert.That(afterAnAnswer, Is.EqualTo(TimeSpan.FromSeconds(1)));
         });
-    }
-
-    [Test]
-    public async Task A_stream_that_is_silent_too_long_is_opened_again()
-    {
-        await SubscribeAsync();
-        (IStubGrpcStream closed, IStubGrpcStream forming) = await StreamsAsync();
-        await closed.ReadAsync();
-        await forming.ReadAsync();
-
-        _time.Advance(TInvestCandleStreamClient.Silence);
-        IStubGrpcStream[] again = [await ReopenedAsync(), await ReopenedAsync()];
-
-        Assert.That(again.Select(stream => Asked(stream).WaitingClose), Is.EquivalentTo(new[] { true, false }));
     }
 
     [Test]

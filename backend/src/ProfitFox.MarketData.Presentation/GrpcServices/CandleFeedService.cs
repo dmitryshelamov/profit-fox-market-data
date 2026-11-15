@@ -16,6 +16,7 @@ using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Presentation.Protos;
 using ProfitFox.MarketData.Presentation.Settings;
 
+using Enum = System.Enum;
 using Exchange = ProfitFox.MarketData.Domain.Entities.Instruments.Enums.Exchange;
 using ProtoExchange = ProfitFox.MarketData.Presentation.Protos.Exchange;
 
@@ -32,7 +33,7 @@ public sealed class CandleFeedService(
     IHostApplicationLifetime lifetime,
     TimeProvider time) : CandleFeed.CandleFeedBase
 {
-    private static readonly Exchange[] All = System.Enum.GetValues<Exchange>();
+    private static readonly Exchange[] All = Enum.GetValues<Exchange>();
 
     public override async Task Subscribe(SubscribeRequest request, IServerStreamWriter<CandleUpdate> responseStream, ServerCallContext context)
     {

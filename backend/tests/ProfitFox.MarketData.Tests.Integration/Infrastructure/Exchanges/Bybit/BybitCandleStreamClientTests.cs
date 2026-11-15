@@ -31,6 +31,7 @@ public class BybitCandleStreamClientTests
                     SocketIndividualSubscriptionCombineTarget = 100
                 }),
             NullLoggerFactory.Instance);
+
         // Half a minute before the minute of the tests: that minute is watched from its start.
         _time = new FakeTimeProvider(Minute.AddSeconds(-30));
         _stream = new BybitCandleStreamClient(_socket, _time, NullLogger<BybitCandleStreamClient>.Instance);
@@ -130,22 +131,6 @@ public class BybitCandleStreamClientTests
     }
 
     [Test]
-    public async Task A_candle_whose_trades_do_not_add_up_to_its_volume_has_no_buy_volume()
-    {
-        await SubscribeAsync(BybitCategory.Linear, "BTCUSDT");
-
-        await _server.PushAsync(Linear, "publicTrade.BTCUSDT", FakeBybitSocketServer.Trade("BTCUSDT", Minute.AddSeconds(40), "Buy", quantity: 2m));
-        await _server.PushAsync(Linear, "kline.1.BTCUSDT", FakeBybitSocketServer.Kline(Minute, open: 5m, high: 8m, low: 4m, close: 7m, volume: 9m, turnover: 54m));
-
-        (string Symbol, Candle Candle) closed = await ClosedAsync();
-        Assert.Multiple(() =>
-        {
-            Assert.That(closed.Candle.Volume, Is.EqualTo(9m));
-            Assert.That(closed.Candle.BuyVolume, Is.Null);
-        });
-    }
-
-    [Test]
     public async Task A_candle_whose_trades_come_after_it_is_told_again_with_its_buy_volume()
     {
         await SubscribeAsync(BybitCategory.Linear, "BTCUSDT");
@@ -161,6 +146,22 @@ public class BybitCandleStreamClientTests
             Assert.That(first.Candle.BuyVolume, Is.Null);
             Assert.That(again.Symbol, Is.EqualTo("BTCUSDT"));
             Assert.That(again.Candle, Is.EqualTo(new Candle(Minute, open: 5m, high: 8m, low: 4m, close: 7m, volume: 3m, turnover: 18m, buyVolume: 2m)));
+        });
+    }
+
+    [Test]
+    public async Task A_candle_whose_trades_do_not_add_up_to_its_volume_has_no_buy_volume()
+    {
+        await SubscribeAsync(BybitCategory.Linear, "BTCUSDT");
+
+        await _server.PushAsync(Linear, "publicTrade.BTCUSDT", FakeBybitSocketServer.Trade("BTCUSDT", Minute.AddSeconds(40), "Buy", quantity: 2m));
+        await _server.PushAsync(Linear, "kline.1.BTCUSDT", FakeBybitSocketServer.Kline(Minute, open: 5m, high: 8m, low: 4m, close: 7m, volume: 9m, turnover: 54m));
+
+        (string Symbol, Candle Candle) closed = await ClosedAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(closed.Candle.Volume, Is.EqualTo(9m));
+            Assert.That(closed.Candle.BuyVolume, Is.Null);
         });
     }
 

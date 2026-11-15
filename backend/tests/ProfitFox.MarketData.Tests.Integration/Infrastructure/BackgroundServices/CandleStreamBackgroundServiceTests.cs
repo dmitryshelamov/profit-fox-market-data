@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using NSubstitute;
+using NSubstitute.Core;
 
 using ProfitFox.MarketData.Application.Commands.Candles.SaveClosedCandles;
 using ProfitFox.MarketData.Application.Contracts.Instruments.Converters;
@@ -37,13 +38,14 @@ public class CandleStreamBackgroundServiceTests
         _shares = new SharesStub();
         _feed = Substitute.For<ILiveCandleFeed>();
         _told = Channel.CreateUnbounded<LiveCandle>();
-        _feed.Publish(Arg.Do<IReadOnlyCollection<LiveCandle>>(candles =>
-        {
-            foreach (LiveCandle candle in candles)
+        _feed.Publish(
+            Arg.Do<IReadOnlyCollection<LiveCandle>>(candles =>
             {
-                _told.Writer.TryWrite(candle);
-            }
-        }));
+                foreach (LiveCandle candle in candles)
+                {
+                    _told.Writer.TryWrite(candle);
+                }
+            }));
         _time = new WatchedTimeProvider(Start);
         _sender = Substitute.For<ISender>();
         BybitHas(Btc, Eth, BtcSpot, Delisted);
@@ -142,7 +144,7 @@ public class CandleStreamBackgroundServiceTests
             .Returns([.. instruments.Select(instrument => instrument.ToInternal())]);
     }
 
-    private Task<SaveClosedCandlesResult> Recorded(NSubstitute.Core.CallInfo call)
+    private Task<SaveClosedCandlesResult> Recorded(CallInfo call)
     {
         if (call[0] is not SaveClosedCandlesCommand command)
         {
@@ -207,9 +209,10 @@ public class CandleStreamBackgroundServiceTests
 
             if (category == Hangs)
             {
-                return Task.Delay(Timeout.Infinite, cancellationToken).ContinueWith<IAsyncDisposable>(
-                    _ => throw new OperationCanceledException(cancellationToken),
-                    TaskScheduler.Default);
+                return Task.Delay(Timeout.Infinite, cancellationToken)
+                    .ContinueWith<IAsyncDisposable>(
+                        _ => throw new OperationCanceledException(cancellationToken),
+                        TaskScheduler.Default);
             }
 
             var subscription = new Subscription(category, [.. symbols], closed, forming);
@@ -350,16 +353,6 @@ public class CandleStreamBackgroundServiceTests
     }
 
     [Test]
-    public async Task A_category_still_subscribing_does_not_hold_back_the_other()
-    {
-        _stream.Hangs = BybitCategory.Linear;
-
-        await StartAsync();
-
-        Assert.That((await _stream.NextAsync()).Category, Is.EqualTo(BybitCategory.Spot));
-    }
-
-    [Test]
     public async Task A_category_Bybit_did_not_take_is_subscribed_to_after_the_wait()
     {
         BybitHas(Btc);
@@ -380,35 +373,13 @@ public class CandleStreamBackgroundServiceTests
     }
 
     [Test]
-    public async Task The_candles_that_close_within_the_window_are_saved_together_each_for_the_instrument_of_its_category_and_symbol()
+    public async Task A_category_still_subscribing_does_not_hold_back_the_other()
     {
-        Candle candle = CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m);
-        Candle ofEth = CandleGenerator.Generate(Minute, close: 6m);
+        _stream.Hangs = BybitCategory.Linear;
+
         await StartAsync();
-        Subscription linear = await _stream.NextAsync();
-        Subscription spot = await _stream.NextAsync();
 
-        spot.Closed("BTCUSDT", candle);
-        linear.Closed("BTCUSDT", candle);
-        linear.Closed("ETHUSDT", ofEth);
-        bool savedBeforeTheWindow = _saved.Reader.TryPeek(out _);
-        await PassBatchWindowAsync();
-        IReadOnlyCollection<ClosedCandle> saved = await SavedAsync();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(savedBeforeTheWindow, Is.False);
-            Assert.That(
-                saved,
-                Is.EqualTo(
-                    new[]
-                    {
-                        new ClosedCandle(Exchange.Bybit, BtcSpot.Id, candle),
-                        new ClosedCandle(Exchange.Bybit, Btc.Id, candle),
-                        new ClosedCandle(Exchange.Bybit, Eth.Id, ofEth)
-                    }));
-            Assert.That(_saved.Reader.TryPeek(out _), Is.False);
-        });
+        Assert.That((await _stream.NextAsync()).Category, Is.EqualTo(BybitCategory.Spot));
     }
 
     [Test]
@@ -477,6 +448,38 @@ public class CandleStreamBackgroundServiceTests
             Assert.That(await _told.Reader.ReadAsync().AsTask().WaitAsync(Patience), Is.EqualTo(new LiveCandle(Exchange.TInvest, Sber.Id, forming, Closed: false)));
             Assert.That(await SavedAsync(), Is.EqualTo(new[] { new ClosedCandle(Exchange.TInvest, Sber.Id, closed) }));
             Assert.That(_stream.HasNext(), Is.False);
+        });
+    }
+
+    [Test]
+    public async Task The_candles_that_close_within_the_window_are_saved_together_each_for_the_instrument_of_its_category_and_symbol()
+    {
+        Candle candle = CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m);
+        Candle ofEth = CandleGenerator.Generate(Minute, close: 6m);
+        await StartAsync();
+        Subscription linear = await _stream.NextAsync();
+        Subscription spot = await _stream.NextAsync();
+
+        spot.Closed("BTCUSDT", candle);
+        linear.Closed("BTCUSDT", candle);
+        linear.Closed("ETHUSDT", ofEth);
+        bool savedBeforeTheWindow = _saved.Reader.TryPeek(out _);
+        await PassBatchWindowAsync();
+        IReadOnlyCollection<ClosedCandle> saved = await SavedAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(savedBeforeTheWindow, Is.False);
+            Assert.That(
+                saved,
+                Is.EqualTo(
+                    new[]
+                    {
+                        new ClosedCandle(Exchange.Bybit, BtcSpot.Id, candle),
+                        new ClosedCandle(Exchange.Bybit, Btc.Id, candle),
+                        new ClosedCandle(Exchange.Bybit, Eth.Id, ofEth)
+                    }));
+            Assert.That(_saved.Reader.TryPeek(out _), Is.False);
         });
     }
 

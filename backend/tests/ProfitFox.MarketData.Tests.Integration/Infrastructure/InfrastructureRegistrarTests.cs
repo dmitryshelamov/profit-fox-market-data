@@ -19,6 +19,43 @@ public class InfrastructureRegistrarTests
         return services.GetRequiredService<IOptions<InstrumentSyncSettings>>().Value;
     }
 
+    [TestCase("0")]
+    [TestCase("60")]
+    public void A_deadline_of_the_tickers_of_no_time_or_of_a_minute_and_more_is_refused(string seconds)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TickerCollection:DeadlineSeconds"] = seconds })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<TickerCollectionSettings>>().Value);
+    }
+
+    [TestCase("FundingPaymentSync:HistoryDays")]
+    [TestCase("FundingPaymentSync:Parallelism")]
+    public void A_loading_of_funding_payments_of_no_days_or_of_no_contract_at_a_time_is_refused(string setting)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [setting] = "0" })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<FundingPaymentSyncSettings>>().Value);
+    }
+
+    [TestCase("OpenInterestSync:HistoryDays")]
+    [TestCase("OpenInterestSync:IdleSeconds")]
+    [TestCase("OpenInterestSync:Parallelism")]
+    public void A_loading_of_open_interest_with_a_setting_of_zero_is_refused(string setting)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [setting] = "0" })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<OpenInterestSyncSettings>>().Value);
+    }
+
     [Test]
     public void A_stream_of_shares_without_a_token_is_refused()
     {

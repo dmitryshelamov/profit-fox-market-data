@@ -64,6 +64,17 @@ internal sealed class LiveCandleFeed : ILiveCandleFeed
         private readonly Channel<LiveCandle> _waiting = Channel.CreateBounded<LiveCandle>(
             new BoundedChannelOptions(Capacity) { SingleReader = true, SingleWriter = false });
 
+        public IAsyncEnumerable<LiveCandle> ReadAllAsync(CancellationToken cancellationToken)
+        {
+            return _waiting.Reader.ReadAllAsync(cancellationToken);
+        }
+
+        public void Dispose()
+        {
+            feed.Remove(this);
+            _waiting.Writer.TryComplete();
+        }
+
         public void Take(IReadOnlyCollection<LiveCandle> candles)
         {
             foreach (LiveCandle candle in candles.Where(candle => exchanges.Contains(candle.Exchange)))
@@ -87,17 +98,6 @@ internal sealed class LiveCandleFeed : ILiveCandleFeed
                     return;
                 }
             }
-        }
-
-        public IAsyncEnumerable<LiveCandle> ReadAllAsync(CancellationToken cancellationToken)
-        {
-            return _waiting.Reader.ReadAllAsync(cancellationToken);
-        }
-
-        public void Dispose()
-        {
-            feed.Remove(this);
-            _waiting.Writer.TryComplete();
         }
     }
 }
