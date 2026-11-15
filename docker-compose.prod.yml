@@ -3,7 +3,8 @@
 # The service runs the image of version N, built from a commit of main. The secrets come from .env.prod on the server (mode
 # 600, never committed): MARKETDATA_DB_PASSWORD (hex, so it needs no escaping in the connection string) and
 # MARKETDATA_TINVEST_TOKEN (a read-only token of T-Invest of its own: the limits of T-Invest count per token). Every other
-# setting is the one of appsettings.json.
+# setting is the one of appsettings.json, unless ~/profit-fox-market-data/config/market-data.json overrides it (README,
+# "Settings without a restart").
 name: profit-fox-market-data
 
 services:
@@ -41,6 +42,10 @@ services:
     ports:
       - "5236:5236"
       - "5237:5237"
+    # market-data.json in the folder, if there, overrides any setting and is read again on each change. The folder, not the file,
+    # is mounted: an editor that saves a new file in place of the old one would leave a mounted file stale.
+    volumes:
+      - ${HOME:?}/profit-fox-market-data/config:/app/config:ro
     # Unhealthy while the database does not answer; the start period covers the migrations.
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:5236/health"]

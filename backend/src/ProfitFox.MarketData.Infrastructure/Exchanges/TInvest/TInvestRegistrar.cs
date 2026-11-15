@@ -20,7 +20,8 @@ internal static class TInvestRegistrar
     /// <summary>
     ///     One gRPC channel to T-Invest for the process, opened on the first call and trusting the server by
     ///     <see cref="TInvestCertificates" />, and the clients of its instruments, market data and candle stream over it, the unary calls
-    ///     counted in the metrics; a test host replaces the clients to answer the calls itself.
+    ///     counted in the metrics; a TInvestApi section broken after the start keeps its last valid settings. A test host replaces the
+    ///     clients to answer the calls itself.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -31,6 +32,7 @@ internal static class TInvestRegistrar
                 "TInvestApi:Endpoint must be an https address.")
             .Validate(tinvest => tinvest.MarketDataRequestsPerMinute > 0, "TInvestApi:MarketDataRequestsPerMinute must be above zero.")
             .ValidateOnStart();
+        LastValidOptionsMonitor<TInvestApiSettings>.Register(services);
 
         // The server is trusted by the root of TInvestCertificates. A call cancelled by its token is an OperationCanceledException, as
         // everywhere else, not an RpcException.

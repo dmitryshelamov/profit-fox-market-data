@@ -12,8 +12,9 @@ internal sealed class BybitApiSettings
 
     /// <summary>
     ///     The pause after the first answer about the limit; each next one in a row pauses twice as long, up to <see cref="BanPauseMinutes" />.
+    ///     Short: Bybit answers 10006 on candles in the first seconds of a quarter hour even well below its limit.
     /// </summary>
-    public int LimitPauseSeconds { get; init; } = 30;
+    public int LimitPauseSeconds { get; init; } = 5;
 
     /// <summary>
     ///     The pause after Bybit banned the IP (HTTP 403), and the longest pause after its limit.

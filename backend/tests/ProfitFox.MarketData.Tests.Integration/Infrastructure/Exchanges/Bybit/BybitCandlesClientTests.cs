@@ -77,7 +77,8 @@ public class BybitCandlesClientTests
         ExchangePausedException? paused =
             Assert.ThrowsAsync<ExchangePausedException>(() => _candles.GetAsync(Linear, Minutes(from: 0, until: 60), CancellationToken.None));
 
-        Assert.That(paused!.Until, Is.EqualTo(Now.AddSeconds(30)));
+        // The limit pause of the settings by default.
+        Assert.That(paused!.Until, Is.EqualTo(Now.AddSeconds(5)));
     }
 
     [Test]
