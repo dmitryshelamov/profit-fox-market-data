@@ -44,7 +44,10 @@ internal sealed class LoadFundingPaymentsCommandHandler(
         }
 
         var listing = (BybitListedInstrument)instrument.Listing;
-        DateTimeOffset until = request.RequestedAt - Publishing;
+        // The clock is finer than the microseconds the database keeps and the milliseconds of Bybit: an end of a whole millisecond comes back
+        // from storage as it was saved, so the next load finds the coverage up to it and asks no page of less than a millisecond.
+        DateTimeOffset requestedUntil = request.RequestedAt - Publishing;
+        DateTimeOffset until = requestedUntil.AddTicks(-(requestedUntil.Ticks % TimeSpan.TicksPerMillisecond));
 
         if (listing.ContractType != BybitContractType.LinearPerpetual || until <= request.From)
         {
