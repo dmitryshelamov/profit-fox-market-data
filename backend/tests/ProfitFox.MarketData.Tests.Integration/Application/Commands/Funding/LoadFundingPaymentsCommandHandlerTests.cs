@@ -54,12 +54,13 @@ public class LoadFundingPaymentsCommandHandlerTests
     private MarketDataTestApplication _app = null!;
     private HttpClient _client = null!;
 
-    private async Task<LoadFundingPaymentsResult> LoadAsync()
+    private async Task<LoadFundingPaymentsResult> LoadAsync(DateTimeOffset? requestedAt = null)
     {
         await using AsyncServiceScope scope = _app.Services.CreateAsyncScope();
+        DateTimeOffset at = requestedAt ?? RequestedAt;
 
         return await scope.ServiceProvider.GetRequiredService<ISender>()
-            .Send(new LoadFundingPaymentsCommand(Perpetual.Id, From, RequestedAt), CancellationToken.None);
+            .Send(new LoadFundingPaymentsCommand(Perpetual.Id, at.AddDays(-365), at), CancellationToken.None);
     }
 
     private async Task<FundingPaymentsInternal> ReadAsync()
@@ -76,6 +77,25 @@ public class LoadFundingPaymentsCommandHandlerTests
     {
         return BybitAnswers.FundingPayments(
             [.. Enumerable.Range(start: 0, count).Select(index => BybitAnswers.FundingPayment("BTCUSDT", "0.0001", newest.AddHours(-8 * index)))]);
+    }
+
+    // The clock of the app is finer than a microsecond, the database keeps microseconds and Bybit milliseconds: an end of the coverage
+    // that came back from storage a little before itself made a page of under a millisecond, which Bybit refused as starting after it ends.
+    [Test]
+    public async Task A_load_asked_at_a_moment_finer_than_a_millisecond_asks_Bybit_nothing_the_second_time()
+    {
+        DateTimeOffset requestedAt = RequestedAt.AddTicks(218297);
+        _app.Bybit.RespondJson(Page(Hour, count: 3));
+
+        LoadFundingPaymentsResult first = await LoadAsync(requestedAt);
+        LoadFundingPaymentsResult second = await LoadAsync(requestedAt);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first, Is.EqualTo(LoadFundingPaymentsResult.NothingLeft));
+            Assert.That(second, Is.EqualTo(LoadFundingPaymentsResult.NothingLeft));
+            Assert.That(_app.Bybit.Requests, Has.Count.EqualTo(1));
+        });
     }
 
     [Test]
