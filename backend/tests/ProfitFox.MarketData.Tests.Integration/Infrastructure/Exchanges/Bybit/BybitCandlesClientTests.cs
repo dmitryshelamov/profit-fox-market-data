@@ -155,6 +155,26 @@ public class BybitCandlesClientTests
         Assert.That(await _candles.GetTradingStartAsync(Spot, Start.AddDays(-365), CancellationToken.None), Is.Null);
     }
 
+    // Bybit answers it now and then on candles, as v5 saw on soyo-02: a failure of its own server, which the next attempt gets past.
+    [Test]
+    public async Task A_system_error_of_Bybit_in_an_ok_answer_is_retried()
+    {
+        _bybit
+            .RespondJson(BybitAnswers.Error(code: 10016, "svc error: Get kline failed"))
+            .RespondJson(BybitAnswers.Klines("linear", Linear.Symbol, BybitAnswers.Kline(Start, "1", "1", "1", "1", "1", "1")));
+
+        Task<IReadOnlyList<Candle>> loading = _candles.GetAsync(Linear, Minutes(from: 0, until: 60), CancellationToken.None);
+
+        // The retry waits a second on the clock.
+        await _time.PassNextWaitAsync();
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That((await loading).Select(candle => candle.OpenTime), Is.EqualTo(new[] { Start }));
+            Assert.That(_bybit.Requests, Has.Count.EqualTo(2));
+        });
+    }
+
     [Test]
     public async Task Candles_of_a_range_come_oldest_first_as_Bybit_gave_them_and_one_without_volume_has_nothing_bought()
     {
