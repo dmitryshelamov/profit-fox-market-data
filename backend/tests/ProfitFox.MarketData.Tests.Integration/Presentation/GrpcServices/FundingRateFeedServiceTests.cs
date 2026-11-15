@@ -157,8 +157,7 @@ public class FundingRateFeedServiceTests
                 ],
                 CancellationToken.None);
 
-        using AsyncServerStreamingCall<FundingRateUpdate> call = await SubscribeAsync(
-            new SubscribeFundingRateRequest { Since = Timestamp.FromDateTimeOffset(HourAgo) });
+        using AsyncServerStreamingCall<FundingRateUpdate> call = await SubscribeAsync(new SubscribeFundingRateRequest { Since = Timestamp.FromDateTimeOffset(HourAgo) });
 
         _app.Services.GetRequiredService<ILiveFeed<InstrumentFundingRateInternal>>()
             .Publish([new InstrumentFundingRateInternal(Btc.Id, HourAgo.AddMinutes(10), FundingRate: 0.0001m)]);

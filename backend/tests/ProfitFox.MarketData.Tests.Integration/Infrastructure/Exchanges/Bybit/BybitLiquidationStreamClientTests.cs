@@ -68,8 +68,8 @@ public class BybitLiquidationStreamClientTests
             CancellationToken.None);
     }
 
-    [TestCase("Buy", true)]
-    [TestCase("Sell", false)]
+    [TestCase("Buy", arg2: true)]
+    [TestCase("Sell", arg2: false)]
     public async Task A_liquidation_is_told_with_the_side_of_its_position_Buy_for_a_long_one(string side, bool ofLong)
     {
         await SubscribeAsync("BTCUSDT");

@@ -11,11 +11,12 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the long/short ratio of every listed linear contract of Bybit quoted in USDT, back to
-///     <see cref="LongShortRatioSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to their launch, and on from where it was loaded to, while
-///     <see cref="LongShortRatioSyncSettings" /> enable Bybit. Bybit has no other source of the ratio than its history, a contract a
-///     request, so the newest points come with the rounds of this loading and not from a snapshot of the market. It goes in rounds
-///     (<see cref="Loading" />), <see cref="LongShortRatioSyncSettings.Parallelism" /> contracts at a time, while pages are left; then
-///     it waits <see cref="LongShortRatioSyncSettings.IdleSeconds" /> and looks again. The settings are read again before every round.
+///     <see cref="LongShortRatioSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to their launch, and on
+///     from where it was loaded to, while <see cref="LongShortRatioSyncSettings" /> enable Bybit. Bybit has no other source of the ratio
+///     than its history, a contract a request, so the newest points come with the rounds of this loading and not from a snapshot of the
+///     market. It goes in rounds (<see cref="Loading" />), <see cref="LongShortRatioSyncSettings.Parallelism" /> contracts at a time,
+///     while pages are left; then it waits <see cref="LongShortRatioSyncSettings.IdleSeconds" /> and looks again. The settings are read
+///     again before every round.
 /// </summary>
 internal sealed class LongShortRatioSyncBackgroundService(
     IServiceScopeFactory scopes,
@@ -60,7 +61,8 @@ internal sealed class LongShortRatioSyncBackgroundService(
             instruments.Where(HasLongShortRatio),
             sync.Parallelism,
             async (instrument, token) =>
-                await scopes.SendAsync(new LoadLongShortRatioCommand(instrument.Id, whole.HistoryFrom(instrument, historyFrom), time.GetUtcNow()), token) == LoadLongShortRatioResult.MoreLeft,
+                await scopes.SendAsync(new LoadLongShortRatioCommand(instrument.Id, whole.HistoryFrom(instrument, historyFrom), time.GetUtcNow()), token) ==
+                LoadLongShortRatioResult.MoreLeft,
             stoppingToken);
     }
 

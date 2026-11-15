@@ -206,7 +206,7 @@ public class LiquidationStreamBackgroundServiceTests
 
         while (_marked.Reader.TryRead(out InvalidateLiquidationsCommand? command))
         {
-            marks.Add(new Mark(string.Join('+', command.InstrumentIds.Select(Name).Order()), command.From, command.Until));
+            marks.Add(new Mark(string.Join(separator: '+', command.InstrumentIds.Select(Name).Order()), command.From, command.Until));
         }
 
         return marks;

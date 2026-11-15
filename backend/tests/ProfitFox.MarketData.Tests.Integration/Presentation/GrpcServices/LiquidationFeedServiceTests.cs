@@ -203,8 +203,7 @@ public class LiquidationFeedServiceTests
             ],
             CancellationToken.None);
 
-        using AsyncServerStreamingCall<LiquidationUpdate> call = await SubscribeAsync(
-            new SubscribeLiquidationsRequest { Since = Timestamp.FromDateTimeOffset(HourAgo) });
+        using AsyncServerStreamingCall<LiquidationUpdate> call = await SubscribeAsync(new SubscribeLiquidationsRequest { Since = Timestamp.FromDateTimeOffset(HourAgo) });
 
         // Saved before any stored minute is read by the caller: it waits in the subscription and is not left out.
         var live = new LiquidationMinute(Btc.Id, HourAgo.AddMinutes(2), new LiquidationSum(volume: 5m, turnover: 5m, count: 1), LiquidationSum.None);

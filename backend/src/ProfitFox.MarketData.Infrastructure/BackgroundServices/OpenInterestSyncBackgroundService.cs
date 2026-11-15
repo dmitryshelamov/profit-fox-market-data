@@ -11,11 +11,11 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the history of open interest of every listed linear contract of Bybit, back to
-///     <see cref="OpenInterestSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to their launch, and the steps the collection missed, while
-///     <see cref="OpenInterestSyncSettings" /> enable Bybit. It goes in rounds (<see cref="Loading" />),
-///     <see cref="OpenInterestSyncSettings.Parallelism" /> contracts at a time, while pages are left; then it waits
-///     <see cref="OpenInterestSyncSettings.IdleSeconds" /> and looks again. A round in which the collection missed nothing asks Bybit
-///     nothing. The settings are read again before every round.
+///     <see cref="OpenInterestSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to their launch, and the
+///     steps the collection missed, while <see cref="OpenInterestSyncSettings" /> enable Bybit. It goes in rounds
+///     (<see cref="Loading" />), <see cref="OpenInterestSyncSettings.Parallelism" /> contracts at a time, while pages are left; then it
+///     waits <see cref="OpenInterestSyncSettings.IdleSeconds" /> and looks again. A round in which the collection missed nothing asks
+///     Bybit nothing. The settings are read again before every round.
 /// </summary>
 internal sealed class OpenInterestSyncBackgroundService(
     IServiceScopeFactory scopes,
@@ -57,7 +57,8 @@ internal sealed class OpenInterestSyncBackgroundService(
             instruments.Where(HasOpenInterest),
             sync.Parallelism,
             async (instrument, token) =>
-                await scopes.SendAsync(new LoadOpenInterestCommand(instrument.Id, whole.HistoryFrom(instrument, historyFrom), time.GetUtcNow()), token) == LoadOpenInterestResult.MoreLeft,
+                await scopes.SendAsync(new LoadOpenInterestCommand(instrument.Id, whole.HistoryFrom(instrument, historyFrom), time.GetUtcNow()), token) ==
+                LoadOpenInterestResult.MoreLeft,
             stoppingToken);
     }
 
