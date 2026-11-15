@@ -40,6 +40,31 @@ On the server, `docker compose -p profit-fox-market-data ps` lists the services 
 `docker compose -p profit-fox-market-data logs market-data` shows the logs of the service. `/health` answers `Healthy` while
 the database answers, and 503 otherwise.
 
+### Settings without a restart
+
+`~/profit-fox-market-data/config/market-data.json` on soyo-02, if it exists, overrides any setting of `appsettings.json` and of the
+environment of `docker-compose.prod.yml`, and the service reads it again on each change. The folder is mounted into the container
+read-only as `/app/config`. When a change takes effect:
+
+| Settings | Take effect |
+|---|---|
+| `BybitApi` (`RequestsPerSecond`, `LimitPauseSeconds`, `BanPauseMinutes`), `TInvestApi:MarketDataRequestsPerMinute` | at once: the next request, the next pause |
+| the sections of the loadings and streams (`CandleSync`, `OpenInterestSync`, `FundingPaymentSync`, `LongShortRatioSync`, `BuyVolumeSync`, `InstrumentSync`, `CandleStream`, `LiquidationStream`, `TickerCollection`, `FullHistory`) | from the next round of each |
+| `Kestrel`, `ConnectionStrings`, `Metrics`, `Serilog` | only after a restart |
+
+```bash
+ssh 192.168.8.213 'nano ~/profit-fox-market-data/config/market-data.json'
+```
+
+```json
+{ "BybitApi": { "LimitPauseSeconds": 5, "RequestsPerSecond": 8 } }
+```
+
+A file that is not valid JSON, or no file, leaves the service on the settings of its image, at start and on a change alike; the log
+says so. A value that breaks a section, such as `"RequestsPerSecond": 0`, is logged once, and the section keeps its last valid
+settings until it is fixed; the same value in the file at a start stops the service, as a broken image would. The folder is made
+once as `soyo` (README, "Setting up the machines"), or Docker makes it owned by root.
+
 ### Secrets
 
 The secrets live only in `~/profit-fox-market-data/.env.prod` on soyo-02 (mode `600`), never in git, the image or GitHub:
@@ -124,6 +149,12 @@ ssh 192.168.8.213 'mkdir -p ~/profit-fox-market-data && curl -fsSL https://raw.g
 
 ```bash
 ssh 192.168.8.213 'umask 077 && test ! -e ~/profit-fox-market-data/.env.prod && printf "MARKETDATA_DB_PASSWORD=%s\n" "$(openssl rand -hex 32)" > ~/profit-fox-market-data/.env.prod'
+```
+
+The folder of the settings file, before the first deploy that mounts it:
+
+```bash
+ssh 192.168.8.213 'mkdir -p ~/profit-fox-market-data/config'
 ```
 
 The deploy key in `authorized_keys` of soyo-02, allowed only from soyo-03 and only as `deploy.sh`:

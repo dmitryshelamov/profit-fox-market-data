@@ -22,6 +22,7 @@ public class Program
         try
         {
             WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+            SettingsFile.AddTo(builder.Configuration);
 
             builder.Services.AddSerilog((services, configuration) => configuration
                 .ReadFrom.Configuration(builder.Configuration)

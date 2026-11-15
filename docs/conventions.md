@@ -105,6 +105,10 @@ and this file is silent, ask which to follow.
   the service goes on. A service that loads history page by page for many instruments goes in rounds of `Loading`, which holds
   what such loadings share: the parallelism, the pause of an exchange, an exchange that is unavailable, an instrument that failed. `BackgroundServicesRegistrar` registers the services with the checks of their sections; an exchange is
   switched by `ExchangeSyncSettings`. `MarketDataTestApplication` leaves the services out.
+- The settings of the API of an exchange (`BybitApiSettings`, `TInvestApiSettings`), which its gate and clients read on every
+  request, are registered with `LastValidOptionsMonitor`: a change that breaks them is logged once and the last valid ones stay, while
+  a section broken from the start still stops the app. A saved change reaches them from `config/market-data.json` of Presentation
+  (`SettingsFile`), which overrides every other source and is read again on each change.
 
 ## Presentation (`ProfitFox.MarketData.Presentation`)
 

@@ -22,7 +22,7 @@ internal static class BybitRegistrar
     /// <summary>
     ///     The public API, the public streams and the public archive of trades of Bybit and one gate for the process, which every client
     ///     of its API sends its requests through, each attempt counted in the metrics; an app with a broken BybitApi section stops at
-    ///     start.
+    ///     start, and a section broken later keeps its last valid settings.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -32,6 +32,7 @@ internal static class BybitRegistrar
             .Validate(bybit => bybit.LimitPauseSeconds > 0, "BybitApi:LimitPauseSeconds must be above zero.")
             .Validate(bybit => bybit.BanPauseMinutes > 0, "BybitApi:BanPauseMinutes must be above zero.")
             .ValidateOnStart();
+        LastValidOptionsMonitor<BybitApiSettings>.Register(services);
 
         services.AddBybit(options => options.Socket.SocketIndividualSubscriptionCombineTarget = StreamTopicsPerConnection);
 
