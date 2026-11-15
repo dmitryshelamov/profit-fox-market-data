@@ -76,23 +76,26 @@ ssh 192.168.8.213 'curl -fsSL https://raw.githubusercontent.com/dmitryshelamov/p
 
 Done once. Steps with `sudo` or in the GitHub settings are the owner's.
 
-The owner, on soyo-02: Docker Engine with Compose from the official Docker repository, as on soyo-01, `soyo` in the `docker`
-group, and `jq` for `deploy.sh`:
+The owner, on soyo-02: `curl` and `jq` for `deploy.sh`, Docker Engine with Compose from the official Docker repository and `soyo`
+in the `docker` group, with the log rotation and `live-restore` of soyo-01:
 
 ```bash
-ssh -t 192.168.8.213 'curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker soyo && sudo apt-get install -y jq'
+ssh -t 192.168.8.213 'sudo apt-get update -q && sudo apt-get install -y -q curl ca-certificates jq && curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker soyo && echo "{\"log-driver\":\"json-file\",\"log-opts\":{\"max-size\":\"10m\",\"max-file\":\"3\"},\"live-restore\":true}" | sudo tee /etc/docker/daemon.json && sudo systemctl restart docker'
 ```
 
-The owner, on soyo-03: a runner of this repository next to the one of profit-fox, in a folder of its own. Settings → Actions →
-Runners → New self-hosted runner (Linux) of this repository gives the download commands and a token; run them in
-`~/actions-runner-market-data` instead of `~/actions-runner`, then:
+On soyo-03: a runner of this repository, `soyo-03-profit-fox-market-data` with the label `soyo-03`, next to the one of
+profit-fox (`~/actions-runner-profit-fox`) in `~/actions-runner-profit-fox-market-data`: the runner of the version of the other,
+downloaded from `github.com/actions/runner/releases`, and registered with a token of this repository, which `gh` gives:
 
 ```bash
-./config.sh --url https://github.com/dmitryshelamov/profit-fox-market-data --token <token> --labels soyo-03 --unattended
+gh api -X POST repos/dmitryshelamov/profit-fox-market-data/actions/runners/registration-token --jq .token | ssh 192.168.8.142 'read -r token; cd ~/actions-runner-profit-fox-market-data && ./config.sh --url https://github.com/dmitryshelamov/profit-fox-market-data --token "$token" --name soyo-03-profit-fox-market-data --labels soyo-03 --work _work --unattended'
 ```
 
+It runs as the user service `actions-runner-profit-fox-market-data.service` of `soyo` (`~/.config/systemd/user`, `ExecStart`
+its `run.sh`, `Restart=always`), which linger keeps running without a login, so it needs no `sudo`:
+
 ```bash
-sudo ./svc.sh install soyo && sudo ./svc.sh start
+ssh 192.168.8.142 'systemctl --user status actions-runner-profit-fox-market-data.service'
 ```
 
 The owner, in GitHub:
@@ -112,7 +115,8 @@ The agent, with the owner's approval. On soyo-03, the deploy key and the host ke
 ssh soyo@192.168.8.142 'ssh-keygen -t ed25519 -N "" -C profit-fox-market-data-deploy -f ~/.ssh/profit-fox-market-data-deploy && ssh-keyscan -t ed25519 192.168.8.213 >> ~/.ssh/known_hosts'
 ```
 
-On soyo-02, the script and the password of the database, generated on the server and never printed:
+On soyo-02, the script and the password of the database, generated on the server and never printed (before the first merge into
+`main`, copy `deploy/deploy.sh` with `scp` instead):
 
 ```bash
 ssh 192.168.8.213 'mkdir -p ~/profit-fox-market-data && curl -fsSL https://raw.githubusercontent.com/dmitryshelamov/profit-fox-market-data/main/deploy/deploy.sh -o ~/profit-fox-market-data/deploy.sh && chmod 700 ~/profit-fox-market-data/deploy.sh'
