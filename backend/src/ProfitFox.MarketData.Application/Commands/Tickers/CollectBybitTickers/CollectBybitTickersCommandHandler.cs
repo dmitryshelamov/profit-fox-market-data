@@ -3,6 +3,7 @@ using MediatR;
 using ProfitFox.MarketData.Application.Ports.Tickers;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
+using ProfitFox.MarketData.Domain.Entities.OpenInterest;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Funding;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
@@ -11,10 +12,11 @@ using ProfitFox.MarketData.Domain.ValueObjects.OpenInterest;
 namespace ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
 
 /// <summary>
-///     Asks Bybit first, so the snapshot is as close to its minute boundary as the request allows, then matches the tickers to the listed
+///     Asks Bybit first, so the snapshot is as close to its boundary as the request allows, then matches the tickers to the listed
 ///     linear contracts of the catalog by symbol. A symbol the catalog does not have is left out: the sync of the catalog brings it, and
-///     its points start from the snapshot after that. Each series is saved by one call of its own repository: the two are read apart, so
-///     a minute whose funding rates were not saved keeps its open interest.
+///     its points start from the snapshot after that. A snapshot is of a time where a step of the open interest series starts,
+///     the step its history at the exchange has, so a collected point and a loaded one are of the same time. Each series is saved by
+///     one call of its own repository: the two are read apart, so a step whose funding rates were not saved keeps its open interest.
 /// </summary>
 internal sealed class CollectBybitTickersCommandHandler(
     IBybitTickersClient bybit,
@@ -22,8 +24,14 @@ internal sealed class CollectBybitTickersCommandHandler(
     IOpenInterestRepository openInterest,
     IFundingRateRepository fundingRates) : IRequestHandler<CollectBybitTickersCommand, CollectBybitTickersResult>
 {
+    /// <exception cref="ArgumentException">No step of the open interest series starts at the time of the snapshot.</exception>
     public async Task<CollectBybitTickersResult> Handle(CollectBybitTickersCommand request, CancellationToken cancellationToken)
     {
+        if (!OpenInterestSeries.StartsStep(request.Time))
+        {
+            throw new ArgumentException($"A snapshot is taken where a step starts; {request.Time:O} is between two steps.", nameof(request));
+        }
+
         IReadOnlyList<BybitLinearTicker> tickers = await bybit.GetLinearAsync(cancellationToken);
         IReadOnlyList<Instrument> stored = await instruments.GetByExchangeAsync(Exchange.Bybit, cancellationToken);
 

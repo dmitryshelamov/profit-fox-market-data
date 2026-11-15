@@ -108,24 +108,24 @@ public class CollectBybitTickersCommandHandlerTests
     }
 
     [Test]
-    public async Task Every_snapshot_adds_a_point_of_its_own_boundary()
+    public async Task Every_snapshot_adds_a_point_of_its_own_boundary_to_each_series()
     {
         _app.Bybit
             .RespondJson(BybitAnswers.Tickers("linear", BybitAnswers.LinearTicker("BTCUSDT", "52345.123", "0.00000331")))
             .RespondJson(BybitAnswers.Tickers("linear", BybitAnswers.LinearTicker("BTCUSDT", "52350", "-0.00000120")));
 
         await CollectAsync(Boundary);
-        await CollectAsync(Boundary.AddMinutes(1));
+        await CollectAsync(Boundary.AddMinutes(5));
 
         Assert.Multiple(async () =>
         {
             Assert.That(
                 await OpenInterestAsync(Perpetual),
-                Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, 52345.123m), new OpenInterestPointInternal(Boundary.AddMinutes(1), 52350m) }));
+                Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, 52345.123m), new OpenInterestPointInternal(Boundary.AddMinutes(5), 52350m) }));
             Assert.That(
                 await FundingRateAsync(Perpetual),
                 Is.EqualTo(
-                    new[] { new FundingRatePointInternal(Boundary, 0.00000331m), new FundingRatePointInternal(Boundary.AddMinutes(1), -0.00000120m) }));
+                    new[] { new FundingRatePointInternal(Boundary, 0.00000331m), new FundingRatePointInternal(Boundary.AddMinutes(5), -0.00000120m) }));
         });
     }
 }
