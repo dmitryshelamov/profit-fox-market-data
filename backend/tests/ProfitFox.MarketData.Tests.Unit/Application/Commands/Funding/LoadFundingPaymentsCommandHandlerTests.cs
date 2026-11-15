@@ -148,20 +148,16 @@ public class LoadFundingPaymentsCommandHandlerTests
     }
 
     [Test]
-    public async Task A_page_of_history_is_saved_and_not_told_to_the_feed()
+    public async Task A_page_before_the_coverage_is_saved_and_not_told_to_the_feed()
     {
-        // The first page of a contract, and a page before the coverage of another load: a year of the market is not live news.
-        BybitPaid(From, Until, full: false, PaidAt(Hour));
-        await Load();
-        bool firstPageTold = _told is not null;
-
         Stored(Hour.AddDays(-30), Until);
         BybitPaid(From, Hour.AddDays(-30), full: false, PaidAt(Hour.AddDays(-31)));
+
         await Load();
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstPageTold, Is.False);
+            // History, not live news.
             Assert.That(_told, Is.Null);
             Assert.That(_saved!.NewPayments, Is.EqualTo(new[] { PaidAt(Hour.AddDays(-31)) }));
         });
@@ -235,6 +231,22 @@ public class LoadFundingPaymentsCommandHandlerTests
     }
 
     [Test]
+    public async Task An_hour_without_a_payment_tells_the_feed_nothing()
+    {
+        // A contract that pays every eight hours, asked an hour after its payment.
+        Stored(Hour.AddDays(-30), Hour.AddHours(-1).AddSeconds(15));
+        BybitPaid(Hour.AddHours(-1).AddSeconds(15), Until, full: false);
+
+        await Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_saved!.CoveredUntil, Is.EqualTo(Until));
+            Assert.That(_told, Is.Null);
+        });
+    }
+
+    [Test]
     public void An_instrument_of_another_exchange_is_refused()
     {
         Instrument share = InstrumentGenerator.Generate(TInvestListedShareGenerator.Generate());
@@ -279,6 +291,39 @@ public class LoadFundingPaymentsCommandHandlerTests
             Assert.That(result, Is.EqualTo(LoadFundingPaymentsResult.MoreLeft));
             Assert.That(_saved!.CoveredFrom, Is.EqualTo(Hour.AddHours(-16)));
             Assert.That(_saved.CoveredUntil, Is.EqualTo(Until));
+
+            // The page is told to the feed; the payments before it will come as history and will not.
+            Assert.That(_told!.Select(payment => payment.Time), Is.EqualTo(payments.Select(payment => payment.Time)));
+        });
+    }
+
+    [Test]
+    public void Payments_that_could_not_be_saved_are_not_told_to_the_feed()
+    {
+        Stored(Hour.AddDays(-30), Hour.AddHours(-1).AddSeconds(15));
+        BybitPaid(Hour.AddHours(-1).AddSeconds(15), Until, full: false, PaidAt(Hour));
+        _series.SaveAsync(Arg.Any<FundingPaymentSeries>(), Arg.Any<CancellationToken>()).ThrowsAsync(new TimeoutException());
+
+        Assert.Multiple(() =>
+        {
+            // A subscriber that caught up from storage would not find them there.
+            Assert.That(() => Load(), Throws.InstanceOf<TimeoutException>());
+            Assert.That(_told, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task The_first_page_of_a_contract_is_saved_and_not_told_to_the_feed()
+    {
+        BybitPaid(From, Until, full: false, PaidAt(Hour));
+
+        await Load();
+
+        Assert.Multiple(() =>
+        {
+            // A year of the whole market is not live news.
+            Assert.That(_told, Is.Null);
+            Assert.That(_saved!.NewPayments, Is.EqualTo(new[] { PaidAt(Hour) }));
         });
     }
 

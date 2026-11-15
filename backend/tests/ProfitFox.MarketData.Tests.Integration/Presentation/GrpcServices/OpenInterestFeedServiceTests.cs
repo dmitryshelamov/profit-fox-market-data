@@ -230,12 +230,28 @@ public class OpenInterestFeedServiceTests
     }
 
     [Test]
+    public async Task A_subscription_from_further_back_than_the_setting_of_the_feed_tells_is_refused()
+    {
+        // An hour for this feed and a day for the other two: the service reads its own setting, not the one of another feed.
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("OpenInterestFeed:MaxCatchUpHours", "1"));
+        using GrpcChannel channel = Channel(app);
+        using AsyncServerStreamingCall<OpenInterestUpdate> call = new OpenInterestFeed.OpenInterestFeedClient(channel).Subscribe(
+            new SubscribeOpenInterestRequest { Since = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow.AddHours(-2)) });
+
+        await Assert.ThatAsync(
+            () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
+            Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.InvalidArgument));
+    }
+
+    [Test]
     public async Task The_stored_points_since_the_time_asked_come_first_oldest_first_and_the_live_ones_follow()
     {
         await StoreAsync(
             new OpenInterestPoint(Btc.Id, HourAgo.AddMinutes(-5), value: 1m),
             new OpenInterestPoint(Btc.Id, HourAgo, value: 2m),
-            new OpenInterestPoint(Eth.Id, HourAgo, value: 3m),
+
+            // As the history of the exchange tells a value, with its zeros: storage and the catch-up keep them.
+            new OpenInterestPoint(Eth.Id, HourAgo, value: 72241.05400000m),
             new OpenInterestPoint(Btc.Id, HourAgo.AddMinutes(5), value: 4m));
 
         using AsyncServerStreamingCall<OpenInterestUpdate> call = await SubscribeAsync(
@@ -247,7 +263,7 @@ public class OpenInterestFeedServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(updates.Select(update => update.OpenInterest), Is.EqualTo(new[] { "2", "3", "4", "5" }));
+            Assert.That(updates.Select(update => update.OpenInterest), Is.EqualTo(new[] { "2", "72241.05400000", "4", "5" }));
             Assert.That(updates[1].InstrumentId, Is.EqualTo(Eth.Id.ToString()));
         });
     }

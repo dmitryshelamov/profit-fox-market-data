@@ -5,6 +5,7 @@ using Grpc.Net.Client;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Application.Commands.Funding.LoadFundingPayments;
@@ -14,6 +15,7 @@ using ProfitFox.MarketData.Domain.Entities.Funding;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Funding;
+using ProfitFox.MarketData.Presentation;
 using ProfitFox.MarketData.Presentation.Protos;
 using ProfitFox.MarketData.Tests.Integration.Grpc;
 using ProfitFox.MarketData.Tests.Integration.Http;
@@ -44,16 +46,13 @@ public class FundingPaymentFeedServiceTests
         await _services.DisposeAsync();
     }
 
+    private const int SecondsOfHour = 3600;
+
     // The app runs on the real clock, and a subscription catches up on a day at most: the last payment was made at the hour before
-    // this one.
-    private static readonly DateTimeOffset LastHour = new DateTimeOffset(
-        DateTimeOffset.UtcNow.Year,
-        DateTimeOffset.UtcNow.Month,
-        DateTimeOffset.UtcNow.Day,
-        DateTimeOffset.UtcNow.Hour,
-        minute: 0,
-        second: 0,
-        TimeSpan.Zero).AddHours(-1);
+    // this one. The clock is read once: a second reading may be of the next hour, or of the next day.
+    private static readonly DateTimeOffset LastHour = DateTimeOffset
+        .FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds() / SecondsOfHour * SecondsOfHour)
+        .AddHours(-1);
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
 
@@ -68,7 +67,7 @@ public class FundingPaymentFeedServiceTests
     public void StartApp()
     {
         _app = new MarketDataTestApplication();
-        _channel = GrpcChannel.ForAddress(_app.Server.BaseAddress, new GrpcChannelOptions { HttpHandler = new ResponseVersionHandler(_app.Server.CreateHandler()) });
+        _channel = Channel(_app);
         _client = new FundingPaymentFeed.FundingPaymentFeedClient(_channel);
     }
 
@@ -77,6 +76,11 @@ public class FundingPaymentFeedServiceTests
     {
         _channel.Dispose();
         await _app.DisposeAsync();
+    }
+
+    private static GrpcChannel Channel(WebApplicationFactory<Program> app)
+    {
+        return GrpcChannel.ForAddress(app.Server.BaseAddress, new GrpcChannelOptions { HttpHandler = new ResponseVersionHandler(app.Server.CreateHandler()) });
     }
 
     // The call once the subscription is in place: what is published from then on reaches it.
@@ -144,6 +148,20 @@ public class FundingPaymentFeedServiceTests
             Assert.That(updates[0].FundingRate, Is.EqualTo("-0.00118658"));
             Assert.That(updates[1].FundingRate, Is.EqualTo("9"));
         });
+    }
+
+    [Test]
+    public async Task A_subscription_from_further_back_than_the_setting_of_the_feed_tells_is_refused()
+    {
+        // An hour for this feed and a day for the other two: the service reads its own setting, not the one of another feed.
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("FundingPaymentFeed:MaxCatchUpHours", "1"));
+        using GrpcChannel channel = Channel(app);
+        using AsyncServerStreamingCall<FundingPaymentUpdate> call = new FundingPaymentFeed.FundingPaymentFeedClient(channel).Subscribe(
+            new SubscribeFundingPaymentRequest { Since = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow.AddHours(-2)) });
+
+        await Assert.ThatAsync(
+            () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
+            Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.InvalidArgument));
     }
 
     [Test]
