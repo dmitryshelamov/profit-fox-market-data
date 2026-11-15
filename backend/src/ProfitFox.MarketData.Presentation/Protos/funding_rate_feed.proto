@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
+
+// The funding rate of the coming payment of the catalog as it is collected.
+service FundingRateFeed {
+  // Tells every point of the funding rate of a coming payment once it is stored, as it is stored, until the caller
+  // ends the call. With `since`, the stored ones of a time at or after it come first, oldest first, of every
+  // instrument, and the live ones follow with none left out. One may come twice on the way from the stored ones to the
+  // live ones: the caller takes them as one, by instrument and time. The response headers come once the subscription
+  // is in place.
+  //
+  // A point is one of the collection, taken where a five-minute step starts. The rate keeps changing until its
+  // payment and is not the rate paid in the end: that one is told by FundingPaymentFeed. A step the collection missed
+  // stays without a point: the exchange keeps no history of this rate.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeFundingRateRequest) returns (stream FundingRateUpdate);
+}
+
+message SubscribeFundingRateRequest {
+  // Where to catch up from; absent means live ones only.
+  google.protobuf.Timestamp since = 1;
+}
+
+// The funding rate of a coming payment at a time. The rate is a decimal number as text, exactly as stored: "-0.00012".
+message FundingRateUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  google.protobuf.Timestamp time = 2;
+
+  // The rate as a fraction, not a percent: "0.0001" is 0.01%. Below zero when the shorts pay the longs.
+  string funding_rate = 3;
+}

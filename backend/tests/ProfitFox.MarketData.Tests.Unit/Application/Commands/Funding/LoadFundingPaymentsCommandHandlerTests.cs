@@ -2,7 +2,9 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
 using ProfitFox.MarketData.Application.Commands.Funding.LoadFundingPayments;
+using ProfitFox.MarketData.Application.Contracts.Funding;
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.Funding;
 using ProfitFox.MarketData.Domain.Entities.Funding;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
@@ -23,12 +25,15 @@ public class LoadFundingPaymentsCommandHandlerTests
         _instruments = Substitute.For<IInstrumentRepository>();
         _series = Substitute.For<IFundingPaymentSeriesRepository>();
         _bybit = Substitute.For<IBybitFundingPaymentsClient>();
+        _feed = Substitute.For<ILiveFeed<InstrumentFundingPaymentInternal>>();
         _saved = null;
+        _told = null;
 
         _instruments.GetAsync(Btc.Id, Arg.Any<CancellationToken>()).Returns(Btc);
         _series.SaveAsync(Arg.Do<FundingPaymentSeries>(series => _saved = series), Arg.Any<CancellationToken>());
+        _feed.Publish(Arg.Do<IReadOnlyCollection<InstrumentFundingPaymentInternal>>(payments => _told = payments));
 
-        _handler = new LoadFundingPaymentsCommandHandler(_instruments, _series, _bybit);
+        _handler = new LoadFundingPaymentsCommandHandler(_instruments, _series, _bybit, _feed);
     }
 
     // Half a minute after a whole hour, as the loading asks.
@@ -46,7 +51,9 @@ public class LoadFundingPaymentsCommandHandlerTests
     private IInstrumentRepository _instruments = null!;
     private IFundingPaymentSeriesRepository _series = null!;
     private IBybitFundingPaymentsClient _bybit = null!;
+    private ILiveFeed<InstrumentFundingPaymentInternal> _feed = null!;
     private FundingPaymentSeries? _saved;
+    private IReadOnlyCollection<InstrumentFundingPaymentInternal>? _told;
     private LoadFundingPaymentsCommandHandler _handler = null!;
 
     private Task<LoadFundingPaymentsResult> Load(Instrument? instrument = null)
@@ -137,6 +144,26 @@ public class LoadFundingPaymentsCommandHandlerTests
         {
             Assert.That(() => Load(), Throws.InvalidOperationException);
             Assert.That(_saved, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task A_page_of_history_is_saved_and_not_told_to_the_feed()
+    {
+        // The first page of a contract, and a page before the coverage of another load: a year of the market is not live news.
+        BybitPaid(From, Until, full: false, PaidAt(Hour));
+        await Load();
+        bool firstPageTold = _told is not null;
+
+        Stored(Hour.AddDays(-30), Until);
+        BybitPaid(From, Hour.AddDays(-30), full: false, PaidAt(Hour.AddDays(-31)));
+        await Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstPageTold, Is.False);
+            Assert.That(_told, Is.Null);
+            Assert.That(_saved!.NewPayments, Is.EqualTo(new[] { PaidAt(Hour.AddDays(-31)) }));
         });
     }
 
@@ -286,6 +313,9 @@ public class LoadFundingPaymentsCommandHandlerTests
             Assert.That(_saved!.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));
             Assert.That(_saved.CoveredUntil, Is.EqualTo(Until));
             Assert.That(_saved.NewPayments, Is.EqualTo(new[] { PaidAt(Hour) }));
+
+            // A payment made since the service last looked is told to the feed.
+            Assert.That(_told, Is.EqualTo(new[] { new InstrumentFundingPaymentInternal(Btc.Id, Hour, FundingRate: 0.0001m) }));
         });
     }
 }

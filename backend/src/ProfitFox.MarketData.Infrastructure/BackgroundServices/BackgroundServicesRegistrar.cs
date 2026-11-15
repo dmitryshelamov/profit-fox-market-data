@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Ports.Candles;
+using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -55,6 +56,9 @@ internal static class BackgroundServicesRegistrar
                 "CandleStream:TInvest needs TInvestApi:Token while it is enabled.")
             .ValidateOnStart();
         services.AddSingleton<ILiveCandleFeed, LiveCandleFeed>();
+
+        // One feed a kind of market data, whatever the kind: its saving publishes and its gRPC service subscribes.
+        services.AddSingleton(typeof(ILiveFeed<>), typeof(LiveFeed<>));
         services.AddHostedService<CandleStreamBackgroundService>();
 
         services.AddOptions<BuyVolumeSyncSettings>()

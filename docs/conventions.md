@@ -61,6 +61,9 @@ and this file is silent, ask which to follow.
   port (`BybitLinearTicker`, `LiveCandle`); so is what an adapter cannot give as the domain keeps it (`BybitOpenInterestPoint`: the
   point of the domain carries its instrument, which the adapter does not know) or gives with more than the domain keeps
   (`BybitFundingPaymentsPage`: the payments and whether the page was full).
+- `Ports/Feeds` holds `ILiveFeed<T>`, the live feed of one kind of market data, whatever the kind: its handler publishes what it
+  saved, a gRPC service subscribes. The feed of candles has a port of its own (`ILiveCandleFeed`): a forming candle is not saved and
+  may be left out for a slow subscriber.
 - A query whose answer is too large to hold is an `IStreamRequest` (`GetClosedCandlesQuery`), read with `ISender.CreateStream`;
   its handler reads storage row by row.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
@@ -102,6 +105,12 @@ and this file is silent, ask which to follow.
   (`CandleFeedService`). A contract speaks of what a consumer needs to know and names no type of the code. gRPC needs HTTP/2,
   which has an endpoint of its own in the `Kestrel` section of `appsettings.json`.
 - Decimal numbers go over gRPC as text, exactly as stored: protobuf has no decimal type.
+- Every kind of market data the service holds is given two ways: a gRPC feed, through which other services get it in real time,
+  and a request for its history over a period, REST by instrument until a consumer needs more than pages give. A new kind brings
+  both in its slice, or says which one is left for later. A feed tells live only what is stored, catches up from storage with
+  `since`, and is a service of its own (`OpenInterestFeed`, `FundingRateFeed`, `FundingPaymentFeed`); what their calls do the same
+  way is `FeedCall`.
+- The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`.
 
 ## Files and code style
 

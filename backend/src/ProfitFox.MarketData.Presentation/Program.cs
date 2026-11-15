@@ -41,8 +41,18 @@ public class Program
                 .Validate(feed => feed.MaxCatchUpHours > 0, "CandleFeed:MaxCatchUpHours must be above zero.")
                 .ValidateOnStart();
 
-            // The feed of live candles; it needs HTTP/2, which has an endpoint of its own in the Kestrel section of the settings.
+            // An app with a broken section of a feed of points stops at start.
+            foreach (string feed in PointFeedSettings.Sections)
+            {
+                builder.Services.AddOptions<PointFeedSettings>(feed)
+                    .Bind(builder.Configuration.GetSection(feed))
+                    .Validate(settings => settings.MaxCatchUpHours > 0, $"{feed}:MaxCatchUpHours must be above zero.")
+                    .ValidateOnStart();
+            }
+
+            // The feeds of live market data; they need HTTP/2, which has an endpoint of its own in the Kestrel section of the settings.
             builder.Services.AddGrpc();
+            builder.Services.AddSingleton<FeedCall>();
 
             // The failures the application tells by an exception are answered in one place.
             builder.Services.AddProblemDetails();
@@ -74,6 +84,9 @@ public class Program
 
             app.MapControllers();
             app.MapGrpcService<CandleFeedService>();
+            app.MapGrpcService<OpenInterestFeedService>();
+            app.MapGrpcService<FundingRateFeedService>();
+            app.MapGrpcService<FundingPaymentFeedService>();
 
             app.Run();
 

@@ -1,6 +1,8 @@
 using MediatR;
 
+using ProfitFox.MarketData.Application.Contracts.Funding;
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.Funding;
 using ProfitFox.MarketData.Domain.Entities.Funding;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
@@ -13,12 +15,14 @@ namespace ProfitFox.MarketData.Application.Commands.Funding.LoadFundingPayments;
 /// <summary>
 ///     Loads the next uncovered page of the payments of a perpetual contract of Bybit; an instrument that pays no funding (a spot pair, a
 ///     dated futures contract) has nothing to load. Bybit gives the newest payments of a range, so a full page covers only the time from
-///     its oldest payment on, and the rest of the range is asked for by the next command.
+///     its oldest payment on, and the rest of the range is asked for by the next command. The payments made since the coverage ended
+///     are told to the live feed once saved; a page of history is not: a first load would tell a year of the whole market.
 /// </summary>
 internal sealed class LoadFundingPaymentsCommandHandler(
     IInstrumentRepository instruments,
     IFundingPaymentSeriesRepository series,
-    IBybitFundingPaymentsClient bybit) : IRequestHandler<LoadFundingPaymentsCommand, LoadFundingPaymentsResult>
+    IBybitFundingPaymentsClient bybit,
+    ILiveFeed<InstrumentFundingPaymentInternal> feed) : IRequestHandler<LoadFundingPaymentsCommand, LoadFundingPaymentsResult>
 {
     // Bybit tells a payment a few seconds after it is made; a time covered before that would lose the payment for good. The same wait,
     // for the same reason, as the Settling of LoadCandlesCommandHandler. The loading that sends the command must ask later after a
@@ -53,10 +57,17 @@ internal sealed class LoadFundingPaymentsCommandHandler(
             return LoadFundingPaymentsResult.NothingLeft;
         }
 
+        // Asked before the series takes the page: it grows by it.
+        bool paidSinceCoverage = stored is not null && range.From >= stored.CoveredUntil;
         BybitFundingPaymentsPage page = await bybit.GetAsync(listing, range.From, range.Until, cancellationToken);
         FundingPaymentSeries current = Covered(stored, instrument.Id, CoveredFrom(page, range.From, listing), range.Until, page);
 
         await series.SaveAsync(current, cancellationToken);
+
+        if (paidSinceCoverage && page.Payments.Count > 0)
+        {
+            feed.Publish([.. page.Payments.Select(payment => new InstrumentFundingPaymentInternal(instrument.Id, payment.Time, payment.Rate))]);
+        }
 
         return current.CoveredFrom > request.From ? LoadFundingPaymentsResult.MoreLeft : LoadFundingPaymentsResult.NothingLeft;
     }
