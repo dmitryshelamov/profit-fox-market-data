@@ -1,0 +1,43 @@
+using Dapper;
+
+using MediatR;
+
+using Npgsql;
+
+using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Queries;
+using ProfitFox.MarketData.Application.Queries.Funding;
+using ProfitFox.MarketData.Domain.Repositories;
+using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Funding.Contracts;
+using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Funding.Queries;
+
+namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Funding;
+
+/// <summary>
+///     Reads the stored points of the window as they are, oldest first, and cuts the answer at <see cref="PointWindow.MaxPoints" />.
+/// </summary>
+internal sealed class GetFundingRatesQueryHandler(IInstrumentRepository instruments, NpgsqlConnection connection)
+    : IRequestHandler<GetFundingRatesQuery, FundingRatePointsInternal>
+{
+    /// <exception cref="InstrumentNotFoundException">The catalog has no instrument of the id.</exception>
+    public async Task<FundingRatePointsInternal> Handle(GetFundingRatesQuery request, CancellationToken cancellationToken)
+    {
+        // One point over the limit tells that the window holds more, and is where the rest starts.
+        FundingRatePointDb[] rows =
+        [
+            .. await connection.QueryAsync<FundingRatePointDb>(
+                GetFundingRatesQueries.Points(request.InstrumentId, request.Window, PointWindow.MaxPoints + 1, cancellationToken))
+        ];
+
+        // Only an instrument of the catalog has points, so the catalog is asked only when none came.
+        if (rows.Length == 0 && await instruments.GetAsync(request.InstrumentId, cancellationToken) is null)
+        {
+            throw new InstrumentNotFoundException(request.InstrumentId);
+        }
+
+        return new FundingRatePointsInternal(
+            [.. rows.Take(PointWindow.MaxPoints).Select(row => new FundingRatePointInternal(row.Time, row.Rate))],
+            rows.Length > PointWindow.MaxPoints ? rows[^1].Time : null);
+    }
+}

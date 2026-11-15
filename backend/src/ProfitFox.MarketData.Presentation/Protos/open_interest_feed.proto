@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
+
+// The open interest of the catalog as it is collected.
+service OpenInterestFeed {
+  // Tells every point of open interest once it is stored, as it is stored, until the caller ends the call. With
+  // `since`, the stored ones of a time at or after it come first, oldest first, of every instrument, and the live ones
+  // follow with none left out. One may come twice on the way from the stored ones to the live ones: the caller takes
+  // them as one, by instrument and time. The response headers come once the subscription is in place.
+  //
+  // A live point is one of the collection, taken where a five-minute step starts. A step the collection missed is
+  // loaded from the history of the exchange and stored later; it is not told live. A caller that needs it subscribes
+  // again with `since`, or asks GET api/instruments/{id}/open-interest.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeOpenInterestRequest) returns (stream OpenInterestUpdate);
+}
+
+message SubscribeOpenInterestRequest {
+  // Where to catch up from; absent means live ones only.
+  google.protobuf.Timestamp since = 1;
+}
+
+// A point of open interest. The value is a decimal number as text, exactly as stored: "52345.123".
+message OpenInterestUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+  google.protobuf.Timestamp time = 2;
+
+  // How much of the base asset the open contracts of the instrument hold at the time.
+  string open_interest = 3;
+}

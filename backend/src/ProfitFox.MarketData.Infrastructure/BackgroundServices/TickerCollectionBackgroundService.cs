@@ -1,0 +1,108 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+using ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
+using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Domain.Entities.OpenInterest;
+
+namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
+
+/// <summary>
+///     Collects the open interest and the funding rates of the linear market of Bybit where every step of the open interest series
+///     starts, every five minutes in UTC, while <see cref="TickerCollectionSettings" /> enable Bybit: one command a step, with the time
+///     of its boundary. A snapshot not taken within <see cref="TickerCollectionSettings.DeadlineSeconds" /> of its boundary is given
+///     up, and so is one Bybit holds or fails: the service skips that step and waits for the next boundary. The settings are read again
+///     before every snapshot.
+/// </summary>
+internal sealed class TickerCollectionBackgroundService(
+    IServiceScopeFactory scopes,
+    IOptionsMonitor<TickerCollectionSettings> settings,
+    TimeProvider time,
+    ILogger<TickerCollectionBackgroundService> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Valid here: the app checks the settings when it starts.
+        TickerCollectionSettings collection = settings.CurrentValue;
+
+        DateTimeOffset? served = null;
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            // The boundary is where the step after the one that goes on starts. It is counted from the clock every time, so the
+            // snapshots do not drift and a boundary that passed while a snapshot was taken is skipped, not caught up with.
+            DateTimeOffset now = time.GetUtcNow();
+            DateTimeOffset boundary = OpenInterestSeries.StartOfStep(now) + OpenInterestSeries.Step;
+
+            // A timer may fire a moment before its boundary by the clock: the boundary just served is not served again.
+            if (boundary <= served)
+            {
+                boundary = served.Value + OpenInterestSeries.Step;
+            }
+
+            await Task.Delay(boundary - now, time, stoppingToken);
+            served = boundary;
+
+            collection = settings.CurrentOrLastValid(collection, logger);
+
+            if (collection.Bybit.Enabled)
+            {
+                await CollectAsync(boundary, TimeSpan.FromSeconds(collection.DeadlineSeconds), stoppingToken);
+            }
+        }
+    }
+
+    // The snapshot of one boundary, in a scope of its own. Whatever keeps it from being saved in time is logged and skips the step; an
+    // escaping exception would stop the host.
+    private async Task CollectAsync(DateTimeOffset boundary, TimeSpan deadline, CancellationToken stoppingToken)
+    {
+        // The deadline is counted from the boundary, not from when the service woke up: a late start leaves less time, or none.
+        TimeSpan left = boundary + deadline - time.GetUtcNow();
+
+        if (left <= TimeSpan.Zero)
+        {
+            logger.LogWarning(
+                "The service woke up more than {Deadline} s after {Boundary:O}; the tickers of Bybit for it are skipped.",
+                deadline.TotalSeconds,
+                boundary);
+
+            return;
+        }
+
+        // The rest of the deadline runs on the clock of the app, as every wait of the service does.
+        using var timeout = new CancellationTokenSource(left, time);
+        using var timeoutOrStopping = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, stoppingToken);
+
+        try
+        {
+            CollectBybitTickersResult collected = await scopes.SendAsync(new CollectBybitTickersCommand(boundary), timeoutOrStopping.Token);
+            logger.LogInformation(
+                "Collected {OpenInterestPoints} points of open interest and {FundingRatePoints} funding rates of Bybit for {Boundary:O}.",
+                collected.OpenInterestPoints,
+                collected.FundingRatePoints,
+                boundary);
+        }
+        catch (Exception exception) when (timeout.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                exception,
+                "The tickers of Bybit for {Boundary:O} were not collected within {Deadline} s; the step is skipped.",
+                boundary,
+                deadline.TotalSeconds);
+        }
+        catch (ExchangePausedException exception) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "Bybit holds the requests until {Until:O}; the tickers for {Boundary:O} are skipped: {Reason}",
+                exception.Until,
+                boundary,
+                exception.Message);
+        }
+        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "Collecting the tickers of Bybit for {Boundary:O} failed; the step is skipped.", boundary);
+        }
+    }
+}

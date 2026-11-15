@@ -1,0 +1,7 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\ProfitFox.MarketData.Application\ProfitFox.MarketData.Application.csproj"/>
+    </ItemGroup>
+
+</Project>

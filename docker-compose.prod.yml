@@ -1,0 +1,54 @@
+# Production on soyo-02 (192.168.8.213). deploy/deploy.sh runs it for one version, never by hand:
+#   MARKETDATA_VERSION=<N> docker compose -f docker-compose.prod.yml --env-file ~/profit-fox-market-data/.env.prod up -d
+# The service runs the image of version N, built from a commit of main. The secrets come from .env.prod on the server (mode
+# 600, never committed): MARKETDATA_DB_PASSWORD (hex, so it needs no escaping in the connection string) and
+# MARKETDATA_TINVEST_TOKEN (a read-only token of T-Invest of its own: the limits of T-Invest count per token). Every other
+# setting is the one of appsettings.json.
+name: profit-fox-market-data
+
+services:
+  # The port is not published: only the service uses the database.
+  db:
+    image: timescale/timescaledb:2.30.2-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: marketdata
+      POSTGRES_USER: marketdata
+      POSTGRES_PASSWORD: ${MARKETDATA_DB_PASSWORD:?}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "marketdata", "-d", "marketdata"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Migrates the database on start. REST on 5236 and gRPC on 5237 are open on the LAN of soyo-02 without authorization: the
+  # service gives only public market data. The metrics go to the Prometheus of profit-fox on soyo-03.
+  market-data:
+    image: ghcr.io/dmitryshelamov/profit-fox-market-data:${MARKETDATA_VERSION:?}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__MarketData: Host=db;Port=5432;Database=marketdata;Username=marketdata;Password=${MARKETDATA_DB_PASSWORD:?}
+      TInvestApi__Token: ${MARKETDATA_TINVEST_TOKEN:?}
+      Kestrel__Endpoints__Http__Url: http://0.0.0.0:5236
+      Kestrel__Endpoints__Grpc__Url: http://0.0.0.0:5237
+      Metrics__OtlpEndpoint: http://192.168.8.142:9090/api/v1/otlp/v1/metrics
+    ports:
+      - "5236:5236"
+      - "5237:5237"
+    # Unhealthy while the database does not answer; the start period covers the migrations.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:5236/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+volumes:
+  db:
+    name: profit-fox-market-data-db
