@@ -41,7 +41,6 @@ public class BybitTickersClientTests
     public void TearDown()
     {
         _bybit.Dispose();
-        _gate.Dispose();
     }
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
