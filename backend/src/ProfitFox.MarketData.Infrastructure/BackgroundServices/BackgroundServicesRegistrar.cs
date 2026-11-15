@@ -2,7 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Contracts.Liquidations;
+using ProfitFox.MarketData.Application.Contracts.LongShortRatio;
+using ProfitFox.MarketData.Application.Contracts.OpenInterest;
 using ProfitFox.MarketData.Application.Ports.Candles;
+using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
@@ -11,7 +16,8 @@ internal static class BackgroundServicesRegistrar
 {
     /// <summary>
     ///     The background sync of the catalog, the background loading of candles, the stream of closed candles, the filling of buy
-    ///     volumes, the collection of tickers, the loading of funding payments and the loading of open interest with their settings;
+    ///     volumes, the collection of tickers, the loading of funding payments, the loading of open interest, the stream of liquidations and the
+    ///     loading of the long/short ratio with their settings;
     ///     an app with a broken section stops at start rather than never working.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
@@ -73,6 +79,14 @@ internal static class BackgroundServicesRegistrar
             .ValidateOnStart();
         services.AddHostedService<TickerCollectionBackgroundService>();
 
+        // One feed a kind of market data: its saving publishes and its gRPC service subscribes. Each is registered by its kind, so a
+        // feed of a kind nobody publishes cannot be asked for by mistake.
+        services.AddSingleton<ILiveFeed<InstrumentOpenInterestInternal>, LiveFeed<InstrumentOpenInterestInternal>>();
+        services.AddSingleton<ILiveFeed<InstrumentFundingRateInternal>, LiveFeed<InstrumentFundingRateInternal>>();
+        services.AddSingleton<ILiveFeed<InstrumentFundingPaymentInternal>, LiveFeed<InstrumentFundingPaymentInternal>>();
+        services.AddSingleton<ILiveFeed<InstrumentLiquidationMinuteInternal>, LiveFeed<InstrumentLiquidationMinuteInternal>>();
+        services.AddSingleton<ILiveFeed<InstrumentLongShortRatioInternal>, LiveFeed<InstrumentLongShortRatioInternal>>();
+
         services.AddOptions<FundingPaymentSyncSettings>()
             .Bind(configuration.GetSection(FundingPaymentSyncSettings.Section))
             .Validate(sync => sync.HistoryDays > 0, "FundingPaymentSync:HistoryDays must be above zero.")
@@ -87,5 +101,20 @@ internal static class BackgroundServicesRegistrar
             .Validate(sync => sync.Parallelism > 0, "OpenInterestSync:Parallelism must be above zero.")
             .ValidateOnStart();
         services.AddHostedService<OpenInterestSyncBackgroundService>();
+
+        services.AddOptions<LiquidationStreamSettings>()
+            .Bind(configuration.GetSection(LiquidationStreamSettings.Section))
+            .Validate(stream => stream.RefreshSeconds > 0, "LiquidationStream:RefreshSeconds must be above zero.")
+            .Validate(stream => stream.SaveSeconds > 0, "LiquidationStream:SaveSeconds must be above zero.")
+            .ValidateOnStart();
+        services.AddHostedService<LiquidationStreamBackgroundService>();
+
+        services.AddOptions<LongShortRatioSyncSettings>()
+            .Bind(configuration.GetSection(LongShortRatioSyncSettings.Section))
+            .Validate(sync => sync.HistoryDays > 0, "LongShortRatioSync:HistoryDays must be above zero.")
+            .Validate(sync => sync.IdleSeconds > 0, "LongShortRatioSync:IdleSeconds must be above zero.")
+            .Validate(sync => sync.Parallelism > 0, "LongShortRatioSync:Parallelism must be above zero.")
+            .ValidateOnStart();
+        services.AddHostedService<LongShortRatioSyncBackgroundService>();
     }
 }

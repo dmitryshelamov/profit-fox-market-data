@@ -4,7 +4,7 @@ using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 namespace ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
 
 /// <summary>
-///     Listings of Bybit that trade, quoted in USDT: <c>BTC</c> gives <c>BTCUSDT</c>. A linear contract is perpetual with a launch time and a
+///     Listings of Bybit that trade, quoted in USDT unless said otherwise: <c>BTC</c> gives <c>BTCUSDT</c>. A linear contract is perpetual with a launch time and a
 ///     minimum value of an order; a spot pair has neither, so the two cover the filled and the empty optional values.
 /// </summary>
 public static class BybitListedInstrumentGenerator
@@ -24,6 +24,22 @@ public static class BybitListedInstrumentGenerator
             new InstrumentRules(tickSize, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
             BybitContractType.LinearPerpetual,
             launchTime ?? LaunchTime);
+    }
+
+    /// <summary>
+    ///     A perpetual contract of linear quoted in USDC, as <c>BTCPERP</c>: Bybit keeps no long/short ratio of one.
+    /// </summary>
+    public static BybitListedInstrument GenerateUsdcPerpetual(string baseAsset = "BTC")
+    {
+        return new BybitListedInstrument(
+            BybitCategory.Linear,
+            baseAsset + "PERP",
+            baseAsset,
+            quoteAsset: "USDC",
+            BybitInstrumentStatus.Trading,
+            new InstrumentRules(tickSize: 0.1m, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
+            BybitContractType.LinearPerpetual,
+            LaunchTime);
     }
 
     /// <summary>

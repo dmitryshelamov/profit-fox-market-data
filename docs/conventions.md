@@ -25,7 +25,10 @@ and this file is silent, ask which to follow.
 
 - Areas: `Instruments` (the catalog of exchange instruments), `Candles` (the minute candles of the instruments and how far storage holds them),
   `OpenInterest` (the open interest of the instruments, a point every five minutes, as far as storage holds it), `Funding` (the
-  funding rates of the instruments, point by point, and the payments their exchange settled, as far as storage holds them).
+  funding rates of the instruments, point by point, and the payments their exchange settled, as far as storage holds them),
+  `Liquidations` (the liquidations of the instruments, summed by the minute and by the side of the liquidated positions),
+  `LongShortRatio` (the shares of the accounts net long and net short in the instruments, a point every five minutes, as far as
+  storage holds it).
 - `Entities/<Area>` holds entities, `Entities/<Area>/Enums` the enums and their pure extensions (`BybitContractTypeExtensions`).
   `Entities/Base` holds `AggregateRoot`; `Events` holds `IDomainEvent`. Both are the shared base copied from profit-fox and stay
   even while no aggregate raises an event.
@@ -61,6 +64,9 @@ and this file is silent, ask which to follow.
   port (`BybitLinearTicker`, `LiveCandle`); so is what an adapter cannot give as the domain keeps it (`BybitOpenInterestPoint`: the
   point of the domain carries its instrument, which the adapter does not know) or gives with more than the domain keeps
   (`BybitFundingPaymentsPage`: the payments and whether the page was full).
+- `Ports/Feeds` holds `ILiveFeed<T>`, the live feed of one kind of market data, whatever the kind: its handler publishes what it
+  saved, a gRPC service subscribes. The feed of candles has a port of its own (`ILiveCandleFeed`): a forming candle is not saved and
+  may be left out for a slow subscriber. Its subscription is still an `ILiveSubscription<LiveCandle>`, so one call serves every feed.
 - A query whose answer is too large to hold is an `IStreamRequest` (`GetClosedCandlesQuery`), read with `ISender.CreateStream`;
   its handler reads storage row by row.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
@@ -102,6 +108,15 @@ and this file is silent, ask which to follow.
   (`CandleFeedService`). A contract speaks of what a consumer needs to know and names no type of the code. gRPC needs HTTP/2,
   which has an endpoint of its own in the `Kestrel` section of `appsettings.json`.
 - Decimal numbers go over gRPC as text, exactly as stored: protobuf has no decimal type.
+- Every kind of market data the service holds is given two ways: a gRPC feed, through which other services get it in real time,
+  and a request for its history over a period, REST by instrument until a consumer needs more than pages give. A new kind brings
+  both in its slice, or says which one is left for later. A feed is a service of its own (`OpenInterestFeed`, `FundingRateFeed`,
+  `FundingPaymentFeed`, `LiquidationFeed`, `LongShortRatioFeed`), tells live what is stored and catches up from storage with
+  `since`; the forming candle of `CandleFeed` is the one thing told that is not stored. What the calls of every feed do the same
+  way, the candles among them, is `FeedCall`.
+- The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`.
+  `candle_feed.proto`, the first contract, keeps its `SubscribeRequest`: a new name would change the generated code of its consumers.
+- What a handler publishes to a feed is made by the converter of the contract (`Contracts/<Area>/Converters`), as what a query gives.
 
 ## Files and code style
 

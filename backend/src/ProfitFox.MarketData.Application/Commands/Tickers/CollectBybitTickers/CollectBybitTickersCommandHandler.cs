@@ -1,5 +1,10 @@
 using MediatR;
 
+using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Contracts.Funding.Converters;
+using ProfitFox.MarketData.Application.Contracts.OpenInterest;
+using ProfitFox.MarketData.Application.Contracts.OpenInterest.Converters;
+using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.Tickers;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
@@ -17,12 +22,15 @@ namespace ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
 ///     its points start from the snapshot after that. A snapshot is of a time where a step of the open interest series starts,
 ///     the step its history at the exchange has, so a collected point and a loaded one are of the same time. Each series is saved by
 ///     one call of its own repository: the two are read apart, so a step whose funding rates were not saved keeps its open interest.
+///     What is saved is told to the live feed of its series right after, so a follower never hears of a point storage does not hold.
 /// </summary>
 internal sealed class CollectBybitTickersCommandHandler(
     IBybitTickersClient bybit,
     IInstrumentRepository instruments,
     IOpenInterestRepository openInterest,
-    IFundingRateRepository fundingRates) : IRequestHandler<CollectBybitTickersCommand, CollectBybitTickersResult>
+    IFundingRateRepository fundingRates,
+    ILiveFeed<InstrumentOpenInterestInternal> openInterestFeed,
+    ILiveFeed<InstrumentFundingRateInternal> fundingRateFeed) : IRequestHandler<CollectBybitTickersCommand, CollectBybitTickersResult>
 {
     /// <exception cref="ArgumentException">No step of the open interest series starts at the time of the snapshot.</exception>
     public async Task<CollectBybitTickersResult> Handle(CollectBybitTickersCommand request, CancellationToken cancellationToken)
@@ -63,11 +71,13 @@ internal sealed class CollectBybitTickersCommandHandler(
         if (openInterestPoints.Count > 0)
         {
             await openInterest.SaveAsync(openInterestPoints, cancellationToken);
+            openInterestFeed.Publish([.. openInterestPoints.Select(point => point.ToInternal())]);
         }
 
         if (fundingRatePoints.Count > 0)
         {
             await fundingRates.SaveAsync(fundingRatePoints, cancellationToken);
+            fundingRateFeed.Publish([.. fundingRatePoints.Select(point => point.ToInternal())]);
         }
 
         return new CollectBybitTickersResult(openInterestPoints.Count, fundingRatePoints.Count);

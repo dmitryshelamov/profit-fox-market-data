@@ -2,7 +2,10 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
 using ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
+using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Contracts.OpenInterest;
 using ProfitFox.MarketData.Application.Exceptions;
+using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.Tickers;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
@@ -24,13 +27,19 @@ public class CollectBybitTickersCommandHandlerTests
         _instruments = Substitute.For<IInstrumentRepository>();
         _openInterest = Substitute.For<IOpenInterestRepository>();
         _fundingRates = Substitute.For<IFundingRateRepository>();
+        _openInterestFeed = Substitute.For<ILiveFeed<InstrumentOpenInterestInternal>>();
+        _fundingRateFeed = Substitute.For<ILiveFeed<InstrumentFundingRateInternal>>();
         _savedOpenInterest = null;
         _savedFundingRates = null;
+        _toldOpenInterest = null;
+        _toldFundingRates = null;
 
         _openInterest.SaveAsync(Arg.Do<IReadOnlyCollection<OpenInterestPoint>>(points => _savedOpenInterest = points), Arg.Any<CancellationToken>());
         _fundingRates.SaveAsync(Arg.Do<IReadOnlyCollection<FundingRatePoint>>(points => _savedFundingRates = points), Arg.Any<CancellationToken>());
+        _openInterestFeed.Publish(Arg.Do<IReadOnlyCollection<InstrumentOpenInterestInternal>>(points => _toldOpenInterest = points));
+        _fundingRateFeed.Publish(Arg.Do<IReadOnlyCollection<InstrumentFundingRateInternal>>(points => _toldFundingRates = points));
 
-        _handler = new CollectBybitTickersCommandHandler(_bybit, _instruments, _openInterest, _fundingRates);
+        _handler = new CollectBybitTickersCommandHandler(_bybit, _instruments, _openInterest, _fundingRates, _openInterestFeed, _fundingRateFeed);
     }
 
     // A boundary where a step of the open interest series starts.
@@ -44,8 +53,12 @@ public class CollectBybitTickersCommandHandlerTests
     private IInstrumentRepository _instruments = null!;
     private IOpenInterestRepository _openInterest = null!;
     private IFundingRateRepository _fundingRates = null!;
+    private ILiveFeed<InstrumentOpenInterestInternal> _openInterestFeed = null!;
+    private ILiveFeed<InstrumentFundingRateInternal> _fundingRateFeed = null!;
     private IReadOnlyCollection<OpenInterestPoint>? _savedOpenInterest;
     private IReadOnlyCollection<FundingRatePoint>? _savedFundingRates;
+    private IReadOnlyCollection<InstrumentOpenInterestInternal>? _toldOpenInterest;
+    private IReadOnlyCollection<InstrumentFundingRateInternal>? _toldFundingRates;
     private CollectBybitTickersCommandHandler _handler = null!;
 
     private Task<CollectBybitTickersResult> Collect(DateTimeOffset? at = null)
@@ -227,6 +240,10 @@ public class CollectBybitTickersCommandHandlerTests
         {
             Assert.That(() => Collect(), Throws.InvalidOperationException);
             Assert.That(_savedOpenInterest, Is.EqualTo(new[] { new OpenInterestPoint(Btc.Id, Boundary, value: 52345.123m) }));
+
+            // The feed of each series tells what was saved of it, and nothing of what was not.
+            Assert.That(_toldOpenInterest, Is.EqualTo(new[] { new InstrumentOpenInterestInternal(Btc.Id, Boundary, OpenInterest: 52345.123m) }));
+            Assert.That(_toldFundingRates, Is.Null);
         });
     }
 
@@ -242,6 +259,33 @@ public class CollectBybitTickersCommandHandlerTests
         {
             Assert.That(() => Collect(), Throws.InvalidOperationException);
             Assert.That(_savedFundingRates, Is.Null);
+            Assert.That(_toldOpenInterest, Is.Null);
+            Assert.That(_toldFundingRates, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task What_a_snapshot_saved_is_told_to_the_feed_of_its_series()
+    {
+        Instrument futures = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateFutures());
+        Stored(Btc, futures);
+        Tickers(
+            new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: -0.00012m),
+            new BybitLinearTicker("BTCUSDT-25DEC26", OpenInterest: 810.5m, FundingRate: null));
+
+        await Collect();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                _toldOpenInterest,
+                Is.EquivalentTo(
+                    new[]
+                    {
+                        new InstrumentOpenInterestInternal(Btc.Id, Boundary, OpenInterest: 52345.123m),
+                        new InstrumentOpenInterestInternal(futures.Id, Boundary, OpenInterest: 810.5m)
+                    }));
+            Assert.That(_toldFundingRates, Is.EqualTo(new[] { new InstrumentFundingRateInternal(Btc.Id, Boundary, FundingRate: -0.00012m) }));
         });
     }
 
@@ -258,6 +302,8 @@ public class CollectBybitTickersCommandHandlerTests
             Assert.That(result, Is.EqualTo(new CollectBybitTickersResult(OpenInterestPoints: 0, FundingRatePoints: 0)));
             Assert.That(_savedOpenInterest, Is.Null);
             Assert.That(_savedFundingRates, Is.Null);
+            Assert.That(_toldOpenInterest, Is.Null);
+            Assert.That(_toldFundingRates, Is.Null);
         });
     }
 }

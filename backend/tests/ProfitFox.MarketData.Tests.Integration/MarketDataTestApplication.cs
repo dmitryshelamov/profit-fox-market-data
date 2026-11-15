@@ -77,6 +77,12 @@ internal sealed class MarketDataTestApplication(string tinvestToken = "test-toke
 
             // The loading of open interest would ask Bybit for every contract of the catalog once the app starts.
             services.Remove(services.Single(service => service.ImplementationType == typeof(OpenInterestSyncBackgroundService)));
+
+            // The stream of liquidations would connect to the real Bybit.
+            services.Remove(services.Single(service => service.ImplementationType == typeof(LiquidationStreamBackgroundService)));
+
+            // The loading of the long/short ratio would ask Bybit for every contract of the catalog once the app starts.
+            services.Remove(services.Single(service => service.ImplementationType == typeof(LongShortRatioSyncBackgroundService)));
         });
     }
 
