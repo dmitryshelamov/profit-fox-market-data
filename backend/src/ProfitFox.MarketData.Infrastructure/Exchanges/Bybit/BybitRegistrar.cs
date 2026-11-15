@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Application.Ports.Funding;
 using ProfitFox.MarketData.Application.Ports.Instruments;
+using ProfitFox.MarketData.Application.Ports.OpenInterest;
 using ProfitFox.MarketData.Application.Ports.Tickers;
 
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
@@ -35,6 +36,7 @@ internal static class BybitRegistrar
         services.AddScoped<IExchangeCandlesClient, BybitCandlesClient>();
         services.AddScoped<IBybitTickersClient, BybitTickersClient>();
         services.AddScoped<IBybitFundingPaymentsClient, BybitFundingPaymentsClient>();
+        services.AddScoped<IBybitOpenInterestClient, BybitOpenInterestClient>();
         services.AddSingleton<IBybitCandleStreamClient, BybitCandleStreamClient>();
         services.AddHttpClient<IBybitTradeArchiveClient, BybitTradeArchiveClient>(http => http.BaseAddress = TradeArchiveAddress);
     }

@@ -33,6 +33,7 @@ public class CollectBybitTickersCommandHandlerTests
         _handler = new CollectBybitTickersCommandHandler(_bybit, _instruments, _openInterest, _fundingRates);
     }
 
+    // A boundary where a step of the open interest series starts.
     private static readonly DateTimeOffset Boundary = new DateTimeOffset(year: 2026, month: 11, day: 14, hour: 12, minute: 5, second: 0, TimeSpan.Zero);
 
     private static readonly Instrument Btc = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear());
@@ -47,9 +48,9 @@ public class CollectBybitTickersCommandHandlerTests
     private IReadOnlyCollection<FundingRatePoint>? _savedFundingRates;
     private CollectBybitTickersCommandHandler _handler = null!;
 
-    private Task<CollectBybitTickersResult> Collect()
+    private Task<CollectBybitTickersResult> Collect(DateTimeOffset? at = null)
     {
-        return _handler.Handle(new CollectBybitTickersCommand(Boundary), CancellationToken.None);
+        return _handler.Handle(new CollectBybitTickersCommand(at ?? Boundary), CancellationToken.None);
     }
 
     private void Stored(params Instrument[] instruments)
@@ -150,6 +151,21 @@ public class CollectBybitTickersCommandHandlerTests
             Is.EquivalentTo(new[] { new FundingRatePoint(Btc.Id, Boundary, rate: 0.00000331m), new FundingRatePoint(Eth.Id, Boundary, rate: -0.00012m) }));
     }
 
+    [TestCase(1)]
+    [TestCase(4)]
+    public void A_snapshot_of_a_time_between_two_steps_is_refused_before_Bybit_is_asked(int minutesAfterTheStep)
+    {
+        Stored(Btc);
+        Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(() => Collect(Boundary.AddMinutes(minutesAfterTheStep)), Throws.ArgumentException);
+            Assert.That(_savedFundingRates, Is.Null);
+            await _bybit.DidNotReceive().GetLinearAsync(Arg.Any<CancellationToken>());
+        });
+    }
+
     [Test]
     public async Task A_spot_pair_of_the_symbol_of_a_ticker_gets_no_points()
     {
@@ -193,14 +209,14 @@ public class CollectBybitTickersCommandHandlerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(Collect, Throws.InstanceOf<ExchangePausedException>());
+            Assert.That(() => Collect(), Throws.InstanceOf<ExchangePausedException>());
             Assert.That(_savedOpenInterest, Is.Null);
             Assert.That(_savedFundingRates, Is.Null);
         });
     }
 
     [Test]
-    public void Funding_rates_that_fail_to_save_leave_the_open_interest_of_the_minute_saved()
+    public void Funding_rates_that_fail_to_save_leave_the_open_interest_of_the_step_saved()
     {
         Stored(Btc);
         Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
@@ -209,13 +225,13 @@ public class CollectBybitTickersCommandHandlerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(Collect, Throws.InvalidOperationException);
+            Assert.That(() => Collect(), Throws.InvalidOperationException);
             Assert.That(_savedOpenInterest, Is.EqualTo(new[] { new OpenInterestPoint(Btc.Id, Boundary, value: 52345.123m) }));
         });
     }
 
     [Test]
-    public void Open_interest_that_fails_to_save_leaves_the_funding_rates_of_the_minute_unsaved()
+    public void Open_interest_that_fails_to_save_leaves_the_funding_rates_of_the_step_unsaved()
     {
         Stored(Btc);
         Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
@@ -224,7 +240,7 @@ public class CollectBybitTickersCommandHandlerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(Collect, Throws.InvalidOperationException);
+            Assert.That(() => Collect(), Throws.InvalidOperationException);
             Assert.That(_savedFundingRates, Is.Null);
         });
     }

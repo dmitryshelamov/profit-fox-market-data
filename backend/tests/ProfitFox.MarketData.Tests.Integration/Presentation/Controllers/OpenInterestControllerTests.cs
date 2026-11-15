@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Application.Contracts.OpenInterest;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.OpenInterest;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.OpenInterest;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
@@ -143,6 +144,26 @@ public class OpenInterestControllerTests
 
             // The names of the contract and the value exactly as stored, not in the notation of a float.
             Assert.That(body, Does.Contain("\"openInterest\":0.00000331").And.Contain("\"time\":").And.Contain("\"continueFrom\":null"));
+            Assert.That(_app.Bybit.Requests, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task The_answer_tells_how_far_the_history_of_the_instrument_is_loaded()
+    {
+        await _services.GetRequiredService<IOpenInterestSeriesRepository>()
+            .SaveAsync(
+                OpenInterestSeries.Create(Linear.Id, Hour.AddDays(-30), Hour.AddMinutes(5), [new OpenInterestPoint(Linear.Id, Hour, value: 52345.123m)]),
+                CancellationToken.None);
+
+        string loaded = await _client.GetStringAsync(Url(Linear.Id, Hour, Hour.AddHours(1)));
+        string notLoaded = await _client.GetStringAsync(Url(Spot.Id, Hour, Hour.AddHours(1)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(loaded, Does.Contain("\"coveredFrom\":\"2026-10-15T10:00:00+00:00\"").And.Contain("\"coveredUntil\":\"2026-11-14T10:05:00+00:00\""));
+            Assert.That(loaded, Does.Contain("\"openInterest\":52345.123"));
+            Assert.That(notLoaded, Does.Contain("\"coveredFrom\":null").And.Contain("\"coveredUntil\":null"));
             Assert.That(_app.Bybit.Requests, Is.Empty);
         });
     }

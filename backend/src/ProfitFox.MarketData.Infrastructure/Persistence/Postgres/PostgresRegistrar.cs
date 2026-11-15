@@ -29,6 +29,7 @@ internal static class PostgresRegistrar
         services.AddScoped<IInstrumentRepository, InstrumentRepository>();
         services.AddScoped<ICandleSeriesRepository, CandleSeriesRepository>();
         services.AddScoped<IOpenInterestRepository, OpenInterestRepository>();
+        services.AddScoped<IOpenInterestSeriesRepository, OpenInterestSeriesRepository>();
         services.AddScoped<IFundingRateRepository, FundingRateRepository>();
         services.AddScoped<IFundingPaymentSeriesRepository, FundingPaymentSeriesRepository>();
 

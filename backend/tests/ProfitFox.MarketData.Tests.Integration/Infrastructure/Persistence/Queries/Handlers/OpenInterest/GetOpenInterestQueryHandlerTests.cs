@@ -7,6 +7,7 @@ using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries;
 using ProfitFox.MarketData.Application.Queries.OpenInterest;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.OpenInterest;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.OpenInterest;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
@@ -93,6 +94,22 @@ public class GetOpenInterestQueryHandlerTests
     }
 
     [Test]
+    public async Task An_instrument_of_the_catalog_with_no_history_loaded_tells_no_coverage()
+    {
+        // The collection kept a point, but nothing tells how far the points of the instrument are whole.
+        await StoreAsync(new OpenInterestPoint(Btc.Id, Hour, value: 5m));
+
+        OpenInterestPointsInternal points = await ReadAsync(Btc.Id, Hour, Hour.AddHours(1));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(points.Points, Has.Count.EqualTo(1));
+            Assert.That(points.CoveredFrom, Is.Null);
+            Assert.That(points.CoveredUntil, Is.Null);
+        });
+    }
+
+    [Test]
     public void An_instrument_the_catalog_does_not_have_is_not_found()
     {
         Assert.That(() => ReadAsync(Guid.NewGuid(), Hour, Hour.AddHours(1)), Throws.InstanceOf<InstrumentNotFoundException>());
@@ -139,6 +156,34 @@ public class GetOpenInterestQueryHandlerTests
                         new OpenInterestPointInternal(Hour.AddMinutes(5), 0.00000331m)
                     }));
             Assert.That(points.ContinueFrom, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task The_points_of_the_window_come_with_the_coverage_of_the_whole_series()
+    {
+        await _scope.ServiceProvider.GetRequiredService<IOpenInterestSeriesRepository>()
+            .SaveAsync(
+                OpenInterestSeries.Create(
+                    Btc.Id,
+                    Hour.AddDays(-30),
+                    Hour.AddMinutes(10),
+                    [new OpenInterestPoint(Btc.Id, Hour, value: 2m), new OpenInterestPoint(Btc.Id, Hour.AddMinutes(5), value: 3m)]),
+                CancellationToken.None);
+
+        // A window with no points in it, inside the coverage: the contract was listed, and had nothing there.
+        OpenInterestPointsInternal quiet = await ReadAsync(Btc.Id, Hour.AddDays(-2), Hour.AddDays(-1));
+        OpenInterestPointsInternal points = await ReadAsync(Btc.Id, Hour, Hour.AddMinutes(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(quiet.Points, Is.Empty);
+            Assert.That(quiet.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));
+            Assert.That(points.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour, 2m) }));
+
+            // The coverage is of the series, not of the window.
+            Assert.That(points.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));
+            Assert.That(points.CoveredUntil, Is.EqualTo(Hour.AddMinutes(10)));
         });
     }
 }

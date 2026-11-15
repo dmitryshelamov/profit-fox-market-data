@@ -14,10 +14,11 @@ namespace ProfitFox.MarketData.Presentation.Controllers;
 public sealed class OpenInterestController(ISender sender) : ControllerBase
 {
     /// <summary>
-    ///     The stored points of open interest of the instrument in <c>[from, to)</c>, oldest first, each with the time it was collected
-    ///     for; at most 1000 an answer. A window that holds more gives in <c>continueFrom</c> the time to ask the rest from, null
-    ///     otherwise. Nothing is loaded from the exchange: an instrument without open interest, or with none collected in the window, gives
-    ///     no points. An instrument the catalog does not have is a 404.
+    ///     The stored points of open interest of the instrument in <c>[from, to)</c>, oldest first, a point every five minutes; at most
+    ///     1000 an answer. A window that holds more gives in <c>continueFrom</c> the time to ask the rest from, null otherwise.
+    ///     <c>coveredFrom</c> and <c>coveredUntil</c> tell how far the history is loaded: between them every point the exchange has is
+    ///     stored, a time outside them is not loaded yet; both are null for an instrument with nothing loaded, as one without open
+    ///     interest is. Nothing is loaded from the exchange. An instrument the catalog does not have is a 404.
     /// </summary>
     [HttpGet]
     [ProducesResponseType<OpenInterestPointsInternal>(StatusCodes.Status200OK)]

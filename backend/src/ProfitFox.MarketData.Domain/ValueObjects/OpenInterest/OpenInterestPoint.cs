@@ -2,7 +2,8 @@ namespace ProfitFox.MarketData.Domain.ValueObjects.OpenInterest;
 
 /// <summary>
 ///     The open interest of an instrument at <see cref="Time" />: how much of the base asset its open contracts hold, as its exchange told
-///     it then. The points of an instrument are a series of their own, each with its own time; a time without a point was not collected.
+///     it then. The points of an instrument are a series of their own, one a step of the series; a step without a point was not collected
+///     or is not loaded yet.
 /// </summary>
 public sealed record OpenInterestPoint
 {
