@@ -1,7 +1,9 @@
 using MediatR;
 
 using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Contracts.Funding.Converters;
 using ProfitFox.MarketData.Application.Contracts.OpenInterest;
+using ProfitFox.MarketData.Application.Contracts.OpenInterest.Converters;
 using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.Tickers;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
@@ -69,13 +71,13 @@ internal sealed class CollectBybitTickersCommandHandler(
         if (openInterestPoints.Count > 0)
         {
             await openInterest.SaveAsync(openInterestPoints, cancellationToken);
-            openInterestFeed.Publish([.. openInterestPoints.Select(point => new InstrumentOpenInterestInternal(point.InstrumentId, point.Time, point.Value))]);
+            openInterestFeed.Publish([.. openInterestPoints.Select(point => point.ToInternal())]);
         }
 
         if (fundingRatePoints.Count > 0)
         {
             await fundingRates.SaveAsync(fundingRatePoints, cancellationToken);
-            fundingRateFeed.Publish([.. fundingRatePoints.Select(point => new InstrumentFundingRateInternal(point.InstrumentId, point.Time, point.Rate))]);
+            fundingRateFeed.Publish([.. fundingRatePoints.Select(point => point.ToInternal())]);
         }
 
         return new CollectBybitTickersResult(openInterestPoints.Count, fundingRatePoints.Count);
