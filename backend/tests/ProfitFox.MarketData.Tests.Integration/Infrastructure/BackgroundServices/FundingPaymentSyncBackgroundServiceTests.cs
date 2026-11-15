@@ -16,8 +16,10 @@ using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
+using ProfitFox.MarketData.Tests.Integration.Settings;
 using ProfitFox.MarketData.Tests.Integration.Time;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
@@ -64,6 +66,8 @@ public class FundingPaymentSyncBackgroundServiceTests
 
     private static readonly Instrument Btc = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear());
 
+    private static readonly DateTimeOffset BtcLaunch = ((BybitListedInstrument)Btc.Listing).LaunchTime!.Value;
+
     private static readonly Instrument Eth = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("ETH"));
 
     private static readonly Instrument Futures = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateFutures());
@@ -80,7 +84,7 @@ public class FundingPaymentSyncBackgroundServiceTests
 
     // The settings as the app binds them, one contract at a time, so the pages come in the order of the catalog; the sender is the last
     // ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true, DateTimeOffset? at = null)
+    private async Task StartAsync(bool bybit = true, DateTimeOffset? at = null, string[]? fullHistory = null)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -90,12 +94,14 @@ public class FundingPaymentSyncBackgroundServiceTests
                     ["FundingPaymentSync:Parallelism"] = "1",
                     ["FundingPaymentSync:Bybit:Enabled"] = bybit.ToString()
                 })
+            .AddInMemoryCollection(FullHistoryConfiguration.Of(fullHistory ?? []))
             .Build();
         _time = new WatchedTimeProvider(at ?? Start);
         _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new FundingPaymentSyncBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _services.GetRequiredService<IOptionsMonitor<FundingPaymentSyncSettings>>(),
+            _services.GetRequiredService<IOptionsMonitor<FullHistorySettings>>(),
             _time,
             NullLogger<FundingPaymentSyncBackgroundService>.Instance);
 
@@ -135,6 +141,16 @@ public class FundingPaymentSyncBackgroundServiceTests
         instrument.Delist(Start.AddDays(-1));
 
         return instrument;
+    }
+
+    [Test]
+    public async Task A_contract_named_for_a_whole_history_loads_it_from_its_launch()
+    {
+        await StartAsync(fullHistory: ["BTCUSDT"]);
+
+        IReadOnlyList<LoadFundingPaymentsCommand> sent = await SentAsync(count: 2);
+
+        Assert.That(sent, Is.EqualTo(new[] { new LoadFundingPaymentsCommand(Btc.Id, BtcLaunch, Start), PageOf(Eth, Start) }));
     }
 
     [Test]

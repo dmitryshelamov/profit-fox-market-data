@@ -11,7 +11,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the funding payments of every listed perpetual contract of Bybit, back to
-///     <see cref="FundingPaymentSyncSettings.HistoryDays" />, while <see cref="FundingPaymentSyncSettings" /> enable Bybit. A load
+///     <see cref="FundingPaymentSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to their launch, while <see cref="FundingPaymentSyncSettings" /> enable Bybit. A load
 ///     starts when the app starts and then half a minute after every whole hour, when the payments of that hour are told. It goes in
 ///     rounds (<see cref="Loading" />), <see cref="FundingPaymentSyncSettings.Parallelism" /> contracts at a time, while history is
 ///     left. A load still going at a whole hour is not cut short: the next one starts after the first whole hour that follows it and
@@ -20,6 +20,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal sealed class FundingPaymentSyncBackgroundService(
     IServiceScopeFactory scopes,
     IOptionsMonitor<FundingPaymentSyncSettings> settings,
+    IOptionsMonitor<FullHistorySettings> fullHistory,
     TimeProvider time,
     ILogger<FundingPaymentSyncBackgroundService> logger) : BackgroundService
 {
@@ -52,7 +53,8 @@ internal sealed class FundingPaymentSyncBackgroundService(
     private async Task LoadAsync(FundingPaymentSyncSettings sync, CancellationToken stoppingToken)
     {
         DateTimeOffset requestedAt = time.GetUtcNow();
-        DateTimeOffset from = requestedAt.AddDays(-sync.HistoryDays);
+        FullHistorySettings whole = fullHistory.CurrentValue;
+        DateTimeOffset historyFrom = requestedAt.AddDays(-sync.HistoryDays);
         var loading = new Loading("funding payments", time, logger);
         LoadingRoundResult round;
 
@@ -64,7 +66,7 @@ internal sealed class FundingPaymentSyncBackgroundService(
                 instruments.Where(PaysFunding),
                 sync.Parallelism,
                 async (instrument, token) =>
-                    await scopes.SendAsync(new LoadFundingPaymentsCommand(instrument.Id, from, requestedAt), token) == LoadFundingPaymentsResult.MoreLeft,
+                    await scopes.SendAsync(new LoadFundingPaymentsCommand(instrument.Id, whole.HistoryFrom(instrument, historyFrom), requestedAt), token) == LoadFundingPaymentsResult.MoreLeft,
                 stoppingToken);
         }
         while (round == LoadingRoundResult.MoreLeft && !stoppingToken.IsCancellationRequested);

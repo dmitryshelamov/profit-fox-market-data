@@ -17,8 +17,10 @@ using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
+using ProfitFox.MarketData.Tests.Integration.Settings;
 using ProfitFox.MarketData.Tests.Integration.Time;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
@@ -84,6 +86,10 @@ public class CandleSyncBackgroundServiceTests
 
     private static readonly Instrument Btc = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear());
 
+    private static readonly DateTimeOffset BtcLaunch = ((BybitListedInstrument)Btc.Listing).LaunchTime!.Value;
+
+    private static readonly Instrument BtcSpot = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateSpot());
+
     private static readonly Instrument Eth = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("ETH"));
 
     private static readonly Instrument Delisted = Delist(InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("LUNA")));
@@ -98,7 +104,7 @@ public class CandleSyncBackgroundServiceTests
     private CandleSyncBackgroundService? _service;
 
     // The settings as the app binds them; the sender is the last ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true, bool tinvest = true)
+    private async Task StartAsync(bool bybit = true, bool tinvest = true, string[]? fullHistory = null)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -110,12 +116,14 @@ public class CandleSyncBackgroundServiceTests
                     ["CandleSync:TInvest:Enabled"] = tinvest.ToString(),
                     ["TInvestApi:Token"] = "test-token"
                 })
+            .AddInMemoryCollection(FullHistoryConfiguration.Of(fullHistory ?? []))
             .Build();
         _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new CandleSyncBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _queue,
             _services.GetRequiredService<IOptionsMonitor<CandleSyncSettings>>(),
+            _services.GetRequiredService<IOptionsMonitor<FullHistorySettings>>(),
             _time,
             NullLogger<CandleSyncBackgroundService>.Instance);
 
@@ -309,5 +317,26 @@ public class CandleSyncBackgroundServiceTests
         Assert.That(
             first.Values,
             Is.EquivalentTo(new[] { new LoadCandlesCommand(Btc.Id, History, Start), new LoadCandlesCommand(Sber.Id, History, Start) }));
+    }
+
+    [Test]
+    public async Task The_instruments_named_for_a_whole_history_load_it_from_when_they_started_to_trade()
+    {
+        BybitHas(Btc, BtcSpot, Eth);
+
+        await StartAsync(tinvest: false, fullHistory: ["BTCUSDT"]);
+        IReadOnlyList<LoadCandlesCommand> firstRound = await SentAsync(count: 3);
+
+        // A linear contract tells its launch; a spot pair tells none, so its history reaches back to the Unix epoch, before any
+        // exchange traded, and ends at the first page Bybit gives no candle for.
+        Assert.That(
+            firstRound,
+            Is.EqualTo(
+                new[]
+                {
+                    new LoadCandlesCommand(Btc.Id, new MinuteRange(BtcLaunch, StartMinute), Start, WholeHistory: true),
+                    new LoadCandlesCommand(BtcSpot.Id, new MinuteRange(DateTimeOffset.UnixEpoch, StartMinute), Start, WholeHistory: true),
+                    new LoadCandlesCommand(Eth.Id, History, Start)
+                }));
     }
 }
