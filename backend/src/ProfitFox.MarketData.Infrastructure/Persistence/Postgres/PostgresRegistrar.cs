@@ -30,6 +30,7 @@ internal static class PostgresRegistrar
         services.AddScoped<ICandleSeriesRepository, CandleSeriesRepository>();
         services.AddScoped<IOpenInterestRepository, OpenInterestRepository>();
         services.AddScoped<IFundingRateRepository, FundingRateRepository>();
+        services.AddScoped<IFundingPaymentSeriesRepository, FundingPaymentSeriesRepository>();
 
         services
             .AddFluentMigratorCore()

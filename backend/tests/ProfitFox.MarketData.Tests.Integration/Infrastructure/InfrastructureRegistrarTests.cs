@@ -31,6 +31,18 @@ public class InfrastructureRegistrarTests
         Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<TickerCollectionSettings>>().Value);
     }
 
+    [TestCase("FundingPaymentSync:HistoryDays")]
+    [TestCase("FundingPaymentSync:Parallelism")]
+    public void A_loading_of_funding_payments_of_no_days_or_of_no_contract_at_a_time_is_refused(string setting)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [setting] = "0" })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<FundingPaymentSyncSettings>>().Value);
+    }
+
     [Test]
     public void A_stream_of_shares_without_a_token_is_refused()
     {

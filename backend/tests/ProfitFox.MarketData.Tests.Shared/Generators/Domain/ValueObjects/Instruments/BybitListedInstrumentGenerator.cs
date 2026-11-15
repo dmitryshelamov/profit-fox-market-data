@@ -26,6 +26,22 @@ public static class BybitListedInstrumentGenerator
             LaunchTime);
     }
 
+    /// <summary>
+    ///     A dated futures contract of linear: it has a delivery time and pays no funding.
+    /// </summary>
+    public static BybitListedInstrument GenerateFutures(string baseAsset = "BTC")
+    {
+        return new BybitListedInstrument(
+            BybitCategory.Linear,
+            baseAsset + QuoteAsset + "-25DEC26",
+            baseAsset,
+            QuoteAsset,
+            BybitInstrumentStatus.Trading,
+            new InstrumentRules(tickSize: 0.1m, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
+            BybitContractType.LinearFutures,
+            LaunchTime);
+    }
+
     public static BybitListedInstrument GenerateSpot(string baseAsset = "BTC", decimal tickSize = 0.01m)
     {
         return new BybitListedInstrument(
