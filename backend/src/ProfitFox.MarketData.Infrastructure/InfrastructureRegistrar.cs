@@ -6,6 +6,7 @@ using ProfitFox.MarketData.Infrastructure.Exchanges.Bybit;
 using ProfitFox.MarketData.Infrastructure.Exchanges.Retry;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
 using ProfitFox.MarketData.Infrastructure.Mediatr;
+using ProfitFox.MarketData.Infrastructure.Observability;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres;
 
 namespace ProfitFox.MarketData.Infrastructure;
@@ -16,7 +17,8 @@ public static class InfrastructureRegistrar
     ///     MediatR with its handlers, the catalog, the candles, the open interest, the funding rates and the funding payments in
     ///     Postgres with their migrations, the public API, streams and archive of trades of Bybit, the Invest API of T-Invest, the
     ///     background sync of the catalog, the background loading of candles, the stream of closed candles, the filling of buy volumes,
-    ///     the collection of tickers, the loading of funding payments, the loading of open interest and the clock.
+    ///     the collection of tickers, the loading of funding payments, the loading of open interest, the clock and the metrics of the
+    ///     calls to the exchanges.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
@@ -29,6 +31,8 @@ public static class InfrastructureRegistrar
         BybitRegistrar.Configure(configuration, services);
 
         TInvestRegistrar.Configure(configuration, services);
+
+        MetricsRegistrar.Configure(configuration, services);
 
         BackgroundServicesRegistrar.Configure(configuration, services);
 

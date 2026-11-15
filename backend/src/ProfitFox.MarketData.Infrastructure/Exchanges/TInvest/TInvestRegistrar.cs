@@ -1,5 +1,7 @@
 using System.Net.Security;
 
+using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
 
 using Microsoft.Extensions.Configuration;
@@ -17,8 +19,8 @@ internal static class TInvestRegistrar
 {
     /// <summary>
     ///     One gRPC channel to T-Invest for the process, opened on the first call and trusting the server by
-    ///     <see cref="TInvestCertificates" />, and the clients of its instruments, market data and candle stream over it; a test host
-    ///     replaces the clients to answer the calls itself.
+    ///     <see cref="TInvestCertificates" />, and the clients of its instruments, market data and candle stream over it, the unary calls
+    ///     counted in the metrics; a test host replaces the clients to answer the calls itself.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -42,8 +44,13 @@ internal static class TInvestRegistrar
                 },
                 ThrowOperationCanceledOnCancellation = true
             }));
-        services.AddSingleton(provider => new InstrumentsService.InstrumentsServiceClient(provider.GetRequiredService<GrpcChannel>()));
-        services.AddSingleton(provider => new MarketDataService.MarketDataServiceClient(provider.GetRequiredService<GrpcChannel>()));
+
+        // The clients of unary calls go through the counter of the metrics.
+        services.AddSingleton<TInvestMetrics>();
+        services.AddSingleton(
+            provider => provider.GetRequiredService<GrpcChannel>().Intercept(new TInvestMetricsInterceptor(provider.GetRequiredService<TInvestMetrics>())));
+        services.AddSingleton(provider => new InstrumentsService.InstrumentsServiceClient(provider.GetRequiredService<CallInvoker>()));
+        services.AddSingleton(provider => new MarketDataService.MarketDataServiceClient(provider.GetRequiredService<CallInvoker>()));
         services.AddScoped<ITInvestSharesClient, TInvestSharesClient>();
         services.AddSingleton<TInvestRequestGate>();
         services.AddScoped<IExchangeCandlesClient, TInvestCandlesClient>();

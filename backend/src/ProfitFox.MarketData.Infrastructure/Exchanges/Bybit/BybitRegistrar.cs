@@ -21,7 +21,8 @@ internal static class BybitRegistrar
 
     /// <summary>
     ///     The public API, the public streams and the public archive of trades of Bybit and one gate for the process, which every client
-    ///     of its API sends its requests through; an app with a broken BybitApi section stops at start.
+    ///     of its API sends its requests through, each attempt counted in the metrics; an app with a broken BybitApi section stops at
+    ///     start.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -33,6 +34,10 @@ internal static class BybitRegistrar
             .ValidateOnStart();
 
         services.AddBybit(options => options.Socket.SocketIndividualSubscriptionCombineTarget = StreamTopicsPerConnection);
+
+        // The SDK takes its HTTP client from the factory, so the counter on every client of the factory counts its requests.
+        services.AddTransient<BybitRestMetricsHandler>();
+        services.ConfigureHttpClientDefaults(http => http.AddHttpMessageHandler<BybitRestMetricsHandler>());
         services.AddSingleton<BybitRequestGate>();
         services.AddScoped<IBybitInstrumentsClient, BybitInstrumentsClient>();
         services.AddScoped<IExchangeCandlesClient, BybitCandlesClient>();

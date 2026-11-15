@@ -16,6 +16,8 @@ internal sealed class StubGrpcInvoker : CallInvoker
 
     private readonly Dictionary<string, Func<object>> _answers = [];
 
+    private readonly Dictionary<string, Metadata> _headers = [];
+
     private readonly Channel<IStubGrpcStream> _streams = Channel.CreateUnbounded<IStubGrpcStream>();
 
     /// <summary>
@@ -24,11 +26,13 @@ internal sealed class StubGrpcInvoker : CallInvoker
     public List<StubGrpcCall> Calls { get; } = [];
 
     /// <summary>
-    ///     Answers <paramref name="method" /> (its name, such as <c>Shares</c>) with <paramref name="response" />.
+    ///     Answers <paramref name="method" /> (its name, such as <c>Shares</c>) with <paramref name="response" /> and the response
+    ///     <paramref name="headers" />, none by default.
     /// </summary>
-    public StubGrpcInvoker Respond(string method, object response)
+    public StubGrpcInvoker Respond(string method, object response, Metadata? headers = null)
     {
         _answers[method] = () => response;
+        _headers[method] = headers ?? [];
 
         return this;
     }
@@ -47,7 +51,9 @@ internal sealed class StubGrpcInvoker : CallInvoker
     {
         Calls.Add(new StubGrpcCall(method.Name, request, options.Headers ?? []));
 
-        return new AsyncUnaryCall<TResponse>(Answer<TResponse>(method.Name), Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => [], () => { });
+        Metadata headers = _headers.GetValueOrDefault(method.Name) ?? [];
+
+        return new AsyncUnaryCall<TResponse>(Answer<TResponse>(method.Name), Task.FromResult(headers), () => Status.DefaultSuccess, () => [], () => { });
     }
 
     public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
