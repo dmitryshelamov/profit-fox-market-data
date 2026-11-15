@@ -66,7 +66,7 @@ and this file is silent, ask which to follow.
   (`BybitFundingPaymentsPage`: the payments and whether the page was full).
 - `Ports/Feeds` holds `ILiveFeed<T>`, the live feed of one kind of market data, whatever the kind: its handler publishes what it
   saved, a gRPC service subscribes. The feed of candles has a port of its own (`ILiveCandleFeed`): a forming candle is not saved and
-  may be left out for a slow subscriber.
+  may be left out for a slow subscriber. Its subscription is still an `ILiveSubscription<LiveCandle>`, so one call serves every feed.
 - A query whose answer is too large to hold is an `IStreamRequest` (`GetClosedCandlesQuery`), read with `ISender.CreateStream`;
   its handler reads storage row by row.
 - `Exceptions` holds the failures a port may throw and a caller handles (`ExchangePausedException`, `TransientExchangeException`,
@@ -112,8 +112,8 @@ and this file is silent, ask which to follow.
   and a request for its history over a period, REST by instrument until a consumer needs more than pages give. A new kind brings
   both in its slice, or says which one is left for later. A feed is a service of its own (`OpenInterestFeed`, `FundingRateFeed`,
   `FundingPaymentFeed`, `LiquidationFeed`, `LongShortRatioFeed`), tells live what is stored and catches up from storage with
-  `since`; the forming candle of `CandleFeed` is the one thing told that is not stored. What the calls of the feeds of points do
-  the same way is `FeedCall`.
+  `since`; the forming candle of `CandleFeed` is the one thing told that is not stored. What the calls of every feed do the same
+  way, the candles among them, is `FeedCall`.
 - The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`.
   `candle_feed.proto`, the first contract, keeps its `SubscribeRequest`: a new name would change the generated code of its consumers.
 - What a handler publishes to a feed is made by the converter of the contract (`Contracts/<Area>/Converters`), as what a query gives.

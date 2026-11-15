@@ -3,8 +3,9 @@ using ProfitFox.MarketData.Application.Exceptions;
 namespace ProfitFox.MarketData.Application.Ports.Feeds;
 
 /// <summary>
-///     What one subscriber of an <see cref="ILiveFeed{T}" /> has waiting: the items published since it subscribed, in the order they
-///     were published. None is left out: a subscriber that reads too slowly is cut off instead.
+///     What one subscriber of a live feed has waiting: the items published since it subscribed, in the order they were published. A
+///     subscriber that reads too slowly is cut off instead of holding back the publisher; what a feed may leave out before that, its
+///     port says (<see cref="ILiveFeed{T}" /> leaves out nothing).
 /// </summary>
 public interface ILiveSubscription<T> : IDisposable
 {

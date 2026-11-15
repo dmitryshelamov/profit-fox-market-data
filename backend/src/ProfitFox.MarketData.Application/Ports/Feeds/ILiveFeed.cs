@@ -13,7 +13,8 @@ public interface ILiveFeed<T>
     void Publish(IReadOnlyCollection<T> items);
 
     /// <summary>
-    ///     Starts to gather what is published from now on for a new subscriber, until the subscription is disposed.
+    ///     Starts to gather what is published from now on for a new subscriber, until the subscription is disposed. None is left out: a
+    ///     subscriber that reads too slowly is cut off instead.
     /// </summary>
     ILiveSubscription<T> Subscribe();
 }
