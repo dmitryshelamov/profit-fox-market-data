@@ -35,7 +35,7 @@ public static class BybitListedInstrumentGenerator
             BybitCategory.Linear,
             baseAsset + "PERP",
             baseAsset,
-            quoteAsset: "USDC",
+            "USDC",
             BybitInstrumentStatus.Trading,
             new InstrumentRules(tickSize: 0.1m, quantityStep: 0.001m, minQuantity: 0.001m, minAmount: 5m),
             BybitContractType.LinearPerpetual,

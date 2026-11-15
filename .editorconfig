@@ -8,6 +8,8 @@
 # Roslyn severities mirror the ReSharper inspection severities from the same settings file.
 # Rider falls back to its own defaults for keys not set here. Keys marked "Rider default" pin those defaults,
 # so that Code Cleanup gives the same result on any machine.
+# The order of type members (File Layout: test methods of a fixture sorted by name) and the profiles of Code Cleanup have no
+# EditorConfig keys: they stay in common_layer.DotSettings.
 
 root = true
 
@@ -189,6 +191,8 @@ resharper_csharp_space_between_attribute_sections = true
 # XML doc comments: `<see cref="X" />`, text inside a multiline tag indented by one level (Rider defaults)
 resharper_xmldoc_space_before_self_closing = true
 resharper_xmldoc_indent_text = one_indent
+# Formatting a doc comment wraps its text at 180 columns (XmlDocFormatter/WRAP_LIMIT), not at max_line_length of the code
+resharper_xmldoc_max_line_length = 180
 
 #### ReSharper: inspection severities (Rider only, not checked by dotnet format) ####
 

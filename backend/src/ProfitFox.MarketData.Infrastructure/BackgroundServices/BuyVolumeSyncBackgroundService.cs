@@ -13,11 +13,12 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Fills the buy volumes the stream did not tell: of the history, back to <see cref="BuyVolumeSyncSettings.HistoryDays" /> or, of the
-///     instruments <see cref="FullHistorySettings" /> name, to when they started to trade, and of the minutes of a downtime, from the daily archives of trades of Bybit, while <see cref="BuyVolumeSyncSettings" /> enables Bybit. A round
-///     settles one archive of every listed instrument, the newest day first, <see cref="BuyVolumeSyncSettings.Parallelism" /> instruments
-///     at a time, so fresh days come before old history and every instrument moves on at the same pace. Rounds follow one another while
-///     days are left; then the service waits <see cref="BuyVolumeSyncSettings.IdleSeconds" />, by which a new day may be published. The
-///     settings are read again before every round.
+///     instruments <see cref="FullHistorySettings" /> name, to when they started to trade, and of the minutes of a downtime, from the
+///     daily archives of trades of Bybit, while <see cref="BuyVolumeSyncSettings" /> enables Bybit. A round settles one archive of every
+///     listed instrument, the newest day first, <see cref="BuyVolumeSyncSettings.Parallelism" /> instruments at a time, so fresh days come
+///     before old history and every instrument moves on at the same pace. Rounds follow one another while days are left; then the service
+///     waits <see cref="BuyVolumeSyncSettings.IdleSeconds" />, by which a new day may be published. The settings are read again before
+///     every round.
 /// </summary>
 internal sealed class BuyVolumeSyncBackgroundService(
     IServiceScopeFactory scopes,

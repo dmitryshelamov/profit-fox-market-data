@@ -102,22 +102,6 @@ public class LiquidationRepositoryTests
     }
 
     [Test]
-    public async Task A_minute_not_valid_already_is_left_as_it_is_and_is_not_given_back()
-    {
-        await _repository.InvalidateAsync([Btc.Id], Minute, Minute.AddMinutes(1), CancellationToken.None);
-
-        IReadOnlyList<StoredLiquidationMinute> marked = await _repository.InvalidateAsync([Btc.Id], Minute.AddMinutes(1), Minute.AddMinutes(2), CancellationToken.None);
-
-        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(Given(marked), Is.EqualTo(new[] { (Nothing(Btc, Minute.AddMinutes(2)), false) }));
-            Assert.That(rows, Has.Count.EqualTo(3));
-        });
-    }
-
-    [Test]
     public async Task A_minute_not_stored_yet_is_stored_as_a_valid_one_exactly_as_it_was_summed()
     {
         LiquidationMinute[] minutes = [new LiquidationMinute(Btc.Id, Minute, Longs, LiquidationSum.None), new LiquidationMinute(Eth.Id, Minute, Longs, Shorts)];
@@ -130,6 +114,22 @@ public class LiquidationRepositoryTests
         {
             Assert.That(rows, Is.EqualTo(minutes.Select(minute => (minute, true))));
             Assert.That(Given(stored), Is.EqualTo(minutes.Select(minute => (minute, true))));
+        });
+    }
+
+    [Test]
+    public async Task A_minute_not_valid_already_is_left_as_it_is_and_is_not_given_back()
+    {
+        await _repository.InvalidateAsync([Btc.Id], Minute, Minute.AddMinutes(1), CancellationToken.None);
+
+        IReadOnlyList<StoredLiquidationMinute> marked = await _repository.InvalidateAsync([Btc.Id], Minute.AddMinutes(1), Minute.AddMinutes(2), CancellationToken.None);
+
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Given(marked), Is.EqualTo(new[] { (Nothing(Btc, Minute.AddMinutes(2)), false) }));
+            Assert.That(rows, Has.Count.EqualTo(3));
         });
     }
 
