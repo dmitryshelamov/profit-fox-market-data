@@ -18,9 +18,11 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres;
 
 internal static class PostgresRegistrar
 {
+    private static readonly TimeSpan HealthCheckTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>
     ///     The connection string is read on first use, so a test host can still replace it after registration. A scope (a request) has one
-    ///     connection, so its repositories share the transaction of its command.
+    ///     connection, so its repositories share the transaction of its command. The health checks ask the database.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
@@ -36,6 +38,9 @@ internal static class PostgresRegistrar
         services.AddScoped<IFundingPaymentSeriesRepository, FundingPaymentSeriesRepository>();
         services.AddScoped<ILiquidationRepository, LiquidationRepository>();
         services.AddScoped<ILongShortRatioSeriesRepository, LongShortRatioSeriesRepository>();
+
+        // A database that does not answer in time is as unhealthy as one that fails.
+        services.AddHealthChecks().AddCheck<PostgresHealthCheck>("postgres", timeout: HealthCheckTimeout);
 
         services
             .AddFluentMigratorCore()

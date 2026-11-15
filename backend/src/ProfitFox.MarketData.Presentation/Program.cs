@@ -78,10 +78,10 @@ public class Program
                 app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "ProfitFox.MarketData v1"));
             }
 
-            app.UseHttpsRedirection();
-
             app.UseAuthorization();
 
+            // The deploy and Docker wait for it: it answers once the migrations are done, and only while the database answers.
+            app.MapHealthChecks("/health");
             app.MapControllers();
             app.MapGrpcService<CandleFeedService>();
             app.MapGrpcService<OpenInterestFeedService>();

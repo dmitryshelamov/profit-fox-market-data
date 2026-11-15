@@ -51,6 +51,13 @@ jobs:
             exit 1
           fi
 
+      # The deploy key of soyo-02 passes its command to deploy.sh, so the script is linted and its parsing tested.
+      - name: Check deploy.sh
+        working-directory: .
+        run: |
+          shellcheck deploy/*.sh
+          bash deploy/deploy.test.sh
+
       - name: Test
         run: >
           dotnet test ProfitFox.MarketData.sln
