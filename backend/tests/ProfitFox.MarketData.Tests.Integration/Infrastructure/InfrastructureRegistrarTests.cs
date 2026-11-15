@@ -56,6 +56,18 @@ public class InfrastructureRegistrarTests
         Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<OpenInterestSyncSettings>>().Value);
     }
 
+    [TestCase("LiquidationStream:RefreshSeconds")]
+    [TestCase("LiquidationStream:SaveSeconds")]
+    public void A_stream_of_liquidations_with_a_setting_of_zero_is_refused(string setting)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [setting] = "0" })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<LiquidationStreamSettings>>().Value);
+    }
+
     [Test]
     public void A_stream_of_shares_without_a_token_is_refused()
     {

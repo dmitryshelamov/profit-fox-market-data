@@ -12,7 +12,8 @@ internal static class BackgroundServicesRegistrar
 {
     /// <summary>
     ///     The background sync of the catalog, the background loading of candles, the stream of closed candles, the filling of buy
-    ///     volumes, the collection of tickers, the loading of funding payments and the loading of open interest with their settings;
+    ///     volumes, the collection of tickers, the loading of funding payments, the loading of open interest and the stream of liquidations with
+    ///     their settings;
     ///     an app with a broken section stops at start rather than never working.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
@@ -91,5 +92,12 @@ internal static class BackgroundServicesRegistrar
             .Validate(sync => sync.Parallelism > 0, "OpenInterestSync:Parallelism must be above zero.")
             .ValidateOnStart();
         services.AddHostedService<OpenInterestSyncBackgroundService>();
+
+        services.AddOptions<LiquidationStreamSettings>()
+            .Bind(configuration.GetSection(LiquidationStreamSettings.Section))
+            .Validate(stream => stream.RefreshSeconds > 0, "LiquidationStream:RefreshSeconds must be above zero.")
+            .Validate(stream => stream.SaveSeconds > 0, "LiquidationStream:SaveSeconds must be above zero.")
+            .ValidateOnStart();
+        services.AddHostedService<LiquidationStreamBackgroundService>();
     }
 }
