@@ -41,9 +41,15 @@ internal sealed class BybitRequestGate : IDisposable
                     _tokens.Release(missing);
                 }
             },
-            null,
+            state: null,
             TimeSpan.FromSeconds(1),
             TimeSpan.FromSeconds(1));
+    }
+
+    public void Dispose()
+    {
+        _refill.Dispose();
+        _tokens.Dispose();
     }
 
     /// <exception cref="ExchangePausedException">Bybit limited the requests, now or before the pause ended.</exception>
@@ -77,12 +83,6 @@ internal sealed class BybitRequestGate : IDisposable
                 }
             },
             cancellationToken);
-    }
-
-    public void Dispose()
-    {
-        _refill.Dispose();
-        _tokens.Dispose();
     }
 
     // A ban pauses for the ban pause. The first answer about the limit pauses for the limit pause, each next one in a row twice as long, up

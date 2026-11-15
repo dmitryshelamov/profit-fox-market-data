@@ -73,7 +73,7 @@ public class LoadFundingPaymentsCommandHandlerTests
 
     private Task BybitWasNotAsked()
     {
-        return _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, default, default, default);
+        return _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, from: default, until: default, cancellationToken: default);
     }
 
     [Test]
@@ -111,19 +111,6 @@ public class LoadFundingPaymentsCommandHandlerTests
     }
 
     [Test]
-    public void A_full_page_with_no_payment_of_the_range_is_refused_and_nothing_is_saved()
-    {
-        // Bybit cut the page and what it gave is of another time: nothing tells how far the range is whole.
-        BybitPaid(From, Until, full: true);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(() => Load(), Throws.InvalidOperationException);
-            Assert.That(_saved, Is.Null);
-        });
-    }
-
-    [Test]
     public async Task A_full_page_covers_only_the_time_from_its_oldest_payment_and_leaves_more_to_load()
     {
         FundingPayment[] payments = [PaidAt(Hour.AddHours(-16)), PaidAt(Hour.AddHours(-8)), PaidAt(Hour)];
@@ -137,6 +124,19 @@ public class LoadFundingPaymentsCommandHandlerTests
             Assert.That(result, Is.EqualTo(LoadFundingPaymentsResult.MoreLeft));
             Assert.That(_saved!.CoveredFrom, Is.EqualTo(Hour.AddHours(-16)));
             Assert.That(_saved.CoveredUntil, Is.EqualTo(Until));
+        });
+    }
+
+    [Test]
+    public void A_full_page_with_no_payment_of_the_range_is_refused_and_nothing_is_saved()
+    {
+        // Bybit cut the page and what it gave is of another time: nothing tells how far the range is whole.
+        BybitPaid(From, Until, full: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(() => Load(), Throws.InvalidOperationException);
+            Assert.That(_saved, Is.Null);
         });
     }
 

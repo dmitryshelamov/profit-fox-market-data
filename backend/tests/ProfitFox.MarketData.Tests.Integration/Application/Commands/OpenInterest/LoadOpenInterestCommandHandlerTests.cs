@@ -112,11 +112,11 @@ public class LoadOpenInterestCommandHandlerTests
                 Is.EqualTo(
                     new[]
                     {
-                        new OpenInterestPointInternal(Until.AddMinutes(-10), 720m),
-                        new OpenInterestPointInternal(Until.AddMinutes(-5), 725m),
-                        new OpenInterestPointInternal(Until, 38.16m),
-                        new OpenInterestPointInternal(Until.AddMinutes(5), 735m),
-                        new OpenInterestPointInternal(Until.AddMinutes(10), 40m)
+                        new OpenInterestPointInternal(Until.AddMinutes(-10), OpenInterest: 720m),
+                        new OpenInterestPointInternal(Until.AddMinutes(-5), OpenInterest: 725m),
+                        new OpenInterestPointInternal(Until, OpenInterest: 38.16m),
+                        new OpenInterestPointInternal(Until.AddMinutes(5), OpenInterest: 735m),
+                        new OpenInterestPointInternal(Until.AddMinutes(10), OpenInterest: 40m)
                     }));
             Assert.That(read.CoveredFrom, Is.EqualTo(Until.AddMinutes(-10)));
             Assert.That(read.CoveredUntil, Is.EqualTo(Until.AddMinutes(15)));

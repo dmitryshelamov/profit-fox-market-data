@@ -85,7 +85,7 @@ public sealed class OpenInterestSeries : AggregateRoot
     /// </summary>
     public static DateTimeOffset StartOfStep(DateTimeOffset time)
     {
-        return new DateTimeOffset(time.UtcTicks - (time.UtcTicks % Step.Ticks), TimeSpan.Zero);
+        return new DateTimeOffset(time.UtcTicks - time.UtcTicks % Step.Ticks, TimeSpan.Zero);
     }
 
     /// <summary>

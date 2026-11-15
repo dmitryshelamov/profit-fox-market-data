@@ -63,7 +63,7 @@ public class GetFundingPaymentsQueryHandlerTests
             Btc,
             Hour.AddHours(-count),
             Hour.AddHours(1),
-            [.. Enumerable.Range(start: 0, count).Select(hour => new FundingPayment(Hour.AddHours(-hour), rate: hour))]);
+            [.. Enumerable.Range(start: 0, count).Select(hour => new FundingPayment(Hour.AddHours(-hour), hour))]);
     }
 
     [Test]
@@ -136,7 +136,11 @@ public class GetFundingPaymentsQueryHandlerTests
         {
             Assert.That(
                 payments.Points,
-                Is.EqualTo(new[] { new FundingPaymentInternal(Hour.AddHours(-16), 0.0001m), new FundingPaymentInternal(Hour.AddHours(-8), -0.00118658m) }));
+                Is.EqualTo(
+                    new[]
+                    {
+                        new FundingPaymentInternal(Hour.AddHours(-16), FundingRate: 0.0001m), new FundingPaymentInternal(Hour.AddHours(-8), FundingRate: -0.00118658m)
+                    }));
 
             // The coverage is of the series, not of the window: it tells the window lies whole inside what is loaded.
             Assert.That(payments.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));

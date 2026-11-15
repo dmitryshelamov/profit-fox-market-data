@@ -132,20 +132,6 @@ public class BybitOpenInterestClientTests
     }
 
     [Test]
-    public void The_request_goes_through_the_gate_of_Bybit()
-    {
-        _bybit.RespondJson("", HttpStatusCode.Forbidden);
-
-        Assert.Multiple(() =>
-        {
-            // The ban pauses the gate, and the pause holds the next request back.
-            Assert.ThrowsAsync<ExchangePausedException>(() => _openInterest.GetAsync(Btc, Noon.AddMinutes(-10), Noon, CancellationToken.None));
-            Assert.ThrowsAsync<ExchangePausedException>(() => _openInterest.GetAsync(Btc, Noon.AddMinutes(-10), Noon, CancellationToken.None));
-            Assert.That(_bybit.Requests, Has.Count.EqualTo(1));
-        });
-    }
-
-    [Test]
     public async Task The_points_of_a_contract_come_in_one_request_at_the_five_minute_step_oldest_first_exactly_as_Bybit_gave_them()
     {
         // Bybit gives the newest first, with the digits its history keeps.
@@ -171,6 +157,20 @@ public class BybitOpenInterestClientTests
             Assert.That(
                 _bybit.Requests.Single().Query,
                 Does.Contain("category=linear").And.Contain("symbol=BTCUSDT").And.Contain("intervalTime=5min"));
+        });
+    }
+
+    [Test]
+    public void The_request_goes_through_the_gate_of_Bybit()
+    {
+        _bybit.RespondJson("", HttpStatusCode.Forbidden);
+
+        Assert.Multiple(() =>
+        {
+            // The ban pauses the gate, and the pause holds the next request back.
+            Assert.ThrowsAsync<ExchangePausedException>(() => _openInterest.GetAsync(Btc, Noon.AddMinutes(-10), Noon, CancellationToken.None));
+            Assert.ThrowsAsync<ExchangePausedException>(() => _openInterest.GetAsync(Btc, Noon.AddMinutes(-10), Noon, CancellationToken.None));
+            Assert.That(_bybit.Requests, Has.Count.EqualTo(1));
         });
     }
 }

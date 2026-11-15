@@ -89,7 +89,7 @@ public class CollectBybitTickersCommandHandlerTests
             BybitAnswers.Tickers(
                 "linear",
                 BybitAnswers.LinearTicker("BTCUSDT", "52345.123", "0.00000331"),
-                BybitAnswers.LinearTicker("ETHUSDT", "810.5", fundingRate: ""),
+                BybitAnswers.LinearTicker("ETHUSDT", "810.5", ""),
                 BybitAnswers.LinearTicker("NEWUSDT", "7", "0.0001")));
 
         CollectBybitTickersResult result = await CollectAsync(Boundary);
@@ -97,9 +97,9 @@ public class CollectBybitTickersCommandHandlerTests
         Assert.Multiple(async () =>
         {
             Assert.That(result, Is.EqualTo(new CollectBybitTickersResult(OpenInterestPoints: 2, FundingRatePoints: 1)));
-            Assert.That(await OpenInterestAsync(Perpetual), Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, 52345.123m) }));
-            Assert.That(await FundingRateAsync(Perpetual), Is.EqualTo(new[] { new FundingRatePointInternal(Boundary, 0.00000331m) }));
-            Assert.That(await OpenInterestAsync(Futures), Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, 810.5m) }));
+            Assert.That(await OpenInterestAsync(Perpetual), Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, OpenInterest: 52345.123m) }));
+            Assert.That(await FundingRateAsync(Perpetual), Is.EqualTo(new[] { new FundingRatePointInternal(Boundary, FundingRate: 0.00000331m) }));
+            Assert.That(await OpenInterestAsync(Futures), Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, OpenInterest: 810.5m) }));
             Assert.That(await FundingRateAsync(Futures), Is.Empty);
             Assert.That(await OpenInterestAsync(Spot), Is.Empty);
             Assert.That(await FundingRateAsync(Spot), Is.Empty);
@@ -121,11 +121,18 @@ public class CollectBybitTickersCommandHandlerTests
         {
             Assert.That(
                 await OpenInterestAsync(Perpetual),
-                Is.EqualTo(new[] { new OpenInterestPointInternal(Boundary, 52345.123m), new OpenInterestPointInternal(Boundary.AddMinutes(5), 52350m) }));
+                Is.EqualTo(
+                    new[]
+                    {
+                        new OpenInterestPointInternal(Boundary, OpenInterest: 52345.123m), new OpenInterestPointInternal(Boundary.AddMinutes(5), OpenInterest: 52350m)
+                    }));
             Assert.That(
                 await FundingRateAsync(Perpetual),
                 Is.EqualTo(
-                    new[] { new FundingRatePointInternal(Boundary, 0.00000331m), new FundingRatePointInternal(Boundary.AddMinutes(5), -0.00000120m) }));
+                    new[]
+                    {
+                        new FundingRatePointInternal(Boundary, FundingRate: 0.00000331m), new FundingRatePointInternal(Boundary.AddMinutes(5), FundingRate: -0.00000120m)
+                    }));
         });
     }
 }

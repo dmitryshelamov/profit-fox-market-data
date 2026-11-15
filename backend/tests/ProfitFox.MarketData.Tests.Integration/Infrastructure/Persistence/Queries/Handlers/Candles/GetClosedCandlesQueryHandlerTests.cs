@@ -85,8 +85,28 @@ public class GetClosedCandlesQueryHandlerTests
             Is.EqualTo(
                 new[]
                 {
-                    new ClosedCandleInternal(Exchange.Bybit, Linear.Id, Hour, 0.00001234m, 0.0000124m, 0.0000123m, 0.00001238m, 1234567.89m, 15.2771m, 600000.5m),
-                    new ClosedCandleInternal(Exchange.TInvest, Share.Id, Hour, 300.5m, 301m, 300m, 300.75m, 1000m, Turnover: null, BuyVolume: null)
+                    new ClosedCandleInternal(
+                        Exchange.Bybit,
+                        Linear.Id,
+                        Hour,
+                        Open: 0.00001234m,
+                        High: 0.0000124m,
+                        Low: 0.0000123m,
+                        Close: 0.00001238m,
+                        Volume: 1234567.89m,
+                        Turnover: 15.2771m,
+                        BuyVolume: 600000.5m),
+                    new ClosedCandleInternal(
+                        Exchange.TInvest,
+                        Share.Id,
+                        Hour,
+                        Open: 300.5m,
+                        High: 301m,
+                        Low: 300m,
+                        Close: 300.75m,
+                        Volume: 1000m,
+                        Turnover: null,
+                        BuyVolume: null)
                 }));
     }
 

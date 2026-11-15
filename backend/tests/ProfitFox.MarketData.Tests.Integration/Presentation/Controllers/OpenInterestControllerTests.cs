@@ -72,10 +72,20 @@ public class OpenInterestControllerTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
+    private async Task StoreAsync(params OpenInterestPoint[] points)
+    {
+        await _services.GetRequiredService<IOpenInterestRepository>().SaveAsync(points, CancellationToken.None);
+    }
+
+    private static string Url(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
+    {
+        return $"api/instruments/{instrumentId}/open-interest?from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
+    }
+
     [Test]
     public async Task A_window_that_holds_more_than_an_answer_gives_tells_where_to_continue_from()
     {
-        await StoreAsync([.. Enumerable.Range(start: 0, count: 1001).Select(step => new OpenInterestPoint(Linear.Id, Hour.AddMinutes(5 * step), value: step))]);
+        await StoreAsync([.. Enumerable.Range(start: 0, count: 1001).Select(step => new OpenInterestPoint(Linear.Id, Hour.AddMinutes(5 * step), step))]);
 
         JsonElement first = await _client.GetFromJsonAsync<JsonElement>(Url(Linear.Id, Hour, Hour.AddDays(4)), Json);
         OpenInterestPointsInternal? rest = await _client.GetFromJsonAsync<OpenInterestPointsInternal>(
@@ -86,7 +96,7 @@ public class OpenInterestControllerTests
         {
             Assert.That(first.GetProperty("points").GetArrayLength(), Is.EqualTo(1000));
             Assert.That(first.GetProperty("continueFrom").GetDateTimeOffset(), Is.EqualTo(Hour.AddMinutes(5 * 1000)));
-            Assert.That(rest!.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour.AddMinutes(5 * 1000), 1000m) }));
+            Assert.That(rest!.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour.AddMinutes(5 * 1000), OpenInterest: 1000m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -122,33 +132,6 @@ public class OpenInterestControllerTests
     }
 
     [Test]
-    public async Task The_stored_points_of_the_window_come_with_their_times_without_asking_the_exchange()
-    {
-        // The steps between the points were not collected; nothing is filled in for them.
-        await StoreAsync(
-            new OpenInterestPoint(Linear.Id, Hour, value: 52345.123m),
-            new OpenInterestPoint(Linear.Id, Hour.AddMinutes(35), value: 0.00000331m),
-            new OpenInterestPoint(Linear.Id, Hour.AddHours(1), value: 9m));
-
-        HttpResponseMessage response = await _client.GetAsync(Url(Linear.Id, Hour, Hour.AddHours(1)));
-        string body = await response.Content.ReadAsStringAsync();
-        OpenInterestPointsInternal? points = JsonSerializer.Deserialize<OpenInterestPointsInternal>(body, Json);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            Assert.That(
-                points!.Points,
-                Is.EqualTo(new[] { new OpenInterestPointInternal(Hour, 52345.123m), new OpenInterestPointInternal(Hour.AddMinutes(35), 0.00000331m) }));
-            Assert.That(points.ContinueFrom, Is.Null);
-
-            // The names of the contract and the value exactly as stored, not in the notation of a float.
-            Assert.That(body, Does.Contain("\"openInterest\":0.00000331").And.Contain("\"time\":").And.Contain("\"continueFrom\":null"));
-            Assert.That(_app.Bybit.Requests, Is.Empty);
-        });
-    }
-
-    [Test]
     public async Task The_answer_tells_how_far_the_history_of_the_instrument_is_loaded()
     {
         await _services.GetRequiredService<IOpenInterestSeriesRepository>()
@@ -168,13 +151,34 @@ public class OpenInterestControllerTests
         });
     }
 
-    private async Task StoreAsync(params OpenInterestPoint[] points)
+    [Test]
+    public async Task The_stored_points_of_the_window_come_with_their_times_without_asking_the_exchange()
     {
-        await _services.GetRequiredService<IOpenInterestRepository>().SaveAsync(points, CancellationToken.None);
-    }
+        // The steps between the points were not collected; nothing is filled in for them.
+        await StoreAsync(
+            new OpenInterestPoint(Linear.Id, Hour, value: 52345.123m),
+            new OpenInterestPoint(Linear.Id, Hour.AddMinutes(35), value: 0.00000331m),
+            new OpenInterestPoint(Linear.Id, Hour.AddHours(1), value: 9m));
 
-    private static string Url(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
-    {
-        return $"api/instruments/{instrumentId}/open-interest?from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
+        HttpResponseMessage response = await _client.GetAsync(Url(Linear.Id, Hour, Hour.AddHours(1)));
+        string body = await response.Content.ReadAsStringAsync();
+        OpenInterestPointsInternal? points = JsonSerializer.Deserialize<OpenInterestPointsInternal>(body, Json);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(
+                points!.Points,
+                Is.EqualTo(
+                    new[]
+                    {
+                        new OpenInterestPointInternal(Hour, OpenInterest: 52345.123m), new OpenInterestPointInternal(Hour.AddMinutes(35), OpenInterest: 0.00000331m)
+                    }));
+            Assert.That(points.ContinueFrom, Is.Null);
+
+            // The names of the contract and the value exactly as stored, not in the notation of a float.
+            Assert.That(body, Does.Contain("\"openInterest\":0.00000331").And.Contain("\"time\":").And.Contain("\"continueFrom\":null"));
+            Assert.That(_app.Bybit.Requests, Is.Empty);
+        });
     }
 }

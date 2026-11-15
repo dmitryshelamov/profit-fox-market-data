@@ -71,7 +71,7 @@ public class LoadOpenInterestCommandHandlerTests
         BybitOpenInterestPoint[] points =
         [
             .. Enumerable.Range(start: 0, (int)((until - from) / OpenInterestSeries.Step))
-                .Select(step => new BybitOpenInterestPoint(from + step * OpenInterestSeries.Step, Value: 70000m + step))
+                .Select(step => new BybitOpenInterestPoint(from + step * OpenInterestSeries.Step, 70000m + step))
         ];
         _bybit.GetAsync(Arg.Any<BybitListedInstrument>(), from, until, Arg.Any<CancellationToken>()).Returns(points);
 
@@ -80,7 +80,7 @@ public class LoadOpenInterestCommandHandlerTests
 
     private Task BybitWasNotAsked()
     {
-        return _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, default, default, default);
+        return _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, from: default, until: default, cancellationToken: default);
     }
 
     [Test]
@@ -185,7 +185,7 @@ public class LoadOpenInterestCommandHandlerTests
             Assert.That(_saved.NewPoints, Has.Count.EqualTo(told.Length));
 
             // The history is asked whatever storage holds of it: only the time after the coverage is checked first.
-            await _series.DidNotReceiveWithAnyArgs().CountPointsAsync(default, default, default, default);
+            await _series.DidNotReceiveWithAnyArgs().CountPointsAsync(instrumentId: default, from: default, until: default, cancellationToken: default);
         });
     }
 

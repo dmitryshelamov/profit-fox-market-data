@@ -100,7 +100,7 @@ public class LoadFundingPaymentsCommandHandlerTests
             Assert.That(second, Is.EqualTo(LoadFundingPaymentsResult.NothingLeft));
             Assert.That(afterSecond.Points, Has.Count.EqualTo(203));
             Assert.That(afterSecond.Points[0].Time, Is.EqualTo(Hour.AddHours(-8 * 202)));
-            Assert.That(afterSecond.Points[^1], Is.EqualTo(new FundingPaymentInternal(Hour, 0.0001m)));
+            Assert.That(afterSecond.Points[^1], Is.EqualTo(new FundingPaymentInternal(Hour, FundingRate: 0.0001m)));
             Assert.That(afterSecond.CoveredFrom, Is.EqualTo(From));
 
             // A series that covers the range asks Bybit nothing more.

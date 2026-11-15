@@ -53,7 +53,7 @@ public class BybitTickersClientTests
     [Test]
     public async Task A_contract_with_an_empty_funding_rate_has_none()
     {
-        _bybit.RespondJson(BybitAnswers.Tickers("linear", BybitAnswers.LinearTicker("BTCUSDT-26DEC26", "810.5", fundingRate: "")));
+        _bybit.RespondJson(BybitAnswers.Tickers("linear", BybitAnswers.LinearTicker("BTCUSDT-26DEC26", "810.5", "")));
 
         IReadOnlyList<BybitLinearTicker> tickers = await _tickers.GetLinearAsync(CancellationToken.None);
 

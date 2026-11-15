@@ -47,6 +47,17 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
         _app = app;
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        foreach (WebSocket socket in _connections.Keys)
+        {
+            socket.Abort();
+        }
+
+        await _app.StopAsync();
+        await _app.DisposeAsync();
+    }
+
     public static async Task<FakeBybitSocketServer> StartAsync()
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
@@ -110,17 +121,6 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
         {
             await connection.SendAsync(message);
         }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        foreach (WebSocket socket in _connections.Keys)
-        {
-            socket.Abort();
-        }
-
-        await _app.StopAsync();
-        await _app.DisposeAsync();
     }
 
     /// <summary>
@@ -238,7 +238,7 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
                     connection.Topics[topic] = true;
                 }
 
-                await connection.SendAsync(Answer(op, requestId, success: true, message: ""));
+                await connection.SendAsync(Answer(op, requestId, success: true, ""));
 
                 break;
             case "unsubscribe":
@@ -247,11 +247,11 @@ internal sealed class FakeBybitSocketServer : IAsyncDisposable
                     connection.Topics.TryRemove(topic!.GetValue<string>(), out _);
                 }
 
-                await connection.SendAsync(Answer(op, requestId, success: true, message: ""));
+                await connection.SendAsync(Answer(op, requestId, success: true, ""));
 
                 break;
             case "ping":
-                await connection.SendAsync(Answer(op, requestId, success: true, message: "pong"));
+                await connection.SendAsync(Answer(op, requestId, success: true, "pong"));
 
                 break;
         }

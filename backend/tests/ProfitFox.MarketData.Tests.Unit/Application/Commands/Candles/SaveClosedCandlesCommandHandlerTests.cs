@@ -27,10 +27,9 @@ public class SaveClosedCandlesCommandHandlerTests
 
         // Storage gives the new candles back as it holds them: with the buy volume a minute already had when its candle knows none.
         _series.SaveAsync(Arg.Do<IReadOnlyCollection<CandleSeries>>(series => _saved = series), Arg.Any<CancellationToken>())
-            .Returns(
-                call => call.Arg<IReadOnlyCollection<CandleSeries>>()
-                    .SelectMany(series => series.NewCandles.Select(candle => (series.InstrumentId, Candle: AsStored(series.InstrumentId, candle))))
-                    .ToLookup(candle => candle.InstrumentId, candle => candle.Candle));
+            .Returns(call => call.Arg<IReadOnlyCollection<CandleSeries>>()
+                .SelectMany(series => series.NewCandles.Select(candle => (series.InstrumentId, Candle: AsStored(series.InstrumentId, candle))))
+                .ToLookup(candle => candle.InstrumentId, candle => candle.Candle));
 
         // What is told to the feed, with whether storage held it by then.
         _feed.Publish(Arg.Do<IReadOnlyCollection<LiveCandle>>(candles => _published.Add((candles, SavedBefore: _saved is not null))));
@@ -92,6 +91,20 @@ public class SaveClosedCandlesCommandHandlerTests
     }
 
     [Test]
+    public async Task A_candle_is_published_as_one_of_the_exchange_it_was_told_of()
+    {
+        Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute));
+        Stored(Sber, new MinuteRange(Minute.AddMinutes(-10), Minute));
+        Candle candle = CandleGenerator.Generate(Minute);
+
+        await Save(new ClosedCandle(Exchange.Bybit, Btc, candle), new ClosedCandle(Exchange.TInvest, Sber, candle));
+
+        Assert.That(
+            _published.Single().Candles,
+            Is.EquivalentTo(new[] { new LiveCandle(Exchange.Bybit, Btc, candle, Closed: true), new LiveCandle(Exchange.TInvest, Sber, candle, Closed: true) }));
+    }
+
+    [Test]
     public async Task A_minute_apart_from_the_covered_ranges_is_covered_on_its_own()
     {
         Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute.AddMinutes(-5)));
@@ -101,21 +114,6 @@ public class SaveClosedCandlesCommandHandlerTests
         Assert.That(
             SavedOf(Btc).Covered,
             Is.EqualTo(new[] { new MinuteRange(Minute.AddMinutes(-10), Minute.AddMinutes(-5)), new MinuteRange(Minute, Minute.AddMinutes(1)) }));
-    }
-
-    [Test]
-    public async Task A_minute_told_more_than_once_is_saved_as_it_was_told_last()
-    {
-        Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute));
-        Candle again = CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m);
-
-        SaveClosedCandlesResult result = await Save(Closed(Btc, CandleGenerator.Generate(Minute, volume: 3m)), Closed(Btc, again));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(result, Is.EqualTo(new SaveClosedCandlesResult(Saved: 1)));
-            Assert.That(SavedOf(Btc).NewCandles, Is.EqualTo(new[] { again }));
-        });
     }
 
     [Test]
@@ -134,17 +132,18 @@ public class SaveClosedCandlesCommandHandlerTests
     }
 
     [Test]
-    public async Task A_candle_is_published_as_one_of_the_exchange_it_was_told_of()
+    public async Task A_minute_told_more_than_once_is_saved_as_it_was_told_last()
     {
         Stored(Btc, new MinuteRange(Minute.AddMinutes(-10), Minute));
-        Stored(Sber, new MinuteRange(Minute.AddMinutes(-10), Minute));
-        Candle candle = CandleGenerator.Generate(Minute);
+        Candle again = CandleGenerator.Generate(Minute, volume: 3m, buyVolume: 2m);
 
-        await Save(new ClosedCandle(Exchange.Bybit, Btc, candle), new ClosedCandle(Exchange.TInvest, Sber, candle));
+        SaveClosedCandlesResult result = await Save(Closed(Btc, CandleGenerator.Generate(Minute, volume: 3m)), Closed(Btc, again));
 
-        Assert.That(
-            _published.Single().Candles,
-            Is.EquivalentTo(new[] { new LiveCandle(Exchange.Bybit, Btc, candle, Closed: true), new LiveCandle(Exchange.TInvest, Sber, candle, Closed: true) }));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.EqualTo(new SaveClosedCandlesResult(Saved: 1)));
+            Assert.That(SavedOf(Btc).NewCandles, Is.EqualTo(new[] { again }));
+        });
     }
 
     [Test]

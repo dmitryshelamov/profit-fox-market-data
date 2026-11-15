@@ -71,10 +71,20 @@ public class FundingRatesControllerTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
+    private async Task StoreAsync(params FundingRatePoint[] points)
+    {
+        await _services.GetRequiredService<IFundingRateRepository>().SaveAsync(points, CancellationToken.None);
+    }
+
+    private static string Url(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
+    {
+        return $"api/instruments/{instrumentId}/funding-rate?from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
+    }
+
     [Test]
     public async Task A_window_that_holds_more_than_an_answer_gives_tells_where_to_continue_from()
     {
-        await StoreAsync([.. Enumerable.Range(start: 0, count: 1001).Select(step => new FundingRatePoint(Linear.Id, Hour.AddMinutes(5 * step), rate: step))]);
+        await StoreAsync([.. Enumerable.Range(start: 0, count: 1001).Select(step => new FundingRatePoint(Linear.Id, Hour.AddMinutes(5 * step), step))]);
 
         JsonElement first = await _client.GetFromJsonAsync<JsonElement>(Url(Linear.Id, Hour, Hour.AddDays(4)), Json);
         FundingRatePointsInternal? rest = await _client.GetFromJsonAsync<FundingRatePointsInternal>(
@@ -85,7 +95,7 @@ public class FundingRatesControllerTests
         {
             Assert.That(first.GetProperty("points").GetArrayLength(), Is.EqualTo(1000));
             Assert.That(first.GetProperty("continueFrom").GetDateTimeOffset(), Is.EqualTo(Hour.AddMinutes(5 * 1000)));
-            Assert.That(rest!.Points, Is.EqualTo(new[] { new FundingRatePointInternal(Hour.AddMinutes(5 * 1000), 1000m) }));
+            Assert.That(rest!.Points, Is.EqualTo(new[] { new FundingRatePointInternal(Hour.AddMinutes(5 * 1000), FundingRate: 1000m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -138,22 +148,13 @@ public class FundingRatesControllerTests
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(
                 points!.Points,
-                Is.EqualTo(new[] { new FundingRatePointInternal(Hour, -0.00012m), new FundingRatePointInternal(Hour.AddMinutes(35), 0.00000331m) }));
+                Is.EqualTo(
+                    new[] { new FundingRatePointInternal(Hour, FundingRate: -0.00012m), new FundingRatePointInternal(Hour.AddMinutes(35), FundingRate: 0.00000331m) }));
             Assert.That(points.ContinueFrom, Is.Null);
 
             // The names of the contract and the value exactly as stored, not in the notation of a float.
             Assert.That(body, Does.Contain("\"fundingRate\":0.00000331").And.Contain("\"time\":").And.Contain("\"continueFrom\":null"));
             Assert.That(_app.Bybit.Requests, Is.Empty);
         });
-    }
-
-    private async Task StoreAsync(params FundingRatePoint[] points)
-    {
-        await _services.GetRequiredService<IFundingRateRepository>().SaveAsync(points, CancellationToken.None);
-    }
-
-    private static string Url(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
-    {
-        return $"api/instruments/{instrumentId}/funding-rate?from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
     }
 }

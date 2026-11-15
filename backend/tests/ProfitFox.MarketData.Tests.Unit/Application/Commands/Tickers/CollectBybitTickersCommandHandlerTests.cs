@@ -65,6 +65,21 @@ public class CollectBybitTickersCommandHandlerTests
         _bybit.GetLinearAsync(Arg.Any<CancellationToken>()).Returns(tickers);
     }
 
+    [TestCase(1)]
+    [TestCase(4)]
+    public void A_snapshot_of_a_time_between_two_steps_is_refused_before_Bybit_is_asked(int minutesAfterTheStep)
+    {
+        Stored(Btc);
+        Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(() => Collect(Boundary.AddMinutes(minutesAfterTheStep)), Throws.ArgumentException);
+            Assert.That(_savedFundingRates, Is.Null);
+            await _bybit.DidNotReceive().GetLinearAsync(Arg.Any<CancellationToken>());
+        });
+    }
+
     [Test]
     public async Task A_contract_Bybit_gave_no_ticker_of_gets_no_points()
     {
@@ -149,21 +164,6 @@ public class CollectBybitTickersCommandHandlerTests
         Assert.That(
             _savedFundingRates,
             Is.EquivalentTo(new[] { new FundingRatePoint(Btc.Id, Boundary, rate: 0.00000331m), new FundingRatePoint(Eth.Id, Boundary, rate: -0.00012m) }));
-    }
-
-    [TestCase(1)]
-    [TestCase(4)]
-    public void A_snapshot_of_a_time_between_two_steps_is_refused_before_Bybit_is_asked(int minutesAfterTheStep)
-    {
-        Stored(Btc);
-        Tickers(new BybitLinearTicker("BTCUSDT", OpenInterest: 52345.123m, FundingRate: 0.0001m));
-
-        Assert.Multiple(async () =>
-        {
-            Assert.That(() => Collect(Boundary.AddMinutes(minutesAfterTheStep)), Throws.ArgumentException);
-            Assert.That(_savedFundingRates, Is.Null);
-            await _bybit.DidNotReceive().GetLinearAsync(Arg.Any<CancellationToken>());
-        });
     }
 
     [Test]

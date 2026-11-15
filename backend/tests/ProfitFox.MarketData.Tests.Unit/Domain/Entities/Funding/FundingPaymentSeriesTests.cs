@@ -74,21 +74,6 @@ public class FundingPaymentSeriesTests
     }
 
     [Test]
-    public void A_range_that_starts_where_the_coverage_ends_widens_it_forward()
-    {
-        FundingPaymentSeries series = Covering();
-
-        series.Cover(Noon, Noon.AddHours(1), [PaidAt(Noon)]);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(series.CoveredFrom, Is.EqualTo(Noon.AddHours(-4)));
-            Assert.That(series.CoveredUntil, Is.EqualTo(Noon.AddHours(1)));
-            Assert.That(series.NewPayments, Is.EqualTo(new[] { PaidAt(Noon) }));
-        });
-    }
-
-    [Test]
     public void A_range_that_ends_where_the_coverage_starts_widens_it_back()
     {
         FundingPaymentSeries series = Covering();
@@ -100,6 +85,21 @@ public class FundingPaymentSeriesTests
             Assert.That(series.CoveredFrom, Is.EqualTo(Noon.AddDays(-30)));
             Assert.That(series.CoveredUntil, Is.EqualTo(Noon));
             Assert.That(series.NewPayments, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void A_range_that_starts_where_the_coverage_ends_widens_it_forward()
+    {
+        FundingPaymentSeries series = Covering();
+
+        series.Cover(Noon, Noon.AddHours(1), [PaidAt(Noon)]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(series.CoveredFrom, Is.EqualTo(Noon.AddHours(-4)));
+            Assert.That(series.CoveredUntil, Is.EqualTo(Noon.AddHours(1)));
+            Assert.That(series.NewPayments, Is.EqualTo(new[] { PaidAt(Noon) }));
         });
     }
 

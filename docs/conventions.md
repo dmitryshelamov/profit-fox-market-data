@@ -106,7 +106,8 @@ and this file is silent, ask which to follow.
 ## Files and code style
 
 - One top-level type per file, named after the type (a migration is named by its version, see above); namespaces follow folders.
-- In a type: properties first, then constructors, then methods.
+- In a type: properties first, then constructors, then methods. Among the members of one kind, what implements an interface comes
+  first (`Dispose`, `DisposeAsync`, `MoveNext`, a property like `Current`), then the rest.
 - An XML doc `<summary>` is always on three or more lines, the text indented by 5 spaces, even for one sentence:
 
   ```csharp
@@ -115,7 +116,19 @@ and this file is silent, ask which to follow.
   /// </summary>
   ```
 
-- `var` only when the type is evident from the right side; explicit `new Foo(...)`, never `new(...)`.
+- `var` only when the type is evident from the right side: a `new`, a cast, a factory or a conversion whose name tells the type
+  (`FundingPaymentSeries.Create(...)`, `decimal.Parse(...)`, `ToString(...)`); the explicit type otherwise. Explicit `new Foo(...)`,
+  never `new(...)`. Where Rider and the build disagree on what is evident, the build decides: it fails on `IDE0007` and `IDE0008`.
+- The format is the one Rider's "Reformat and Cleanup Code" gives with the `.editorconfig` of the repository.
+  `scripts/verify-format.sh` checks only a part of it, so code is written this way from the start:
+  - A statement stays on one line while it fits `max_line_length`, 170 characters. It is broken only when it does not fit, and then
+    after the opening bracket, an argument a line. A line that fits is not broken to look shorter.
+  - In a call with several arguments, a literal argument is named when it is a number, `true` or `false`, `null` or `default`:
+    `new Candle(Minute, open: 5m, high: 8m, ...)`, `Enumerable.Range(start: 0, count)`, `Answer(op, requestId, success: true, "pong")`.
+    A string literal and any other expression are not named: `new FundingPayment(time, rate)`, never `rate: rate`. The only argument
+    of a call is not named: `TimeSpan.FromSeconds(30)`.
+  - No brackets the precedence of the operators does not need: `time.UtcTicks - time.UtcTicks % Step.Ticks`.
+  - No namespace in front of a name in code: a `using`, or an alias where two names clash (`using Enum = System.Enum;`).
 - Every attribute is in brackets of its own, never `[A, B]`; attributes on one line, as on a parameter, have a space between them:
   `[FromQuery] [BindRequired] string interval`. Rider keeps this (`.editorconfig`). The formatter of Roslyn deletes that space and
   has no option for it, so the format is checked by `scripts/verify-format.sh`, which is `dotnet format --verify-no-changes` that
@@ -134,3 +147,5 @@ and this file is silent, ask which to follow.
 - `Tests.Unit` and `Tests.Integration` mirror the folders of `src` (`Tests.Unit/Domain/Entities/Instruments/InstrumentTests.cs`,
   `Tests.Integration/Infrastructure/Exchanges/Bybit/BybitInstrumentsTests.cs`).
 - NUnit with the constraint model (`Assert.That`, `Assert.Multiple`).
+- In a fixture: `[SetUp]` and `[TearDown]` first, then the fields, then the helpers and the `[TestCase]` methods, then the `[Test]`
+  methods in the alphabetical order of their names. A new test goes where its name puts it, not at the end.

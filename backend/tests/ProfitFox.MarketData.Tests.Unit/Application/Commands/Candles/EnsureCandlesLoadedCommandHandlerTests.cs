@@ -87,7 +87,7 @@ public class EnsureCandlesLoadedCommandHandlerTests
         {
             Assert.That(readiness, Is.EqualTo(CandlesReadiness.Ready));
             await _sender.Received(2).Send(Arg.Any<LoadCandlesCommand>(), Arg.Any<CancellationToken>());
-            _queue.DidNotReceiveWithAnyArgs().Enqueue(default, default!);
+            _queue.DidNotReceiveWithAnyArgs().Enqueue(instrumentId: default, default!);
         });
     }
 

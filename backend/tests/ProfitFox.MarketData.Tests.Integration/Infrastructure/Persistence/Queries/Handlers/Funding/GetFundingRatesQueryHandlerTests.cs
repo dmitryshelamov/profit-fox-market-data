@@ -56,7 +56,7 @@ public class GetFundingRatesQueryHandlerTests
     // A point a step of the instrument from the hour on, five minutes apart, each with the number of its step.
     private Task StoreStepsAsync(int count)
     {
-        return StoreAsync([.. Enumerable.Range(start: 0, count).Select(step => new FundingRatePoint(Btc.Id, Hour.AddMinutes(5 * step), rate: step))]);
+        return StoreAsync([.. Enumerable.Range(start: 0, count).Select(step => new FundingRatePoint(Btc.Id, Hour.AddMinutes(5 * step), step))]);
     }
 
     [Test]
@@ -84,10 +84,10 @@ public class GetFundingRatesQueryHandlerTests
         Assert.Multiple(() =>
         {
             Assert.That(first.Points, Has.Count.EqualTo(1000));
-            Assert.That(first.Points[0], Is.EqualTo(new FundingRatePointInternal(Hour, 0m)));
-            Assert.That(first.Points[^1], Is.EqualTo(new FundingRatePointInternal(Hour.AddMinutes(5 * 999), 999m)));
+            Assert.That(first.Points[0], Is.EqualTo(new FundingRatePointInternal(Hour, FundingRate: 0m)));
+            Assert.That(first.Points[^1], Is.EqualTo(new FundingRatePointInternal(Hour.AddMinutes(5 * 999), FundingRate: 999m)));
             Assert.That(first.ContinueFrom, Is.EqualTo(Hour.AddMinutes(5 * 1000)));
-            Assert.That(rest.Points, Is.EqualTo(new[] { new FundingRatePointInternal(Hour.AddMinutes(5 * 1000), 1000m) }));
+            Assert.That(rest.Points, Is.EqualTo(new[] { new FundingRatePointInternal(Hour.AddMinutes(5 * 1000), FundingRate: 1000m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -134,9 +134,9 @@ public class GetFundingRatesQueryHandlerTests
                 Is.EqualTo(
                     new[]
                     {
-                        new FundingRatePointInternal(Hour, 2m),
-                        new FundingRatePointInternal(Hour.AddMinutes(5), 3m),
-                        new FundingRatePointInternal(Hour.AddMinutes(25), 0.00000331m)
+                        new FundingRatePointInternal(Hour, FundingRate: 2m),
+                        new FundingRatePointInternal(Hour.AddMinutes(5), FundingRate: 3m),
+                        new FundingRatePointInternal(Hour.AddMinutes(25), FundingRate: 0.00000331m)
                     }));
             Assert.That(points.ContinueFrom, Is.Null);
         });

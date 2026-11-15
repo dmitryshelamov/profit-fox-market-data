@@ -136,7 +136,7 @@ public class LoadBuyVolumesCommandHandlerTests
         Assert.Multiple(async () =>
         {
             Assert.That(_saved?.Settled, Is.EqualTo(new[] { new MinuteRange(Today.AddDays(-3), Today.AddDays(-1)) }));
-            await _archive.DidNotReceiveWithAnyArgs().GetTradesAsync(default!, default, cancellationToken: default);
+            await _archive.DidNotReceiveWithAnyArgs().GetTradesAsync(default!, day: default, cancellationToken: default);
         });
     }
 
@@ -204,8 +204,7 @@ public class LoadBuyVolumesCommandHandlerTests
     [Test]
     public void An_instrument_the_catalog_does_not_have_is_not_found()
     {
-        Assert.ThrowsAsync<InstrumentNotFoundException>(
-            () => _handler.Handle(new LoadBuyVolumesCommand(Guid.NewGuid(), History, Now), CancellationToken.None));
+        Assert.ThrowsAsync<InstrumentNotFoundException>(() => _handler.Handle(new LoadBuyVolumesCommand(Guid.NewGuid(), History, Now), CancellationToken.None));
     }
 
     [Test]
@@ -223,7 +222,7 @@ public class LoadBuyVolumesCommandHandlerTests
             Assert.That(_saved?.Settled, Is.EqualTo(new[] { new MinuteRange(Today.AddDays(-3), Today) }));
             Assert.That(_saved?.NewCandles, Is.EqualTo(new[] { CandleGenerator.Generate(quiet.OpenTime, volume: 0m, buyVolume: 0m) }));
             await _series.Received(1).SaveAsync(Arg.Any<CandleSeries>(), Arg.Any<CancellationToken>());
-            await _archive.DidNotReceiveWithAnyArgs().GetTradesAsync(default!, default, cancellationToken: default);
+            await _archive.DidNotReceiveWithAnyArgs().GetTradesAsync(default!, day: default, cancellationToken: default);
         });
     }
 
@@ -239,7 +238,7 @@ public class LoadBuyVolumesCommandHandlerTests
         {
             Assert.That(result, Is.EqualTo(LoadBuyVolumesResult.NothingLeft));
             Assert.That(_saved, Is.Null);
-            await _series.DidNotReceiveWithAnyArgs().GetCandlesWithoutBuyVolumeAsync(default, default!, cancellationToken: default);
+            await _series.DidNotReceiveWithAnyArgs().GetCandlesWithoutBuyVolumeAsync(instrumentId: default, default!, cancellationToken: default);
         });
     }
 

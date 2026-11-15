@@ -72,13 +72,25 @@ public class FundingPaymentsControllerTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
+    // The series of the linear contract covering [from, until) with the payments.
+    private async Task StoreAsync(DateTimeOffset from, DateTimeOffset until, params FundingPayment[] payments)
+    {
+        await _services.GetRequiredService<IFundingPaymentSeriesRepository>()
+            .SaveAsync(FundingPaymentSeries.Create(Linear.Id, from, until, payments), CancellationToken.None);
+    }
+
+    private static string Url(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
+    {
+        return $"api/instruments/{instrumentId}/funding-payments?from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
+    }
+
     [Test]
     public async Task A_window_that_holds_more_than_an_answer_gives_tells_where_to_continue_from()
     {
         await StoreAsync(
             Hour.AddHours(-1001),
             Hour,
-            [.. Enumerable.Range(start: 1, count: 1001).Select(hour => new FundingPayment(Hour.AddHours(-hour), rate: hour))]);
+            [.. Enumerable.Range(start: 1, count: 1001).Select(hour => new FundingPayment(Hour.AddHours(-hour), hour))]);
 
         JsonElement first = await _client.GetFromJsonAsync<JsonElement>(Url(Linear.Id, Hour.AddDays(-365), Hour), Json);
         FundingPaymentsInternal? rest = await _client.GetFromJsonAsync<FundingPaymentsInternal>(
@@ -89,7 +101,7 @@ public class FundingPaymentsControllerTests
         {
             Assert.That(first.GetProperty("points").GetArrayLength(), Is.EqualTo(1000));
             Assert.That(first.GetProperty("continueFrom").GetDateTimeOffset(), Is.EqualTo(Hour.AddHours(-1)));
-            Assert.That(rest!.Points, Is.EqualTo(new[] { new FundingPaymentInternal(Hour.AddHours(-1), 1m) }));
+            Assert.That(rest!.Points, Is.EqualTo(new[] { new FundingPaymentInternal(Hour.AddHours(-1), FundingRate: 1m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -141,7 +153,8 @@ public class FundingPaymentsControllerTests
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(
                 payments!.Points,
-                Is.EqualTo(new[] { new FundingPaymentInternal(Hour.AddHours(-8), -0.00118658m), new FundingPaymentInternal(Hour, 0.00000819m) }));
+                Is.EqualTo(
+                    new[] { new FundingPaymentInternal(Hour.AddHours(-8), FundingRate: -0.00118658m), new FundingPaymentInternal(Hour, FundingRate: 0.00000819m) }));
             Assert.That(payments.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));
             Assert.That(payments.CoveredUntil, Is.EqualTo(Hour.AddSeconds(15)));
             Assert.That(payments.ContinueFrom, Is.Null);
@@ -152,17 +165,5 @@ public class FundingPaymentsControllerTests
                 Does.Contain("\"fundingRate\":0.00000819").And.Contain("\"time\":").And.Contain("\"coveredFrom\":").And.Contain("\"continueFrom\":null"));
             Assert.That(_app.Bybit.Requests, Is.Empty);
         });
-    }
-
-    // The series of the linear contract covering [from, until) with the payments.
-    private async Task StoreAsync(DateTimeOffset from, DateTimeOffset until, params FundingPayment[] payments)
-    {
-        await _services.GetRequiredService<IFundingPaymentSeriesRepository>()
-            .SaveAsync(FundingPaymentSeries.Create(Linear.Id, from, until, payments), CancellationToken.None);
-    }
-
-    private static string Url(Guid instrumentId, DateTimeOffset from, DateTimeOffset to)
-    {
-        return $"api/instruments/{instrumentId}/funding-payments?from={from.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}&to={to.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}";
     }
 }

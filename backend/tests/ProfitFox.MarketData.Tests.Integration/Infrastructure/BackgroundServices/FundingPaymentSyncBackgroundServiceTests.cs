@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using NSubstitute;
+using NSubstitute.Core;
 
 using ProfitFox.MarketData.Application.Commands.Funding.LoadFundingPayments;
 using ProfitFox.MarketData.Application.Contracts.Instruments.Converters;
@@ -102,7 +103,7 @@ public class FundingPaymentSyncBackgroundServiceTests
     }
 
     // A page that is loaded and leaves nothing: the command is recorded.
-    private Task<LoadFundingPaymentsResult> NothingLeft(NSubstitute.Core.CallInfo call)
+    private Task<LoadFundingPaymentsResult> NothingLeft(CallInfo call)
     {
         if (call[0] is LoadFundingPaymentsCommand command)
         {

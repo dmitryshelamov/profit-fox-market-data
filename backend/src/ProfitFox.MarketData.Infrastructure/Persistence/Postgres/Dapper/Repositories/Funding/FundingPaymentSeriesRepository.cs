@@ -35,8 +35,7 @@ internal sealed class FundingPaymentSeriesRepository(
             {
                 if (series.NewPayments.Count > 0)
                 {
-                    await connection.ExecuteAsync(
-                        FundingPaymentSeriesRepositoryQueries.UpsertPayments(series, transactions.Current, cancellationToken));
+                    await connection.ExecuteAsync(FundingPaymentSeriesRepositoryQueries.UpsertPayments(series, transactions.Current, cancellationToken));
                 }
 
                 await connection.ExecuteAsync(FundingPaymentSeriesRepositoryQueries.UpsertSeries(series, transactions.Current, cancellationToken));

@@ -65,7 +65,7 @@ public class BybitTradeArchiveClientTests
     // A trade of a linear file: its time is in seconds with a fraction.
     private static string LinearTrade(DateTimeOffset time, string side, string size)
     {
-        string seconds = (time.ToUnixTimeMilliseconds() / 1000m).ToString(CultureInfo.InvariantCulture);
+        var seconds = (time.ToUnixTimeMilliseconds() / 1000m).ToString(CultureInfo.InvariantCulture);
 
         return $"{seconds},BTCUSDT,{side},{size},71435.00,ZeroMinusTick,aa81bc91,2.00018e+11,{size},2000.18,0";
     }
@@ -87,15 +87,21 @@ public class BybitTradeArchiveClientTests
     }
 
     [Test]
-    public void A_file_laid_out_in_a_way_not_known_fails_without_being_read_again()
+    public async Task A_file_Bybit_keeps_refusing_is_a_transient_failure()
     {
-        _bybit.RespondBytes(Gzip("time,qty,taker", "1,2,Buy"));
-
-        Assert.Multiple(() =>
+        for (var attempt = 0; attempt < 6; attempt++)
         {
-            Assert.ThrowsAsync<FormatException>(() => _archive.GetTradesAsync(Linear, Day, CancellationToken.None));
-            Assert.That(_bybit.Requests, Has.Count.EqualTo(1));
-        });
+            _bybit.RespondBytes([], HttpStatusCode.ServiceUnavailable);
+        }
+
+        Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> reading = _archive.GetTradesAsync(Linear, Day, CancellationToken.None);
+
+        for (var retry = 0; retry < 5; retry++)
+        {
+            await _time.PassNextWaitAsync();
+        }
+
+        Assert.ThrowsAsync<TransientExchangeException>(() => reading);
     }
 
     [Test]
@@ -114,21 +120,15 @@ public class BybitTradeArchiveClientTests
     }
 
     [Test]
-    public async Task A_file_Bybit_keeps_refusing_is_a_transient_failure()
+    public void A_file_laid_out_in_a_way_not_known_fails_without_being_read_again()
     {
-        for (var attempt = 0; attempt < 6; attempt++)
+        _bybit.RespondBytes(Gzip("time,qty,taker", "1,2,Buy"));
+
+        Assert.Multiple(() =>
         {
-            _bybit.RespondBytes([], HttpStatusCode.ServiceUnavailable);
-        }
-
-        Task<IReadOnlyDictionary<DateTimeOffset, TradedVolume>?> reading = _archive.GetTradesAsync(Linear, Day, CancellationToken.None);
-
-        for (var retry = 0; retry < 5; retry++)
-        {
-            await _time.PassNextWaitAsync();
-        }
-
-        Assert.ThrowsAsync<TransientExchangeException>(() => reading);
+            Assert.ThrowsAsync<FormatException>(() => _archive.GetTradesAsync(Linear, Day, CancellationToken.None));
+            Assert.That(_bybit.Requests, Has.Count.EqualTo(1));
+        });
     }
 
     [Test]

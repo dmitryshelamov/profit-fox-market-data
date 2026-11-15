@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using NSubstitute;
+using NSubstitute.Core;
 
 using ProfitFox.MarketData.Application.Commands.OpenInterest.LoadOpenInterest;
 using ProfitFox.MarketData.Application.Contracts.Instruments.Converters;
@@ -99,7 +100,7 @@ public class OpenInterestSyncBackgroundServiceTests
     }
 
     // A page that is loaded and leaves nothing: the command is recorded.
-    private Task<LoadOpenInterestResult> NothingLeft(NSubstitute.Core.CallInfo call)
+    private Task<LoadOpenInterestResult> NothingLeft(CallInfo call)
     {
         if (call[0] is LoadOpenInterestCommand command)
         {

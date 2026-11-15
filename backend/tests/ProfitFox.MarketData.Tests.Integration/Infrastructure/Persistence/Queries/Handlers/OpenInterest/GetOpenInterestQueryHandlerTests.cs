@@ -57,7 +57,7 @@ public class GetOpenInterestQueryHandlerTests
     // A point a step of the instrument from the hour on, five minutes apart, each with the number of its step.
     private Task StoreStepsAsync(int count)
     {
-        return StoreAsync([.. Enumerable.Range(start: 0, count).Select(step => new OpenInterestPoint(Btc.Id, Hour.AddMinutes(5 * step), value: step))]);
+        return StoreAsync([.. Enumerable.Range(start: 0, count).Select(step => new OpenInterestPoint(Btc.Id, Hour.AddMinutes(5 * step), step))]);
     }
 
     [Test]
@@ -85,10 +85,10 @@ public class GetOpenInterestQueryHandlerTests
         Assert.Multiple(() =>
         {
             Assert.That(first.Points, Has.Count.EqualTo(1000));
-            Assert.That(first.Points[0], Is.EqualTo(new OpenInterestPointInternal(Hour, 0m)));
-            Assert.That(first.Points[^1], Is.EqualTo(new OpenInterestPointInternal(Hour.AddMinutes(5 * 999), 999m)));
+            Assert.That(first.Points[0], Is.EqualTo(new OpenInterestPointInternal(Hour, OpenInterest: 0m)));
+            Assert.That(first.Points[^1], Is.EqualTo(new OpenInterestPointInternal(Hour.AddMinutes(5 * 999), OpenInterest: 999m)));
             Assert.That(first.ContinueFrom, Is.EqualTo(Hour.AddMinutes(5 * 1000)));
-            Assert.That(rest.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour.AddMinutes(5 * 1000), 1000m) }));
+            Assert.That(rest.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour.AddMinutes(5 * 1000), OpenInterest: 1000m) }));
             Assert.That(rest.ContinueFrom, Is.Null);
         });
     }
@@ -151,9 +151,9 @@ public class GetOpenInterestQueryHandlerTests
                 Is.EqualTo(
                     new[]
                     {
-                        new OpenInterestPointInternal(Hour, 2m),
-                        new OpenInterestPointInternal(Hour.AddMinutes(5), 3m),
-                        new OpenInterestPointInternal(Hour.AddMinutes(25), 0.00000331m)
+                        new OpenInterestPointInternal(Hour, OpenInterest: 2m),
+                        new OpenInterestPointInternal(Hour.AddMinutes(5), OpenInterest: 3m),
+                        new OpenInterestPointInternal(Hour.AddMinutes(25), OpenInterest: 0.00000331m)
                     }));
             Assert.That(points.ContinueFrom, Is.Null);
         });
@@ -179,7 +179,7 @@ public class GetOpenInterestQueryHandlerTests
         {
             Assert.That(quiet.Points, Is.Empty);
             Assert.That(quiet.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));
-            Assert.That(points.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour, 2m) }));
+            Assert.That(points.Points, Is.EqualTo(new[] { new OpenInterestPointInternal(Hour, OpenInterest: 2m) }));
 
             // The coverage is of the series, not of the window.
             Assert.That(points.CoveredFrom, Is.EqualTo(Hour.AddDays(-30)));

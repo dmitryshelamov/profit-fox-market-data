@@ -103,7 +103,8 @@ public class OpenInterestSeriesRepositoryTests
     [Test]
     public async Task A_series_is_read_as_it_was_saved_with_no_points_to_save_again()
     {
-        OpenInterestPoint[] points = [new OpenInterestPoint(Btc.Id, Noon.AddMinutes(-10), value: 70772.729m), new OpenInterestPoint(Btc.Id, Noon.AddMinutes(-5), value: 70711.87699999m)];
+        OpenInterestPoint[] points =
+            [new OpenInterestPoint(Btc.Id, Noon.AddMinutes(-10), value: 70772.729m), new OpenInterestPoint(Btc.Id, Noon.AddMinutes(-5), value: 70711.87699999m)];
 
         await _repository.SaveAsync(OpenInterestSeries.Create(Btc.Id, Noon.AddMinutes(-10), Noon, points), CancellationToken.None);
         OpenInterestSeries? read = await _repository.GetAsync(Btc.Id, CancellationToken.None);

@@ -29,8 +29,7 @@ internal sealed class OpenInterestSeriesRepository(
 
     public Task<int> CountPointsAsync(Guid instrumentId, DateTimeOffset from, DateTimeOffset until, CancellationToken cancellationToken)
     {
-        return connection.ExecuteScalarAsync<int>(
-            OpenInterestSeriesRepositoryQueries.CountPoints(instrumentId, from, until, transactions.Current, cancellationToken));
+        return connection.ExecuteScalarAsync<int>(OpenInterestSeriesRepositoryQueries.CountPoints(instrumentId, from, until, transactions.Current, cancellationToken));
     }
 
     // The points and the coverage go together, so the coverage never claims a time storage does not hold.

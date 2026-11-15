@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using NSubstitute;
+using NSubstitute.Core;
 
 using ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
 using ProfitFox.MarketData.Application.Exceptions;
@@ -92,7 +93,7 @@ public class TickerCollectionBackgroundServiceTests
     }
 
     // A snapshot that is taken: the command is recorded.
-    private Task<CollectBybitTickersResult> Collected(NSubstitute.Core.CallInfo call)
+    private Task<CollectBybitTickersResult> Collected(CallInfo call)
     {
         if (call[0] is CollectBybitTickersCommand command)
         {
@@ -275,6 +276,21 @@ public class TickerCollectionBackgroundServiceTests
     }
 
     [Test]
+    public async Task Bybit_switched_on_is_asked_from_the_next_boundary()
+    {
+        await StartAsync(bybit: false);
+        await PassToBoundaryAsync();
+
+        // The first boundary is behind the service only once it waits for the second: a switch made before that could still be read for
+        // the first.
+        TimeSpan toNextBoundary = await _time.NextWaitAsync();
+        Save("TickerCollection:Bybit:Enabled", "true");
+        _time.Advance(toNextBoundary);
+
+        Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
+    }
+
+    [Test]
     public async Task Bybit_that_is_not_enabled_is_not_asked()
     {
         await StartAsync(bybit: false);
@@ -288,21 +304,6 @@ public class TickerCollectionBackgroundServiceTests
             Assert.That(toNextBoundary, Is.EqualTo(Step));
             await _sender.DidNotReceive().Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>());
         });
-    }
-
-    [Test]
-    public async Task Bybit_switched_on_is_asked_from_the_next_boundary()
-    {
-        await StartAsync(bybit: false);
-        await PassToBoundaryAsync();
-
-        // The first boundary is behind the service only once it waits for the second: a switch made before that could still be read for
-        // the first.
-        TimeSpan toNextBoundary = await _time.NextWaitAsync();
-        Save("TickerCollection:Bybit:Enabled", "true");
-        _time.Advance(toNextBoundary);
-
-        Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
     }
 
     [Test]

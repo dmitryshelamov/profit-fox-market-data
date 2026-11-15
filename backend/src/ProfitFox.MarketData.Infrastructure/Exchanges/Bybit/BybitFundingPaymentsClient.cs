@@ -45,6 +45,6 @@ internal sealed class BybitFundingPaymentsClient(IBybitRestClient bybit, BybitRe
                     .Where(payment => payment.Time >= from && payment.Time < until)
                     .OrderBy(payment => payment.Time)
             ],
-            Full: response.List.Count() >= PageSize);
+            response.List.Count() >= PageSize);
     }
 }

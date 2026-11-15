@@ -129,7 +129,7 @@ public class BybitRequestGateTests
     [Test]
     public async Task No_more_requests_go_in_a_second_than_the_settings_let()
     {
-        Task<int>[] sending = [.. Enumerable.Range(0, 3).Select(request => _gate.SendAsync(_ => Task.FromResult(request), CancellationToken.None))];
+        Task<int>[] sending = [.. Enumerable.Range(start: 0, count: 3).Select(request => _gate.SendAsync(_ => Task.FromResult(request), CancellationToken.None))];
         await Task.WhenAll(sending[0], sending[1]).WaitAsync(TimeSpan.FromSeconds(5));
 
         // The bucket is empty, so the third can only go once the clock fills it again.

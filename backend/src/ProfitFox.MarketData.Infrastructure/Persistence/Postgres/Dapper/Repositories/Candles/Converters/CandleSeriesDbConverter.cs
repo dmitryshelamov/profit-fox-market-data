@@ -32,7 +32,7 @@ internal static class CandleSeriesDbConverter
             .Where(row => row.From is not null)
             .ToLookup(row => row.Settled, row => new MinuteRange(row.From!.Value, row.Until!.Value));
 
-        return CandleSeries.Restore(instrumentId, covered: ranges[false], settled: ranges[true]);
+        return CandleSeries.Restore(instrumentId, ranges[false], ranges[true]);
     }
 
     internal static Candle ToDomain(CandleDb row)

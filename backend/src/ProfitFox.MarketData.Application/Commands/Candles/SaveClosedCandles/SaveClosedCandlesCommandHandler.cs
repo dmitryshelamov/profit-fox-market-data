@@ -54,8 +54,7 @@ internal sealed class SaveClosedCandlesCommandHandler(ICandleSeriesRepository se
         // What storage holds, not what was told: a candle told again without its buy volume has the one saved before.
         LiveCandle[] saved =
         [
-            .. stored.SelectMany(
-                instrument => instrument.Select(candle => new LiveCandle(told[instrument.Key].Exchange, instrument.Key, candle, Closed: true)))
+            .. stored.SelectMany(instrument => instrument.Select(candle => new LiveCandle(told[instrument.Key].Exchange, instrument.Key, candle, Closed: true)))
         ];
         feed.Publish(saved);
 

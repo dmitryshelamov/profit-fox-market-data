@@ -197,15 +197,15 @@ internal sealed class BybitCandleStreamClient(IBybitSocketClient bybit, TimeProv
     {
         private readonly List<UpdateSubscription> _subscriptions = [];
 
-        public void Add(UpdateSubscription subscription)
-        {
-            _subscriptions.Add(subscription);
-        }
-
         public async ValueTask DisposeAsync()
         {
             await formingTimer.DisposeAsync();
             await Task.WhenAll(_subscriptions.Select(subscription => subscription.CloseAsync()));
+        }
+
+        public void Add(UpdateSubscription subscription)
+        {
+            _subscriptions.Add(subscription);
         }
     }
 }
