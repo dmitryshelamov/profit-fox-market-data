@@ -5,8 +5,8 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Postgres.FluentMigrato
 [Migration(202611140003)]
 public sealed class CreateOpenInterestTableMigration : Migration
 {
-    // The open interest of every instrument that has one, in its base asset, a point for each time it was collected: unconstrained
-    // numeric keeps every value exactly, and a time that was not collected has no row. Daily chunks, each compressed once it is 7 days
+    // The open interest of every instrument that has one, in its base asset, a point for each step it was collected or loaded for:
+    // unconstrained numeric keeps every value exactly, and a step neither collected nor loaded has no row. Daily chunks, each compressed once it is 7 days
     // old; a segment per instrument, so a read of one instrument unpacks only its own.
     public override void Up()
     {

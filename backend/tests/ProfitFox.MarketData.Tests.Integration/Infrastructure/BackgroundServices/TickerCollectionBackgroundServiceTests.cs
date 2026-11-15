@@ -49,7 +49,8 @@ public class TickerCollectionBackgroundServiceTests
 
     private static readonly DateTimeOffset FirstBoundary = Start.AddSeconds(30);
 
-    private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
+    // The time between two snapshots: a step of the open interest series.
+    private static readonly TimeSpan Step = TimeSpan.FromMinutes(5);
 
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
 
@@ -152,8 +153,8 @@ public class TickerCollectionBackgroundServiceTests
         Assert.Multiple(async () =>
         {
             // No snapshot of the first boundary was started: the next wait is for the second one.
-            Assert.That(toNextBoundary, Is.EqualTo(Minute - Deadline - TimeSpan.FromSeconds(5)));
-            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+            Assert.That(toNextBoundary, Is.EqualTo(Step - Deadline - TimeSpan.FromSeconds(5)));
+            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
             await _sender.Received(1).Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>());
         });
     }
@@ -169,11 +170,11 @@ public class TickerCollectionBackgroundServiceTests
         Assert.Throws<AggregateException>(() => Save("TickerCollection:DeadlineSeconds", "60"));
         await PassToBoundaryAsync();
 
-        Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+        Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
     }
 
     [Test]
-    public async Task A_pause_of_Bybit_skips_the_minute_and_the_next_boundary_still_runs()
+    public async Task A_pause_of_Bybit_skips_the_step_and_the_next_boundary_still_runs()
     {
         _sender.Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -188,8 +189,8 @@ public class TickerCollectionBackgroundServiceTests
         Assert.Multiple(async () =>
         {
             // The pause is not waited out: the service keeps to the boundaries.
-            Assert.That(toNextBoundary, Is.EqualTo(Minute));
-            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+            Assert.That(toNextBoundary, Is.EqualTo(Step));
+            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
         });
     }
 
@@ -223,8 +224,8 @@ public class TickerCollectionBackgroundServiceTests
         {
             Assert.That(deadline, Is.EqualTo(Deadline));
             Assert.That(givenUpEarly, Is.False);
-            Assert.That(toNextBoundary, Is.EqualTo(Minute - Deadline));
-            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+            Assert.That(toNextBoundary, Is.EqualTo(Step - Deadline));
+            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
         });
     }
 
@@ -256,7 +257,7 @@ public class TickerCollectionBackgroundServiceTests
     }
 
     [Test]
-    public async Task A_snapshot_that_fails_skips_the_minute_and_the_next_boundary_still_runs()
+    public async Task A_snapshot_that_fails_skips_the_step_and_the_next_boundary_still_runs()
     {
         _sender.Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException<CollectBybitTickersResult>(new TransientExchangeException("Bybit answered 502.")), Collected);
@@ -268,7 +269,7 @@ public class TickerCollectionBackgroundServiceTests
         Assert.Multiple(async () =>
         {
             // The minute that failed is not asked for again.
-            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+            Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
             await _sender.Received(2).Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>());
         });
     }
@@ -284,7 +285,7 @@ public class TickerCollectionBackgroundServiceTests
 
         Assert.Multiple(async () =>
         {
-            Assert.That(toNextBoundary, Is.EqualTo(Minute));
+            Assert.That(toNextBoundary, Is.EqualTo(Step));
             await _sender.DidNotReceive().Send(Arg.Any<CollectBybitTickersCommand>(), Arg.Any<CancellationToken>());
         });
     }
@@ -301,11 +302,11 @@ public class TickerCollectionBackgroundServiceTests
         Save("TickerCollection:Bybit:Enabled", "true");
         _time.Advance(toNextBoundary);
 
-        Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Minute)));
+        Assert.That(await SentAsync(), Is.EqualTo(new CollectBybitTickersCommand(FirstBoundary + Step)));
     }
 
     [Test]
-    public async Task Every_minute_boundary_sends_a_command()
+    public async Task Every_boundary_of_five_minutes_sends_a_command()
     {
         await StartAsync();
 
@@ -322,8 +323,8 @@ public class TickerCollectionBackgroundServiceTests
                 new[]
                 {
                     new CollectBybitTickersCommand(FirstBoundary),
-                    new CollectBybitTickersCommand(FirstBoundary + Minute),
-                    new CollectBybitTickersCommand(FirstBoundary + Minute * 2)
+                    new CollectBybitTickersCommand(FirstBoundary + Step),
+                    new CollectBybitTickersCommand(FirstBoundary + Step * 2)
                 }));
     }
 }

@@ -44,6 +44,40 @@ internal static class BybitAnswers
                   """;
     }
 
+    /// <summary>
+    ///     A funding payment of a linear contract as Bybit writes it in its history: the settled rate and the time it was paid at.
+    /// </summary>
+    public static string FundingPayment(string symbol, string fundingRate, DateTimeOffset paidAt)
+    {
+        return $$"""
+                 {"symbol":"{{symbol}}","fundingRate":"{{fundingRate}}","fundingRateTimestamp":"{{paidAt.ToUnixTimeMilliseconds()}}"}
+                 """;
+    }
+
+    public static string FundingPayments(params string[] payments)
+    {
+        return $$"""
+                 {"retCode":0,"retMsg":"OK","result":{"category":"linear","list":[{{string.Join(",", payments)}}]},"retExtInfo":{},"time":0}
+                 """;
+    }
+
+    /// <summary>
+    ///     A point of the history of open interest as Bybit writes it: the open interest in the base coin and the time it is of.
+    /// </summary>
+    public static string OpenInterestPoint(string openInterest, DateTimeOffset time)
+    {
+        return $$"""
+                 {"openInterest":"{{openInterest}}","singleOpenInterest":"{{openInterest}}","timestamp":"{{time.ToUnixTimeMilliseconds()}}"}
+                 """;
+    }
+
+    public static string OpenInterestHistory(string symbol, params string[] points)
+    {
+        return $$"""
+                 {"retCode":0,"retMsg":"OK","result":{"symbol":"{{symbol}}","category":"linear","list":[{{string.Join(",", points)}}],"nextPageCursor":""},"retExtInfo":{},"time":0}
+                 """;
+    }
+
     public static string Tickers(string category, params string[] tickers)
     {
         return $$"""

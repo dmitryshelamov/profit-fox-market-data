@@ -5,16 +5,16 @@ using Microsoft.Extensions.Options;
 
 using ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
 using ProfitFox.MarketData.Application.Exceptions;
-using ProfitFox.MarketData.Domain.ValueObjects.Candles;
+using ProfitFox.MarketData.Domain.Entities.OpenInterest;
 
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     Collects the open interest and the funding rates of the linear market of Bybit at every minute boundary in UTC, while
-///     <see cref="TickerCollectionSettings" /> enable Bybit: one command a minute, with the time of the boundary. A snapshot not taken
-///     within <see cref="TickerCollectionSettings.DeadlineSeconds" /> of its boundary is given up, and so is one Bybit holds or fails:
-///     that minute is skipped for good, nothing is filled in later, and the service waits for the next boundary. The settings are read
-///     again before every snapshot.
+///     Collects the open interest and the funding rates of the linear market of Bybit where every step of the open interest series
+///     starts, every five minutes in UTC, while <see cref="TickerCollectionSettings" /> enable Bybit: one command a step, with the time
+///     of its boundary. A snapshot not taken within <see cref="TickerCollectionSettings.DeadlineSeconds" /> of its boundary is given
+///     up, and so is one Bybit holds or fails: the service skips that step and waits for the next boundary. The settings are read again
+///     before every snapshot.
 /// </summary>
 internal sealed class TickerCollectionBackgroundService(
     IServiceScopeFactory scopes,
@@ -34,12 +34,12 @@ internal sealed class TickerCollectionBackgroundService(
             // The boundary is counted from the clock every time, so the snapshots do not drift and a boundary that passed while a
             // snapshot was taken is skipped, not caught up with.
             DateTimeOffset now = time.GetUtcNow();
-            DateTimeOffset boundary = MinuteRange.StartOfMinute(now).AddMinutes(1);
+            DateTimeOffset boundary = NextBoundary(now);
 
             // A timer may fire a moment before its boundary by the clock: the boundary just served is not served again.
             if (boundary <= served)
             {
-                boundary = served.Value.AddMinutes(1);
+                boundary = served.Value + OpenInterestSeries.Step;
             }
 
             await Task.Delay(boundary - now, time, stoppingToken);
@@ -54,7 +54,13 @@ internal sealed class TickerCollectionBackgroundService(
         }
     }
 
-    // The snapshot of one boundary, in a scope of its own. Whatever keeps it from being saved in time is logged and skips the minute; an
+    // Where the step after the one that goes on starts.
+    private static DateTimeOffset NextBoundary(DateTimeOffset now)
+    {
+        return new DateTimeOffset(now.UtcTicks - (now.UtcTicks % OpenInterestSeries.Step.Ticks), TimeSpan.Zero) + OpenInterestSeries.Step;
+    }
+
+    // The snapshot of one boundary, in a scope of its own. Whatever keeps it from being saved in time is logged and skips the step; an
     // escaping exception would stop the host.
     private async Task CollectAsync(DateTimeOffset boundary, TimeSpan deadline, CancellationToken stoppingToken)
     {
@@ -88,7 +94,7 @@ internal sealed class TickerCollectionBackgroundService(
         {
             logger.LogWarning(
                 exception,
-                "The tickers of Bybit for {Boundary:O} were not collected within {Deadline} s; the minute is skipped.",
+                "The tickers of Bybit for {Boundary:O} were not collected within {Deadline} s; the step is skipped.",
                 boundary,
                 deadline.TotalSeconds);
         }
@@ -102,7 +108,7 @@ internal sealed class TickerCollectionBackgroundService(
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
-            logger.LogError(exception, "Collecting the tickers of Bybit for {Boundary:O} failed; the minute is skipped.", boundary);
+            logger.LogError(exception, "Collecting the tickers of Bybit for {Boundary:O} failed; the step is skipped.", boundary);
         }
     }
 }

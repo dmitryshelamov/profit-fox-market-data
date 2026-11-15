@@ -66,7 +66,8 @@ public class IntegrationEnvironment
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "TRUNCATE instruments, bybit_listings, tinvest_shares, candles, candle_series, open_interest, funding_rates",
+            "TRUNCATE instruments, bybit_listings, tinvest_shares, candles, candle_series, open_interest, funding_rates, funding_payments, " +
+            "funding_payment_series, open_interest_series",
             connection);
         await command.ExecuteNonQueryAsync();
     }
