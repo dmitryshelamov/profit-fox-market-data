@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package profitfox.marketdata.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
+
+// The liquidations of the catalog, summed by the minute, as they are collected.
+service LiquidationFeed {
+  // Tells every minute of liquidations once a change of it is stored, as it is stored, until the caller ends the call.
+  // With `since`, the stored ones of a time at or after it come first, oldest first, of every instrument, and the live
+  // ones follow with none left out. The response headers come once the subscription is in place.
+  //
+  // A minute is told again every time it changes, each time with all that is stored of it by then, not with what was
+  // added: while it goes on, about every five seconds in which the instrument had a liquidation; once more for a
+  // liquidation told after it ended; and when it is marked not valid. The caller replaces the minute it has, by
+  // instrument and time. A minute that was heard in full and had no liquidation is not stored and is never told.
+  //
+  // A minute that changed while the caller was away is told only if its time is at or after `since`: a caller that
+  // subscribes again asks from a few minutes before the last minute it got.
+  //
+  // After a downtime of the service every minute of it is marked not valid, a message a minute of every contract, which
+  // is more than a caller may have waiting: the callers subscribed by then are cut off and subscribe again.
+  //
+  // INVALID_ARGUMENT: `since` is further back than the service catches up.
+  // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
+  // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
+  rpc Subscribe (SubscribeLiquidationsRequest) returns (stream LiquidationUpdate);
+}
+
+message SubscribeLiquidationsRequest {
+  // Where to catch up from; absent means live ones only.
+  google.protobuf.Timestamp since = 1;
+}
+
+// The liquidations of an instrument over one minute, the liquidated long and short positions apart. A volume and a
+// turnover are decimal numbers as text, exactly as stored: "0.75".
+message LiquidationUpdate {
+  // The id of the instrument in the catalog, as GET api/instruments gives it.
+  string instrument_id = 1;
+
+  // The start of the minute.
+  google.protobuf.Timestamp time = 2;
+
+  // What was liquidated of long positions, in the base asset.
+  string long_volume = 3;
+
+  // What it was worth in the quote asset: the size of each liquidation times the bankruptcy price of its position.
+  string long_turnover = 4;
+
+  // How many liquidations of long positions were summed.
+  int32 long_count = 5;
+
+  // The same of short positions.
+  string short_volume = 6;
+  string short_turnover = 7;
+  int32 short_count = 8;
+
+  // False when the liquidations of the minute were not all heard: the sums tell only what was heard, down to nothing.
+  bool is_valid = 9;
+}

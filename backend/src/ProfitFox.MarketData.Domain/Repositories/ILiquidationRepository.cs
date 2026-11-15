@@ -12,16 +12,21 @@ public interface ILiquidationRepository
     /// <summary>
     ///     Adds the sums to the stored ones of the same instrument and minute, all of them together or none; a minute not stored yet
     ///     is stored as a valid one, a stored one keeps its mark. A minute of an instrument comes once in
-    ///     <paramref name="minutes" />.
+    ///     <paramref name="minutes" />. Gives those minutes as storage holds them now, oldest first.
     /// </summary>
-    Task AddAsync(IReadOnlyCollection<LiquidationMinute> minutes, CancellationToken cancellationToken);
+    Task<IReadOnlyList<StoredLiquidationMinute>> AddAsync(IReadOnlyCollection<LiquidationMinute> minutes, CancellationToken cancellationToken);
 
     /// <summary>
     ///     Marks every minute of the instruments from <paramref name="from" /> to <paramref name="until" />, both included, as not
     ///     valid, all of them together or none. A stored minute keeps its sums; one not stored is stored with sums of nothing. The mark
-    ///     is never taken back.
+    ///     is never taken back. Gives the minutes the call changed as storage holds them now, oldest first: one that was not valid
+    ///     already is not among them.
     /// </summary>
-    Task InvalidateAsync(IReadOnlyCollection<Guid> instrumentIds, DateTimeOffset from, DateTimeOffset until, CancellationToken cancellationToken);
+    Task<IReadOnlyList<StoredLiquidationMinute>> InvalidateAsync(
+        IReadOnlyCollection<Guid> instrumentIds,
+        DateTimeOffset from,
+        DateTimeOffset until,
+        CancellationToken cancellationToken);
 
     /// <summary>
     ///     The latest minute stored of any instrument, valid or not; null while nothing is stored.

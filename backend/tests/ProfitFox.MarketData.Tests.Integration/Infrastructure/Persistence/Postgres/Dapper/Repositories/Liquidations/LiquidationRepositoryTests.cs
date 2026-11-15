@@ -74,6 +74,11 @@ public class LiquidationRepositoryTests
         ];
     }
 
+    private static IEnumerable<(LiquidationMinute Minute, bool Valid)> Given(IReadOnlyList<StoredLiquidationMinute> stored)
+    {
+        return stored.Select(minute => (minute.Minute, minute.IsValid));
+    }
+
     private static LiquidationMinute Nothing(Instrument instrument, DateTimeOffset time)
     {
         return new LiquidationMinute(instrument.Id, time, LiquidationSum.None, LiquidationSum.None);
@@ -85,9 +90,31 @@ public class LiquidationRepositoryTests
         var heard = new LiquidationMinute(Btc.Id, Minute, Longs, Shorts);
         await _repository.AddAsync([heard], CancellationToken.None);
 
-        await _repository.InvalidateAsync([Btc.Id], Minute, Minute, CancellationToken.None);
+        IReadOnlyList<StoredLiquidationMinute> marked = await _repository.InvalidateAsync([Btc.Id], Minute, Minute, CancellationToken.None);
 
-        Assert.That(await StoredAsync(), Is.EqualTo(new[] { (heard, false) }));
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows, Is.EqualTo(new[] { (heard, false) }));
+            Assert.That(Given(marked), Is.EqualTo(new[] { (heard, false) }));
+        });
+    }
+
+    [Test]
+    public async Task A_minute_not_valid_already_is_left_as_it_is_and_is_not_given_back()
+    {
+        await _repository.InvalidateAsync([Btc.Id], Minute, Minute.AddMinutes(1), CancellationToken.None);
+
+        IReadOnlyList<StoredLiquidationMinute> marked = await _repository.InvalidateAsync([Btc.Id], Minute.AddMinutes(1), Minute.AddMinutes(2), CancellationToken.None);
+
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Given(marked), Is.EqualTo(new[] { (Nothing(Btc, Minute.AddMinutes(2)), false) }));
+            Assert.That(rows, Has.Count.EqualTo(3));
+        });
     }
 
     [Test]
@@ -95,9 +122,15 @@ public class LiquidationRepositoryTests
     {
         LiquidationMinute[] minutes = [new LiquidationMinute(Btc.Id, Minute, Longs, LiquidationSum.None), new LiquidationMinute(Eth.Id, Minute, Longs, Shorts)];
 
-        await _repository.AddAsync(minutes, CancellationToken.None);
+        IReadOnlyList<StoredLiquidationMinute> stored = await _repository.AddAsync(minutes, CancellationToken.None);
 
-        Assert.That(await StoredAsync(), Is.EqualTo(minutes.Select(minute => (minute, true))));
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows, Is.EqualTo(minutes.Select(minute => (minute, true))));
+            Assert.That(Given(stored), Is.EqualTo(minutes.Select(minute => (minute, true))));
+        });
     }
 
     [Test]
@@ -111,33 +144,60 @@ public class LiquidationRepositoryTests
             Minute,
             new LiquidationSum(volume: 0.25m, turnover: 25000m, count: 1),
             new LiquidationSum(volume: 2m, turnover: 200m, count: 4));
-        await _repository.AddAsync([more], CancellationToken.None);
+        IReadOnlyList<StoredLiquidationMinute> stored = await _repository.AddAsync([more], CancellationToken.None);
 
         var summed = new LiquidationMinute(
             Btc.Id,
             Minute,
             new LiquidationSum(volume: 1m, turnover: 101125.5m, count: 4),
             new LiquidationSum(volume: 2.001m, turnover: 301.337m, count: 5));
-        Assert.That(await StoredAsync(), Is.EqualTo(new[] { (summed, true), (other, true) }));
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows, Is.EqualTo(new[] { (summed, true), (other, true) }));
+
+            // Only the minute the call added to, with all that is stored of it now.
+            Assert.That(Given(stored), Is.EqualTo(new[] { (summed, true) }));
+        });
     }
 
     [Test]
     public async Task Every_minute_of_a_span_is_marked_for_every_instrument_both_ends_included_and_one_not_stored_gets_sums_of_nothing()
     {
-        await _repository.InvalidateAsync([Btc.Id, Eth.Id], Minute, Minute.AddMinutes(2), CancellationToken.None);
+        IReadOnlyList<StoredLiquidationMinute> marked = await _repository.InvalidateAsync([Btc.Id, Eth.Id], Minute, Minute.AddMinutes(2), CancellationToken.None);
 
-        Assert.That(
-            await StoredAsync(),
-            Is.EqualTo(
-                new[]
-                {
-                    (Nothing(Btc, Minute), false),
-                    (Nothing(Btc, Minute.AddMinutes(1)), false),
-                    (Nothing(Btc, Minute.AddMinutes(2)), false),
-                    (Nothing(Eth, Minute), false),
-                    (Nothing(Eth, Minute.AddMinutes(1)), false),
-                    (Nothing(Eth, Minute.AddMinutes(2)), false)
-                }));
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                rows,
+                Is.EqualTo(
+                    new[]
+                    {
+                        (Nothing(Btc, Minute), false),
+                        (Nothing(Btc, Minute.AddMinutes(1)), false),
+                        (Nothing(Btc, Minute.AddMinutes(2)), false),
+                        (Nothing(Eth, Minute), false),
+                        (Nothing(Eth, Minute.AddMinutes(1)), false),
+                        (Nothing(Eth, Minute.AddMinutes(2)), false)
+                    }));
+
+            // Given back by time first, as a follower takes them.
+            Assert.That(
+                Given(marked),
+                Is.EqualTo(
+                    new[]
+                    {
+                        (Nothing(Btc, Minute), false),
+                        (Nothing(Eth, Minute), false),
+                        (Nothing(Btc, Minute.AddMinutes(1)), false),
+                        (Nothing(Eth, Minute.AddMinutes(1)), false),
+                        (Nothing(Btc, Minute.AddMinutes(2)), false),
+                        (Nothing(Eth, Minute.AddMinutes(2)), false)
+                    }));
+        });
     }
 
     [Test]
@@ -151,9 +211,15 @@ public class LiquidationRepositoryTests
     {
         await _repository.InvalidateAsync([Btc.Id], Minute, Minute, CancellationToken.None);
 
-        await _repository.AddAsync([new LiquidationMinute(Btc.Id, Minute, Longs, Shorts)], CancellationToken.None);
+        IReadOnlyList<StoredLiquidationMinute> stored = await _repository.AddAsync([new LiquidationMinute(Btc.Id, Minute, Longs, Shorts)], CancellationToken.None);
 
-        Assert.That(await StoredAsync(), Is.EqualTo(new[] { (new LiquidationMinute(Btc.Id, Minute, Longs, Shorts), false) }));
+        IReadOnlyList<(LiquidationMinute Minute, bool Valid)> rows = await StoredAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows, Is.EqualTo(new[] { (new LiquidationMinute(Btc.Id, Minute, Longs, Shorts), false) }));
+            Assert.That(Given(stored), Is.EqualTo(new[] { (new LiquidationMinute(Btc.Id, Minute, Longs, Shorts), false) }));
+        });
     }
 
     [Test]
