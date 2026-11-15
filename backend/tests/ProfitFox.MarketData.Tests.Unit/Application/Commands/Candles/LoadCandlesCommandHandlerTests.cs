@@ -62,9 +62,9 @@ public class LoadCandlesCommandHandlerTests
         return client;
     }
 
-    private Task<LoadCandlesResult> Load(Instrument instrument, MinuteRange range, DateTimeOffset? requestedAt = null)
+    private Task<LoadCandlesResult> Load(Instrument instrument, MinuteRange range, DateTimeOffset? requestedAt = null, bool wholeHistory = false)
     {
-        return _handler.Handle(new LoadCandlesCommand(instrument.Id, range, requestedAt ?? Now.AddSeconds(30)), CancellationToken.None);
+        return _handler.Handle(new LoadCandlesCommand(instrument.Id, range, requestedAt ?? Now.AddSeconds(30), wholeHistory), CancellationToken.None);
     }
 
     private void Stored(Instrument instrument, MinuteRange covered)
@@ -161,6 +161,36 @@ public class LoadCandlesCommandHandlerTests
     }
 
     [Test]
+    public async Task An_empty_page_of_a_history_that_is_not_whole_covers_only_the_page()
+    {
+        Stored(Linear, Minutes(from: -10, until: 0));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -1010, until: 0) }));
+            Assert.That(_saved.Settled, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task An_empty_page_of_a_whole_history_between_covered_parts_covers_only_the_page()
+    {
+        Stored(Linear, Minutes(from: -100, until: -10));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0), wholeHistory: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -100, until: 0) }));
+            Assert.That(_saved.Settled, Is.Empty);
+        });
+    }
+
+    [Test]
     public void An_instrument_the_catalog_does_not_have_is_rejected()
     {
         Assert.ThrowsAsync<InstrumentNotFoundException>(() => _handler.Handle(
@@ -180,6 +210,23 @@ public class LoadCandlesCommandHandlerTests
             Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
             await _bybit.DidNotReceiveWithAnyArgs().GetAsync(default!, default!, cancellationToken: default);
             await _series.DidNotReceiveWithAnyArgs().SaveAsync(default(CandleSeries)!, cancellationToken: default);
+        });
+    }
+
+    [Test]
+    public async Task The_first_empty_page_of_the_oldest_part_of_a_whole_history_ends_it_with_no_candles_back_to_its_start()
+    {
+        Stored(Linear, Minutes(from: -10, until: 0));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0), wholeHistory: true);
+
+        Assert.Multiple(async () =>
+        {
+            // The time before trading is settled too: it has no trades to look the buy volumes up in.
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -5000, until: 0) }));
+            Assert.That(_saved.Settled, Is.EqualTo(new[] { Minutes(from: -5000, until: -10) }));
+            await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -1010, until: -10), Arg.Any<CancellationToken>());
         });
     }
 

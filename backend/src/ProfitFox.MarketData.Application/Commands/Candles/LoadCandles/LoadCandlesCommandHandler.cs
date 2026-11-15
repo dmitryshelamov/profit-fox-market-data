@@ -11,7 +11,8 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 
 /// <summary>
 ///     Loads the newest uncovered page of the series of an instrument through the client of its exchange. A series loaded for the first
-///     time covers the time before the instrument started to trade with no candles, so that time is never asked for.
+///     time covers the time before the instrument started to trade with no candles, so that time is never asked for. A whole history
+///     ends at the first page of its oldest part the exchange gives no candle for (<see cref="LoadCandlesCommand.WholeHistory" />).
 /// </summary>
 internal sealed class LoadCandlesCommandHandler(
     IInstrumentRepository instruments,
@@ -53,8 +54,18 @@ internal sealed class LoadCandlesCommandHandler(
         }
 
         MinuteRange page = NewestPage(uncovered[^1], exchange.PageLength);
+        IReadOnlyList<Candle> candles = await exchange.GetAsync(instrument.Listing, page, cancellationToken);
 
-        current.Cover(page, await exchange.GetAsync(instrument.Listing, page, cancellationToken));
+        // Only once everything newer is covered: an empty page between covered parts is a pause of trading, not the time before it.
+        if (request.WholeHistory && candles.Count == 0 && uncovered is [{ } oldest] && oldest.From == range.From)
+        {
+            CoverBeforeTrading(current, new MinuteRange(range.From, page.Until));
+        }
+        else
+        {
+            current.Cover(page, candles);
+        }
+
         await series.SaveAsync(current, cancellationToken);
 
         return current.Uncovered(range).Count > 0 ? LoadCandlesResult.MoreLeft : LoadCandlesResult.NothingLeft;
@@ -79,6 +90,14 @@ internal sealed class LoadCandlesCommandHandler(
         DateTimeOffset pageFrom = uncovered.Until - pageLength;
 
         return new MinuteRange(pageFrom > uncovered.From ? pageFrom : uncovered.From, uncovered.Until);
+    }
+
+    // The time before the instrument traded: covered with no candles, and settled at once, as it has no trades to look a buy volume up
+    // in. Settled here, the days of years before trading need no pass of the buy volumes each.
+    private static void CoverBeforeTrading(CandleSeries current, MinuteRange beforeTrading)
+    {
+        current.Cover(beforeTrading, []);
+        current.Settle(beforeTrading, []);
     }
 
     // A new series with the part of the range before the instrument started to trade covered, when the exchange tells the start.

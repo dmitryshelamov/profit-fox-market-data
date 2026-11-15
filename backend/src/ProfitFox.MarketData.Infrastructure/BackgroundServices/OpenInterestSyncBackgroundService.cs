@@ -11,7 +11,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the history of open interest of every listed linear contract of Bybit, back to
-///     <see cref="OpenInterestSyncSettings.HistoryDays" />, and the steps the collection missed, while
+///     <see cref="OpenInterestSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to their launch, and the steps the collection missed, while
 ///     <see cref="OpenInterestSyncSettings" /> enable Bybit. It goes in rounds (<see cref="Loading" />),
 ///     <see cref="OpenInterestSyncSettings.Parallelism" /> contracts at a time, while pages are left; then it waits
 ///     <see cref="OpenInterestSyncSettings.IdleSeconds" /> and looks again. A round in which the collection missed nothing asks Bybit
@@ -20,6 +20,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal sealed class OpenInterestSyncBackgroundService(
     IServiceScopeFactory scopes,
     IOptionsMonitor<OpenInterestSyncSettings> settings,
+    IOptionsMonitor<FullHistorySettings> fullHistory,
     TimeProvider time,
     ILogger<OpenInterestSyncBackgroundService> logger) : BackgroundService
 {
@@ -49,13 +50,14 @@ internal sealed class OpenInterestSyncBackgroundService(
     private async Task<LoadingRoundResult> LoadRoundAsync(Loading loading, OpenInterestSyncSettings sync, CancellationToken stoppingToken)
     {
         IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.Bybit, logger, stoppingToken);
-        DateTimeOffset from = time.GetUtcNow().AddDays(-sync.HistoryDays);
+        FullHistorySettings whole = fullHistory.CurrentValue;
+        DateTimeOffset historyFrom = time.GetUtcNow().AddDays(-sync.HistoryDays);
 
         return await loading.RunRoundAsync(
             instruments.Where(HasOpenInterest),
             sync.Parallelism,
             async (instrument, token) =>
-                await scopes.SendAsync(new LoadOpenInterestCommand(instrument.Id, from, time.GetUtcNow()), token) == LoadOpenInterestResult.MoreLeft,
+                await scopes.SendAsync(new LoadOpenInterestCommand(instrument.Id, whole.HistoryFrom(instrument, historyFrom), time.GetUtcNow()), token) == LoadOpenInterestResult.MoreLeft,
             stoppingToken);
     }
 

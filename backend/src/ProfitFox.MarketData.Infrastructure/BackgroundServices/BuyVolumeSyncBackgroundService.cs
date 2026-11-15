@@ -12,8 +12,8 @@ using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     Fills the buy volumes the stream did not tell: of the history, back to <see cref="BuyVolumeSyncSettings.HistoryDays" />, and of the
-///     minutes of a downtime, from the daily archives of trades of Bybit, while <see cref="BuyVolumeSyncSettings" /> enables Bybit. A round
+///     Fills the buy volumes the stream did not tell: of the history, back to <see cref="BuyVolumeSyncSettings.HistoryDays" /> or, of the
+///     instruments <see cref="FullHistorySettings" /> name, to when they started to trade, and of the minutes of a downtime, from the daily archives of trades of Bybit, while <see cref="BuyVolumeSyncSettings" /> enables Bybit. A round
 ///     settles one archive of every listed instrument, the newest day first, <see cref="BuyVolumeSyncSettings.Parallelism" /> instruments
 ///     at a time, so fresh days come before old history and every instrument moves on at the same pace. Rounds follow one another while
 ///     days are left; then the service waits <see cref="BuyVolumeSyncSettings.IdleSeconds" />, by which a new day may be published. The
@@ -22,6 +22,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 internal sealed class BuyVolumeSyncBackgroundService(
     IServiceScopeFactory scopes,
     IOptionsMonitor<BuyVolumeSyncSettings> settings,
+    IOptionsMonitor<FullHistorySettings> fullHistory,
     TimeProvider time,
     ILogger<BuyVolumeSyncBackgroundService> logger) : BackgroundService
 {
@@ -49,7 +50,9 @@ internal sealed class BuyVolumeSyncBackgroundService(
     private async Task<bool> SettleRoundAsync(BuyVolumeSyncSettings sync, CancellationToken stoppingToken)
     {
         IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(Exchange.Bybit, logger, stoppingToken);
-        MinuteRange history = History(sync.HistoryDays);
+        FullHistorySettings whole = fullHistory.CurrentValue;
+        DateTimeOffset now = time.GetUtcNow();
+        DateTimeOffset historyFrom = now.AddDays(-sync.HistoryDays);
         var hasMoreDays = 0;
         var unavailable = 0;
 
@@ -62,6 +65,8 @@ internal sealed class BuyVolumeSyncBackgroundService(
                 {
                     return;
                 }
+
+                var history = new MinuteRange(MinuteRange.StartOfMinute(whole.HistoryFrom(instrument, historyFrom)), MinuteRange.StartOfMinute(now));
 
                 try
                 {
@@ -84,13 +89,5 @@ internal sealed class BuyVolumeSyncBackgroundService(
             });
 
         return hasMoreDays != 0 && unavailable == 0;
-    }
-
-    // The whole minutes from historyDays back to now.
-    private MinuteRange History(int historyDays)
-    {
-        DateTimeOffset now = time.GetUtcNow();
-
-        return new MinuteRange(MinuteRange.StartOfMinute(now.AddDays(-historyDays)), MinuteRange.StartOfMinute(now));
     }
 }

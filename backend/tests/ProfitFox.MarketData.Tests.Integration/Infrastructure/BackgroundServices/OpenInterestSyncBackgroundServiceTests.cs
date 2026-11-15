@@ -16,8 +16,10 @@ using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
+using ProfitFox.MarketData.Tests.Integration.Settings;
 using ProfitFox.MarketData.Tests.Integration.Time;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
@@ -63,6 +65,8 @@ public class OpenInterestSyncBackgroundServiceTests
 
     private static readonly Instrument Btc = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear());
 
+    private static readonly DateTimeOffset BtcLaunch = ((BybitListedInstrument)Btc.Listing).LaunchTime!.Value;
+
     private static readonly Instrument Futures = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateFutures());
 
     private static readonly Instrument Spot = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateSpot());
@@ -77,7 +81,7 @@ public class OpenInterestSyncBackgroundServiceTests
 
     // The settings as the app binds them, one contract at a time, so the pages come in the order of the catalog; the sender is the last
     // ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true)
+    private async Task StartAsync(bool bybit = true, string[]? fullHistory = null)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -88,11 +92,13 @@ public class OpenInterestSyncBackgroundServiceTests
                     ["OpenInterestSync:Parallelism"] = "1",
                     ["OpenInterestSync:Bybit:Enabled"] = bybit.ToString()
                 })
+            .AddInMemoryCollection(FullHistoryConfiguration.Of(fullHistory ?? []))
             .Build();
         _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new OpenInterestSyncBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _services.GetRequiredService<IOptionsMonitor<OpenInterestSyncSettings>>(),
+            _services.GetRequiredService<IOptionsMonitor<FullHistorySettings>>(),
             _time,
             NullLogger<OpenInterestSyncBackgroundService>.Instance);
 
@@ -132,6 +138,17 @@ public class OpenInterestSyncBackgroundServiceTests
         instrument.Delist(Start.AddDays(-1));
 
         return instrument;
+    }
+
+    [Test]
+    public async Task A_contract_named_for_a_whole_history_loads_it_from_its_launch()
+    {
+        await StartAsync(fullHistory: ["BTCUSDT"]);
+
+        IReadOnlyList<LoadOpenInterestCommand> sent = await SentAsync(count: 2);
+
+        // The dated contract of BTC has a symbol of its own, so it keeps a year.
+        Assert.That(sent, Is.EqualTo(new[] { new LoadOpenInterestCommand(Btc.Id, BtcLaunch, Start), PageOf(Futures, Start) }));
     }
 
     [Test]

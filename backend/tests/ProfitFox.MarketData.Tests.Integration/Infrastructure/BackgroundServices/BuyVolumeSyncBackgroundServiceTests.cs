@@ -16,8 +16,10 @@ using ProfitFox.MarketData.Application.Queries.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.ValueObjects.Candles;
+using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Infrastructure;
 using ProfitFox.MarketData.Infrastructure.BackgroundServices;
+using ProfitFox.MarketData.Tests.Integration.Settings;
 using ProfitFox.MarketData.Tests.Integration.Time;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.ValueObjects.Instruments;
@@ -82,6 +84,8 @@ public class BuyVolumeSyncBackgroundServiceTests
 
     private static readonly Instrument Btc = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear());
 
+    private static readonly DateTimeOffset BtcLaunch = ((BybitListedInstrument)Btc.Listing).LaunchTime!.Value;
+
     private static readonly Instrument Eth = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("ETH"));
 
     private static readonly Instrument Delisted = Delist(InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("LUNA")));
@@ -94,7 +98,7 @@ public class BuyVolumeSyncBackgroundServiceTests
 
     // The settings as the app binds them, one instrument at a time so the order is known; the sender is the last ISender registered, so
     // it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true)
+    private async Task StartAsync(bool bybit = true, string[]? fullHistory = null)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -105,11 +109,13 @@ public class BuyVolumeSyncBackgroundServiceTests
                     ["BuyVolumeSync:Parallelism"] = "1",
                     ["BuyVolumeSync:Bybit:Enabled"] = bybit.ToString()
                 })
+            .AddInMemoryCollection(FullHistoryConfiguration.Of(fullHistory ?? []))
             .Build();
         _services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).AddSingleton(_sender).BuildServiceProvider();
         _service = new BuyVolumeSyncBackgroundService(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _services.GetRequiredService<IOptionsMonitor<BuyVolumeSyncSettings>>(),
+            _services.GetRequiredService<IOptionsMonitor<FullHistorySettings>>(),
             _time,
             NullLogger<BuyVolumeSyncBackgroundService>.Instance);
 
@@ -197,6 +203,18 @@ public class BuyVolumeSyncBackgroundServiceTests
             await _time.NextWaitAsync();
             await _sender.Received(2).Send(CommandOf(Btc), Arg.Any<CancellationToken>());
         });
+    }
+
+    [Test]
+    public async Task An_instrument_named_for_a_whole_history_settles_it_from_when_it_started_to_trade()
+    {
+        await StartAsync(fullHistory: ["BTCUSDT"]);
+
+        IReadOnlyList<LoadBuyVolumesCommand> sent = await SentAsync(count: 2);
+
+        Assert.That(
+            sent,
+            Is.EqualTo(new[] { new LoadBuyVolumesCommand(Btc.Id, new MinuteRange(BtcLaunch, StartMinute), Start), new LoadBuyVolumesCommand(Eth.Id, History, Start) }));
     }
 
     [Test]

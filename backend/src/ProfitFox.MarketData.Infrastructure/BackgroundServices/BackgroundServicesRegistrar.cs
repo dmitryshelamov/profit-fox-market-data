@@ -17,11 +17,13 @@ internal static class BackgroundServicesRegistrar
     /// <summary>
     ///     The background sync of the catalog, the background loading of candles, the stream of closed candles, the filling of buy
     ///     volumes, the collection of tickers, the loading of funding payments, the loading of open interest, the stream of liquidations and the
-    ///     loading of the long/short ratio with their settings;
+    ///     loading of the long/short ratio with their settings, and the instruments whose whole history they load;
     ///     an app with a broken section stops at start rather than never working.
     /// </summary>
     public static void Configure(IConfiguration configuration, IServiceCollection services)
     {
+        services.AddOptions<FullHistorySettings>().Bind(configuration.GetSection(FullHistorySettings.Section));
+
         services.AddOptions<InstrumentSyncSettings>()
             .Bind(configuration.GetSection(InstrumentSyncSettings.Section))
             .Validate(sync => sync.IntervalMinutes > 0, "InstrumentSync:IntervalMinutes must be above zero.")

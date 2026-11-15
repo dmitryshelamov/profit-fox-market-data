@@ -13,16 +13,17 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
 ///     Loads the candles of every listed instrument of the exchanges <see cref="CandleSyncSettings" /> enables, back to
-///     <see cref="CandleSyncSettings.HistoryDays" />, and before them the ranges reads asked for and could not wait for
-///     (<see cref="CandleLoadQueue" />). A round loads one page of every such range and every instrument in turn, the newest it misses first,
-///     so fresh minutes come before old history and every instrument moves on at the same pace. Rounds follow one another while pages
-///     are left; an exchange with none left waits <see cref="CandleSyncSettings.IdleSeconds" />. The settings are read again before every
-///     round.
+///     <see cref="CandleSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to when they started to trade,
+///     and before them the ranges reads asked for and could not wait for (<see cref="CandleLoadQueue" />). A round loads one page of every
+///     such range and every instrument in turn, the newest it misses first, so fresh minutes come before old history and every instrument
+///     moves on at the same pace. Rounds follow one another while pages are left; an exchange with none left waits
+///     <see cref="CandleSyncSettings.IdleSeconds" />. The settings are read again before every round.
 /// </summary>
 internal sealed class CandleSyncBackgroundService(
     IServiceScopeFactory scopes,
     CandleLoadQueue queue,
     IOptionsMonitor<CandleSyncSettings> settings,
+    IOptionsMonitor<FullHistorySettings> fullHistory,
     TimeProvider time,
     ILogger<CandleSyncBackgroundService> logger) : BackgroundService
 {
@@ -61,11 +62,15 @@ internal sealed class CandleSyncBackgroundService(
         try
         {
             bool hasMorePages = await LoadRequestedAsync(exchange, instruments, stoppingToken);
-            MinuteRange history = History(historyDays);
+            FullHistorySettings whole = fullHistory.CurrentValue;
+            DateTimeOffset now = time.GetUtcNow();
+            DateTimeOffset historyFrom = now.AddDays(-historyDays);
 
             foreach (InstrumentInternal instrument in instruments.Where(instrument => instrument.DelistedAt is null))
             {
-                hasMorePages |= await LoadPageAsync(exchange, instrument.Id, history, stoppingToken) == LoadCandlesResult.MoreLeft;
+                var history = new MinuteRange(MinuteRange.StartOfMinute(whole.HistoryFrom(instrument, historyFrom)), MinuteRange.StartOfMinute(now));
+                LoadCandlesResult result = await LoadPageAsync(exchange, instrument.Id, history, whole.Covers(instrument), stoppingToken);
+                hasMorePages |= result == LoadCandlesResult.MoreLeft;
             }
 
             return hasMorePages;
@@ -87,7 +92,7 @@ internal sealed class CandleSyncBackgroundService(
 
         foreach (CandleLoadRequest request in queue.Pending().Where(request => ofExchange.Contains(request.InstrumentId)))
         {
-            if (await LoadPageAsync(exchange, request.InstrumentId, request.Range, stoppingToken) == LoadCandlesResult.MoreLeft)
+            if (await LoadPageAsync(exchange, request.InstrumentId, request.Range, wholeHistory: false, stoppingToken) == LoadCandlesResult.MoreLeft)
             {
                 hasMorePages = true;
             }
@@ -102,11 +107,16 @@ internal sealed class CandleSyncBackgroundService(
 
     // One page of one instrument of the range. A pause of the exchange is waited out here. A page that fails for a reason of its own is
     // logged and counts as nothing left for now: its history is tried again in the next round.
-    private async Task<LoadCandlesResult> LoadPageAsync(Exchange exchange, Guid instrumentId, MinuteRange range, CancellationToken stoppingToken)
+    private async Task<LoadCandlesResult> LoadPageAsync(
+        Exchange exchange,
+        Guid instrumentId,
+        MinuteRange range,
+        bool wholeHistory,
+        CancellationToken stoppingToken)
     {
         try
         {
-            return await scopes.SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow()), stoppingToken);
+            return await scopes.SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow(), wholeHistory), stoppingToken);
         }
         catch (ExchangePausedException exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -131,14 +141,6 @@ internal sealed class CandleSyncBackgroundService(
             Exchange.TInvest => sync.TInvest.Enabled,
             _ => false
         };
-    }
-
-    // The whole minutes from historyDays back to now.
-    private MinuteRange History(int historyDays)
-    {
-        DateTimeOffset now = time.GetUtcNow();
-
-        return new MinuteRange(MinuteRange.StartOfMinute(now.AddDays(-historyDays)), MinuteRange.StartOfMinute(now));
     }
 
     private async Task WaitUntilAsync(DateTimeOffset until, CancellationToken stoppingToken)
