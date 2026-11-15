@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Contracts.OpenInterest;
 using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Infrastructure.Exchanges.TInvest;
@@ -56,9 +58,6 @@ internal static class BackgroundServicesRegistrar
                 "CandleStream:TInvest needs TInvestApi:Token while it is enabled.")
             .ValidateOnStart();
         services.AddSingleton<ILiveCandleFeed, LiveCandleFeed>();
-
-        // One feed a kind of market data, whatever the kind: its saving publishes and its gRPC service subscribes.
-        services.AddSingleton(typeof(ILiveFeed<>), typeof(LiveFeed<>));
         services.AddHostedService<CandleStreamBackgroundService>();
 
         services.AddOptions<BuyVolumeSyncSettings>()
@@ -76,6 +75,12 @@ internal static class BackgroundServicesRegistrar
                 "TickerCollection:DeadlineSeconds must be above zero and below 60.")
             .ValidateOnStart();
         services.AddHostedService<TickerCollectionBackgroundService>();
+
+        // One feed a kind of market data: its saving publishes and its gRPC service subscribes. Each is registered by its kind, so a
+        // feed of a kind nobody publishes cannot be asked for by mistake.
+        services.AddSingleton<ILiveFeed<InstrumentOpenInterestInternal>, LiveFeed<InstrumentOpenInterestInternal>>();
+        services.AddSingleton<ILiveFeed<InstrumentFundingRateInternal>, LiveFeed<InstrumentFundingRateInternal>>();
+        services.AddSingleton<ILiveFeed<InstrumentFundingPaymentInternal>, LiveFeed<InstrumentFundingPaymentInternal>>();
 
         services.AddOptions<FundingPaymentSyncSettings>()
             .Bind(configuration.GetSection(FundingPaymentSyncSettings.Section))

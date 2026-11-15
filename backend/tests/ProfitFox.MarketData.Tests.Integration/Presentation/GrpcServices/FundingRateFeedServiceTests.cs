@@ -5,6 +5,7 @@ using Grpc.Net.Client;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Application.Commands.Tickers.CollectBybitTickers;
@@ -14,6 +15,7 @@ using ProfitFox.MarketData.Domain.Entities.Instruments;
 using ProfitFox.MarketData.Domain.Entities.OpenInterest;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Funding;
+using ProfitFox.MarketData.Presentation;
 using ProfitFox.MarketData.Presentation.Protos;
 using ProfitFox.MarketData.Tests.Integration.Grpc;
 using ProfitFox.MarketData.Tests.Integration.Http;
@@ -62,7 +64,7 @@ public class FundingRateFeedServiceTests
     public void StartApp()
     {
         _app = new MarketDataTestApplication();
-        _channel = GrpcChannel.ForAddress(_app.Server.BaseAddress, new GrpcChannelOptions { HttpHandler = new ResponseVersionHandler(_app.Server.CreateHandler()) });
+        _channel = Channel(_app);
         _client = new FundingRateFeed.FundingRateFeedClient(_channel);
     }
 
@@ -71,6 +73,11 @@ public class FundingRateFeedServiceTests
     {
         _channel.Dispose();
         await _app.DisposeAsync();
+    }
+
+    private static GrpcChannel Channel(WebApplicationFactory<Program> app)
+    {
+        return GrpcChannel.ForAddress(app.Server.BaseAddress, new GrpcChannelOptions { HttpHandler = new ResponseVersionHandler(app.Server.CreateHandler()) });
     }
 
     // The call once the subscription is in place: what is published from then on reaches it.
@@ -122,6 +129,20 @@ public class FundingRateFeedServiceTests
             Assert.That(updates[0].FundingRate, Is.EqualTo("-0.00012"));
             Assert.That(updates[1].FundingRate, Is.EqualTo("9"));
         });
+    }
+
+    [Test]
+    public async Task A_subscription_from_further_back_than_the_setting_of_the_feed_tells_is_refused()
+    {
+        // An hour for this feed and a day for the other two: the service reads its own setting, not the one of another feed.
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("FundingRateFeed:MaxCatchUpHours", "1"));
+        using GrpcChannel channel = Channel(app);
+        using AsyncServerStreamingCall<FundingRateUpdate> call = new FundingRateFeed.FundingRateFeedClient(channel).Subscribe(
+            new SubscribeFundingRateRequest { Since = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow.AddHours(-2)) });
+
+        await Assert.ThatAsync(
+            () => call.ResponseStream.MoveNext(CancellationToken.None).WaitAsync(Patience),
+            Throws.TypeOf<RpcException>().With.Property(nameof(RpcException.StatusCode)).EqualTo(StatusCode.InvalidArgument));
     }
 
     [Test]

@@ -107,10 +107,12 @@ and this file is silent, ask which to follow.
 - Decimal numbers go over gRPC as text, exactly as stored: protobuf has no decimal type.
 - Every kind of market data the service holds is given two ways: a gRPC feed, through which other services get it in real time,
   and a request for its history over a period, REST by instrument until a consumer needs more than pages give. A new kind brings
-  both in its slice, or says which one is left for later. A feed tells live only what is stored, catches up from storage with
-  `since`, and is a service of its own (`OpenInterestFeed`, `FundingRateFeed`, `FundingPaymentFeed`); what their calls do the same
-  way is `FeedCall`.
+  both in its slice, or says which one is left for later. A feed is a service of its own (`OpenInterestFeed`, `FundingRateFeed`,
+  `FundingPaymentFeed`), tells live what is stored and catches up from storage with `since`; the forming candle of `CandleFeed` is
+  the one thing told that is not stored. What the calls of the feeds of points do the same way is `FeedCall`.
 - The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`.
+  `candle_feed.proto`, the first contract, keeps its `SubscribeRequest`: a new name would change the generated code of its consumers.
+- What a handler publishes to a feed is made by the converter of the contract (`Contracts/<Area>/Converters`), as what a query gives.
 
 ## Files and code style
 

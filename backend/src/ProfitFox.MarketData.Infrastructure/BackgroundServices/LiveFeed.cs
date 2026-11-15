@@ -12,7 +12,7 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 /// </summary>
 internal sealed class LiveFeed<T> : ILiveFeed<T>
 {
-    // About ten snapshots of the whole market: fifty minutes of open interest.
+    // About ten snapshots of the whole market: fifty minutes of the points a collection saves, far more of rarer ones.
     internal const int Capacity = 10_000;
 
     private readonly Lock _lock = new Lock();
@@ -58,6 +58,8 @@ internal sealed class LiveFeed<T> : ILiveFeed<T>
     {
         private readonly Channel<T> _waiting = Channel.CreateBounded<T>(new BoundedChannelOptions(Capacity) { SingleReader = true, SingleWriter = false });
 
+        private readonly Lock _taking = new Lock();
+
         public IAsyncEnumerable<T> ReadAllAsync(CancellationToken cancellationToken)
         {
             return _waiting.Reader.ReadAllAsync(cancellationToken);
@@ -71,15 +73,20 @@ internal sealed class LiveFeed<T> : ILiveFeed<T>
 
         public void Take(IReadOnlyCollection<T> items)
         {
-            foreach (T item in items)
+            // One publisher at a time: between an item that did not fit and the end of the subscription the subscriber may free a
+            // place, and an item of another publisher written there would come after a gap.
+            lock (_taking)
             {
-                if (!_waiting.Writer.TryWrite(item))
+                foreach (T item in items)
                 {
-                    // No room: the subscriber reads what fitted and is told it fell behind. A subscription already ended takes nothing.
-                    _waiting.Writer.TryComplete(new SubscriberFellBehindException());
-                    feed.Remove(this);
+                    if (!_waiting.Writer.TryWrite(item))
+                    {
+                        // No room: the subscriber reads what fitted and is told it fell behind. A subscription already ended takes nothing.
+                        _waiting.Writer.TryComplete(new SubscriberFellBehindException());
+                        feed.Remove(this);
 
-                    return;
+                        return;
+                    }
                 }
             }
         }

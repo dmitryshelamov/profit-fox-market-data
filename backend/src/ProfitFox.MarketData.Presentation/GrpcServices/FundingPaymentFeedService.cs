@@ -24,8 +24,7 @@ public sealed class FundingPaymentFeedService(
     ISender sender,
     ILiveFeed<InstrumentFundingPaymentInternal> feed,
     IOptionsMonitor<PointFeedSettings> settings,
-    FeedCall call)
-    : FundingPaymentFeed.FundingPaymentFeedBase
+    FeedCall call) : FundingPaymentFeed.FundingPaymentFeedBase
 {
     public override Task Subscribe(SubscribeFundingPaymentRequest request, IServerStreamWriter<FundingPaymentUpdate> responseStream, ServerCallContext context)
     {

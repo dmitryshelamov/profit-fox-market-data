@@ -1,6 +1,7 @@
 using MediatR;
 
 using ProfitFox.MarketData.Application.Contracts.Funding;
+using ProfitFox.MarketData.Application.Contracts.Funding.Converters;
 using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Application.Ports.Feeds;
 using ProfitFox.MarketData.Application.Ports.Funding;
@@ -66,7 +67,7 @@ internal sealed class LoadFundingPaymentsCommandHandler(
 
         if (paidSinceCoverage && page.Payments.Count > 0)
         {
-            feed.Publish([.. page.Payments.Select(payment => new InstrumentFundingPaymentInternal(instrument.Id, payment.Time, payment.Rate))]);
+            feed.Publish([.. page.Payments.Select(payment => payment.ToInternal(instrument.Id))]);
         }
 
         return current.CoveredFrom > request.From ? LoadFundingPaymentsResult.MoreLeft : LoadFundingPaymentsResult.NothingLeft;
