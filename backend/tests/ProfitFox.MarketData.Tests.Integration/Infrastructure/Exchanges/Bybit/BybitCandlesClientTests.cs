@@ -22,7 +22,7 @@ namespace ProfitFox.MarketData.Tests.Integration.Infrastructure.Exchanges.Bybit;
 public class BybitCandlesClientTests
 {
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
         _bybit = new StubHttpHandler();
 
@@ -39,16 +39,12 @@ public class BybitCandlesClientTests
                 Options.Create(new BybitRestOptions { RateLimiterEnabled = false })),
             _gate,
             _time);
-
-        // The timer of the gate that refills its bucket every second.
-        await _time.NextWaitAsync();
     }
 
     [TearDown]
     public void TearDown()
     {
         _bybit.Dispose();
-        _gate.Dispose();
     }
 
     private static readonly DateTimeOffset Now = new DateTimeOffset(year: 2026, month: 11, day: 12, hour: 9, minute: 0, second: 30, TimeSpan.Zero);

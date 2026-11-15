@@ -38,7 +38,6 @@ public class BybitInstrumentsClientTests
     public void TearDown()
     {
         _bybit.Dispose();
-        _gate.Dispose();
     }
 
     private static readonly DateTimeOffset LaunchTime = new DateTimeOffset(year: 2020, month: 3, day: 30, hour: 0, minute: 0, second: 0, TimeSpan.Zero);
