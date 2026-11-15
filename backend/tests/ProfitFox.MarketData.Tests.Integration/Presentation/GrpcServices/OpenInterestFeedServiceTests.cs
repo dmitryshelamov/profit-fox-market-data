@@ -136,6 +136,7 @@ public class OpenInterestFeedServiceTests
     [TestCase("FundingRateFeed")]
     [TestCase("FundingPaymentFeed")]
     [TestCase("LiquidationFeed")]
+    [TestCase("LongShortRatioFeed")]
     public async Task An_app_whose_feed_catches_up_on_no_time_does_not_start(string feed)
     {
         await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting($"{feed}:MaxCatchUpHours", "0"));

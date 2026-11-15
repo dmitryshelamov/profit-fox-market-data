@@ -10,6 +10,7 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositori
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Funding;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Instruments;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.Liquidations;
+using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.LongShortRatio;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Dapper.Repositories.OpenInterest;
 using ProfitFox.MarketData.Infrastructure.Persistence.Postgres.Transactions;
 
@@ -34,6 +35,7 @@ internal static class PostgresRegistrar
         services.AddScoped<IFundingRateRepository, FundingRateRepository>();
         services.AddScoped<IFundingPaymentSeriesRepository, FundingPaymentSeriesRepository>();
         services.AddScoped<ILiquidationRepository, LiquidationRepository>();
+        services.AddScoped<ILongShortRatioSeriesRepository, LongShortRatioSeriesRepository>();
 
         services
             .AddFluentMigratorCore()

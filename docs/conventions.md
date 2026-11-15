@@ -26,7 +26,9 @@ and this file is silent, ask which to follow.
 - Areas: `Instruments` (the catalog of exchange instruments), `Candles` (the minute candles of the instruments and how far storage holds them),
   `OpenInterest` (the open interest of the instruments, a point every five minutes, as far as storage holds it), `Funding` (the
   funding rates of the instruments, point by point, and the payments their exchange settled, as far as storage holds them),
-  `Liquidations` (the liquidations of the instruments, summed by the minute and by the side of the liquidated positions).
+  `Liquidations` (the liquidations of the instruments, summed by the minute and by the side of the liquidated positions),
+  `LongShortRatio` (the shares of the accounts net long and net short in the instruments, a point every five minutes, as far as
+  storage holds it).
 - `Entities/<Area>` holds entities, `Entities/<Area>/Enums` the enums and their pure extensions (`BybitContractTypeExtensions`).
   `Entities/Base` holds `AggregateRoot`; `Events` holds `IDomainEvent`. Both are the shared base copied from profit-fox and stay
   even while no aggregate raises an event.
@@ -109,8 +111,8 @@ and this file is silent, ask which to follow.
 - Every kind of market data the service holds is given two ways: a gRPC feed, through which other services get it in real time,
   and a request for its history over a period, REST by instrument until a consumer needs more than pages give. A new kind brings
   both in its slice, or says which one is left for later. A feed tells live only what is stored, catches up from storage with
-  `since`, and is a service of its own (`OpenInterestFeed`, `FundingRateFeed`, `FundingPaymentFeed`, `LiquidationFeed`); what
-  their calls do the same way is `FeedCall`.
+  `since`, and is a service of its own (`OpenInterestFeed`, `FundingRateFeed`, `FundingPaymentFeed`, `LiquidationFeed`,
+  `LongShortRatioFeed`); what their calls do the same way is `FeedCall`.
 - The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`.
 
 ## Files and code style

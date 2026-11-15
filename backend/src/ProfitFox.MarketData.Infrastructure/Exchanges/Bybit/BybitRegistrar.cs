@@ -5,6 +5,7 @@ using ProfitFox.MarketData.Application.Ports.Candles;
 using ProfitFox.MarketData.Application.Ports.Funding;
 using ProfitFox.MarketData.Application.Ports.Instruments;
 using ProfitFox.MarketData.Application.Ports.Liquidations;
+using ProfitFox.MarketData.Application.Ports.LongShortRatio;
 using ProfitFox.MarketData.Application.Ports.OpenInterest;
 using ProfitFox.MarketData.Application.Ports.Tickers;
 
@@ -38,6 +39,7 @@ internal static class BybitRegistrar
         services.AddScoped<IBybitTickersClient, BybitTickersClient>();
         services.AddScoped<IBybitFundingPaymentsClient, BybitFundingPaymentsClient>();
         services.AddScoped<IBybitOpenInterestClient, BybitOpenInterestClient>();
+        services.AddScoped<IBybitLongShortRatioClient, BybitLongShortRatioClient>();
         services.AddSingleton<IBybitCandleStreamClient, BybitCandleStreamClient>();
         services.AddSingleton<IBybitLiquidationStreamClient, BybitLiquidationStreamClient>();
         services.AddHttpClient<IBybitTradeArchiveClient, BybitTradeArchiveClient>(http => http.BaseAddress = TradeArchiveAddress);
