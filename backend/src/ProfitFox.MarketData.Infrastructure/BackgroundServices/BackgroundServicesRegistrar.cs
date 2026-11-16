@@ -43,6 +43,7 @@ internal static class BackgroundServicesRegistrar
             .Bind(configuration.GetSection(CandleSyncSettings.Section))
             .Validate(sync => sync.HistoryDays > 0, "CandleSync:HistoryDays must be above zero.")
             .Validate(sync => sync.IdleSeconds > 0, "CandleSync:IdleSeconds must be above zero.")
+            .Validate(sync => sync.Parallelism > 0, "CandleSync:Parallelism must be above zero.")
             .Validate(
                 sync => sync.Bybit.Enabled || sync.TInvest.Enabled,
                 "CandleSync must load something: enable CandleSync:Bybit or CandleSync:TInvest.")

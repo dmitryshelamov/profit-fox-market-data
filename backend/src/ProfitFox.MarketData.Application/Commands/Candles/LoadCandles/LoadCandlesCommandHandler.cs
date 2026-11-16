@@ -12,7 +12,9 @@ namespace ProfitFox.MarketData.Application.Commands.Candles.LoadCandles;
 /// <summary>
 ///     Loads the newest uncovered page of the series of an instrument through the client of its exchange. A series loaded for the first
 ///     time covers the time before the instrument started to trade with no candles, so that time is never asked for. A whole history
-///     ends at the first page of its oldest part the exchange gives no candle for (<see cref="LoadCandlesCommand.WholeHistory" />).
+///     ends at the first page of its oldest part the exchange gives no candle for (<see cref="LoadCandlesCommand.WholeHistory" />). Any
+///     other history whose oldest part gives an empty page asks when the instrument started to trade, and ends there when the page lies
+///     before that start: a history made longer after the first load is not walked back page by page through the time before trading.
 /// </summary>
 internal sealed class LoadCandlesCommandHandler(
     IInstrumentRepository instruments,
@@ -57,7 +59,9 @@ internal sealed class LoadCandlesCommandHandler(
         IReadOnlyList<Candle> candles = await exchange.GetAsync(instrument.Listing, page, cancellationToken);
 
         // Only once everything newer is covered: an empty page between covered parts is a pause of trading, not the time before it.
-        if (request.WholeHistory && candles.Count == 0 && uncovered is [{ } oldest] && oldest.From == range.From)
+        bool emptyOldest = candles.Count == 0 && uncovered is [{ } oldest] && oldest.From == range.From;
+
+        if (emptyOldest && (request.WholeHistory || await IsBeforeTradingAsync(exchange, instrument, range, page, cancellationToken)))
         {
             CoverBeforeTrading(current, new MinuteRange(range.From, page.Until));
         }
@@ -90,6 +94,20 @@ internal sealed class LoadCandlesCommandHandler(
         DateTimeOffset pageFrom = uncovered.Until - pageLength;
 
         return new MinuteRange(pageFrom > uncovered.From ? pageFrom : uncovered.From, uncovered.Until);
+    }
+
+    // Whether the page ends before the instrument started to trade, so all of the range back from it is the time before trading. An
+    // empty page after the start is a pause of trading and covers only itself.
+    private static async Task<bool> IsBeforeTradingAsync(
+        IExchangeCandlesClient exchange,
+        Instrument instrument,
+        MinuteRange range,
+        MinuteRange page,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset? start = await exchange.GetTradingStartAsync(instrument.Listing, range.From, cancellationToken);
+
+        return start is { } known && MinuteRange.StartOfMinute(known) >= page.Until;
     }
 
     // The time before the instrument traded: covered with no candles, and settled at once, as it has no trades to look a buy volume up

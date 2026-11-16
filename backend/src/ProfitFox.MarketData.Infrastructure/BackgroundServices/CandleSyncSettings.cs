@@ -1,8 +1,8 @@
 namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 
 /// <summary>
-///     The <c>CandleSync</c> section of the settings: how far back the candles of the catalog are loaded, how long a caught-up exchange
-///     waits before its next pass, and which exchanges load.
+///     The <c>CandleSync</c> section of the settings: how far back the candles of the catalog are loaded, how many instruments of an
+///     exchange load at a time, how long a caught-up exchange waits before its next pass, and which exchanges load.
 /// </summary>
 internal sealed class CandleSyncSettings
 {
@@ -17,6 +17,11 @@ internal sealed class CandleSyncSettings
     ///     Seconds an exchange waits before its next pass once a pass found nothing left to load.
     /// </summary>
     public int IdleSeconds { get; init; } = 60;
+
+    /// <summary>
+    ///     How many instruments of an exchange load a page at the same time; each waits for its page before it asks for another.
+    /// </summary>
+    public int Parallelism { get; init; } = 4;
 
     public ExchangeSyncSettings Bybit { get; init; } = new ExchangeSyncSettings();
 

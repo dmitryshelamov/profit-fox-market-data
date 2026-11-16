@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 
 using MediatR;
@@ -104,7 +105,7 @@ public class CandleSyncBackgroundServiceTests
     private CandleSyncBackgroundService? _service;
 
     // The settings as the app binds them; the sender is the last ISender registered, so it wins over the one of MediatR.
-    private async Task StartAsync(bool bybit = true, bool tinvest = true, string[]? fullHistory = null)
+    private async Task StartAsync(bool bybit = true, bool tinvest = true, string[]? fullHistory = null, int parallelism = 1)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -112,6 +113,7 @@ public class CandleSyncBackgroundServiceTests
                 {
                     ["CandleSync:HistoryDays"] = "365",
                     ["CandleSync:IdleSeconds"] = "60",
+                    ["CandleSync:Parallelism"] = parallelism.ToString(CultureInfo.InvariantCulture),
                     ["CandleSync:Bybit:Enabled"] = bybit.ToString(),
                     ["CandleSync:TInvest:Enabled"] = tinvest.ToString(),
                     ["TInvestApi:Token"] = "test-token"
@@ -255,6 +257,36 @@ public class CandleSyncBackgroundServiceTests
         {
             Assert.That(sentEarly, Is.False);
             Assert.That(afterIdle.Single().RequestedAt, Is.EqualTo(Start + Idle));
+        });
+    }
+
+    [Test]
+    public async Task Instruments_load_their_pages_as_many_at_a_time_as_the_parallelism_tells()
+    {
+        Instrument sol = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear("SOL"));
+        BybitHas(Btc, Eth, sol);
+        var release = new TaskCompletionSource<LoadCandlesResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sender.Send(Arg.Any<LoadCandlesCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (call[0] is LoadCandlesCommand command)
+                {
+                    _sent.Writer.TryWrite(command);
+                }
+
+                return release.Task;
+            });
+
+        await StartAsync(tinvest: false, parallelism: 2);
+        IReadOnlyList<LoadCandlesCommand> inFlight = await SentAsync(count: 2);
+        bool thirdBeforeRelease = _sent.Reader.TryRead(out _);
+        release.SetResult(LoadCandlesResult.NothingLeft);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(inFlight.Select(command => command.InstrumentId), Is.EquivalentTo(new[] { Btc.Id, Eth.Id }));
+            Assert.That(thirdBeforeRelease, Is.False);
+            Assert.That((await SentAsync(count: 1)).Single().InstrumentId, Is.EqualTo(sol.Id));
         });
     }
 
