@@ -9,9 +9,13 @@ name: profit-fox-market-data
 
 services:
   # The port is not published: only the service uses the database.
+  # The WAL settings keep checkpoints on their timer while the history loads: with the default max_wal_size of 1 GB the
+  # candle writes filled the WAL every 10-30 s, each checkpoint made the next writes log whole pages, and the disk stalled
+  # queries past their 30 s timeout.
   db:
     image: timescale/timescaledb:2.30.2-pg17
     restart: unless-stopped
+    command: ["postgres", "-c", "max_wal_size=8GB", "-c", "checkpoint_timeout=15min", "-c", "wal_compression=lz4"]
     environment:
       POSTGRES_DB: marketdata
       POSTGRES_USER: marketdata
