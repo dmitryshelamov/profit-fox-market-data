@@ -31,6 +31,20 @@ public class InfrastructureRegistrarTests
         Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<TickerCollectionSettings>>().Value);
     }
 
+    [TestCase("CandleSync:HistoryDays")]
+    [TestCase("CandleSync:IdleSeconds")]
+    [TestCase("CandleSync:Parallelism")]
+    public void A_loading_of_candles_with_a_setting_of_zero_is_refused(string setting)
+    {
+        IConfigurationRoot configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["CandleSync:Bybit:Enabled"] = "true", ["CandleSync:TInvest:Enabled"] = "false", [setting] = "0" })
+            .Build();
+        using ServiceProvider services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => _ = services.GetRequiredService<IOptions<CandleSyncSettings>>().Value);
+    }
+
     [TestCase("FundingPaymentSync:HistoryDays")]
     [TestCase("FundingPaymentSync:Parallelism")]
     public void A_loading_of_funding_payments_of_no_days_or_of_no_contract_at_a_time_is_refused(string setting)

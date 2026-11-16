@@ -15,9 +15,10 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 ///     Loads the candles of every listed instrument of the exchanges <see cref="CandleSyncSettings" /> enables, back to
 ///     <see cref="CandleSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to when they started to trade,
 ///     and before them the ranges reads asked for and could not wait for (<see cref="CandleLoadQueue" />). A round loads one page of every
-///     such range and every instrument in turn, the newest it misses first, so fresh minutes come before old history and every instrument
-///     moves on at the same pace. Rounds follow one another while pages are left; an exchange with none left waits
-///     <see cref="CandleSyncSettings.IdleSeconds" />. The settings are read again before every round.
+///     such range in turn, then one page of every instrument, <see cref="CandleSyncSettings.Parallelism" /> instruments at a time, the
+///     newest it misses first, so fresh minutes come before old history and every instrument moves on at the same pace. Rounds follow
+///     one another while pages are left; an exchange with none left waits <see cref="CandleSyncSettings.IdleSeconds" />. The settings
+///     are read again before every round.
 /// </summary>
 internal sealed class CandleSyncBackgroundService(
     IServiceScopeFactory scopes,
@@ -41,7 +42,7 @@ internal sealed class CandleSyncBackgroundService(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            bool hasMorePages = IsEnabled(exchange, sync) && await LoadRoundAsync(exchange, sync.HistoryDays, stoppingToken);
+            bool hasMorePages = IsEnabled(exchange, sync) && await LoadRoundAsync(exchange, sync, stoppingToken);
 
             if (!hasMorePages)
             {
@@ -54,33 +55,62 @@ internal sealed class CandleSyncBackgroundService(
 
     // A round: first one page of every range reads asked for, then one page of the history of every listed instrument of the exchange;
     // whether any of them has more to load. An exchange that is unavailable stops the round: every other instrument would fail the same
-    // way after retries of its own, so the exchange is tried again after the idle wait.
-    private async Task<bool> LoadRoundAsync(Exchange exchange, int historyDays, CancellationToken stoppingToken)
+    // way after retries of its own, so the exchange is tried again after the idle wait; the pages already asked for at that moment end
+    // as they do.
+    private async Task<bool> LoadRoundAsync(Exchange exchange, CandleSyncSettings sync, CancellationToken stoppingToken)
     {
         IReadOnlyCollection<InstrumentInternal> instruments = await scopes.InstrumentsOrNoneAsync(exchange, logger, stoppingToken);
 
         try
         {
-            bool hasMorePages = await LoadRequestedAsync(exchange, instruments, stoppingToken);
+            bool requestedLeft = await LoadRequestedAsync(exchange, instruments, stoppingToken);
             FullHistorySettings whole = fullHistory.CurrentValue;
             DateTimeOffset now = time.GetUtcNow();
-            DateTimeOffset historyFrom = now.AddDays(-historyDays);
+            DateTimeOffset historyFrom = now.AddDays(-sync.HistoryDays);
+            var historyLeft = 0;
+            var unavailable = 0;
 
-            foreach (InstrumentInternal instrument in instruments.Where(instrument => instrument.DelistedAt is null))
-            {
-                var history = new MinuteRange(MinuteRange.StartOfMinute(whole.HistoryFrom(instrument, historyFrom)), MinuteRange.StartOfMinute(now));
-                LoadCandlesResult result = await LoadPageAsync(exchange, instrument.Id, history, whole.Covers(instrument), stoppingToken);
-                hasMorePages |= result == LoadCandlesResult.MoreLeft;
-            }
+            await Parallel.ForEachAsync(
+                instruments.Where(instrument => instrument.DelistedAt is null),
+                new ParallelOptions { MaxDegreeOfParallelism = sync.Parallelism, CancellationToken = stoppingToken },
+                async (instrument, token) =>
+                {
+                    if (Volatile.Read(ref unavailable) != 0)
+                    {
+                        return;
+                    }
 
-            return hasMorePages;
+                    var history = new MinuteRange(MinuteRange.StartOfMinute(whole.HistoryFrom(instrument, historyFrom)), MinuteRange.StartOfMinute(now));
+
+                    try
+                    {
+                        if (await LoadPageAsync(exchange, instrument.Id, history, whole.Covers(instrument), token) == LoadCandlesResult.MoreLeft)
+                        {
+                            Interlocked.Exchange(ref historyLeft, value: 1);
+                        }
+                    }
+                    catch (TransientExchangeException exception) when (!token.IsCancellationRequested)
+                    {
+                        if (Interlocked.Exchange(ref unavailable, value: 1) == 0)
+                        {
+                            LogUnavailable(exchange, exception);
+                        }
+                    }
+                });
+
+            return unavailable == 0 && (requestedLeft || historyLeft != 0);
         }
         catch (TransientExchangeException exception) when (!stoppingToken.IsCancellationRequested)
         {
-            logger.LogError(exception, "{Exchange} is unavailable; the loading of its candles goes on after the idle wait.", exchange);
+            LogUnavailable(exchange, exception);
 
             return false;
         }
+    }
+
+    private void LogUnavailable(Exchange exchange, TransientExchangeException exception)
+    {
+        logger.LogError(exception, "{Exchange} is unavailable; the loading of its candles goes on after the idle wait.", exchange);
     }
 
     // One page of every range reads asked for of an instrument of the exchange, listed or not. A range leaves the queue once nothing of it

@@ -176,6 +176,49 @@ public class LoadCandlesCommandHandlerTests
     }
 
     [Test]
+    public async Task An_empty_oldest_page_before_the_trading_start_ends_a_history_made_longer_with_no_candles_back_to_its_start()
+    {
+        Stored(Linear, Minutes(from: -10, until: 0));
+        _bybit.GetTradingStartAsync(LinearListing, Now.AddMinutes(-5000), Arg.Any<CancellationToken>()).Returns(Now.AddMinutes(-10).AddSeconds(30));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0));
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.NothingLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -5000, until: 0) }));
+            Assert.That(_saved.Settled, Is.EqualTo(new[] { Minutes(from: -5000, until: -10) }));
+            await _bybit.Received(1).GetAsync(Arg.Any<ListedInstrument>(), Arg.Any<MinuteRange>(), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task An_empty_oldest_page_after_the_trading_start_is_a_pause_and_covers_only_the_page()
+    {
+        Stored(Linear, Minutes(from: -10, until: 0));
+        _bybit.GetTradingStartAsync(LinearListing, Now.AddMinutes(-5000), Arg.Any<CancellationToken>()).Returns(Now.AddMinutes(-3000));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -1010, until: 0) }));
+            Assert.That(_saved.Settled, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task An_empty_page_between_covered_parts_does_not_ask_for_the_trading_start()
+    {
+        Stored(Linear, Minutes(from: -100, until: -10));
+
+        await Load(Linear, Minutes(from: -5000, until: 0));
+
+        await _bybit.DidNotReceiveWithAnyArgs().GetTradingStartAsync(default!, default, cancellationToken: default);
+    }
+
+    [Test]
     public async Task An_empty_page_of_a_whole_history_between_covered_parts_covers_only_the_page()
     {
         Stored(Linear, Minutes(from: -100, until: -10));
