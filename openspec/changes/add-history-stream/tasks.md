@@ -40,26 +40,26 @@
 
 ## 4. Presentation: вызовы `History`
 
-- [ ] 4.1 Добавить `HistoryReadSettings` (`MaxConcurrentReads`, `Validate` > 0, `ValidateOnStart`), секцию `HistoryRead` в
+- [x] 4.1 Добавить `HistoryReadSettings` (`MaxConcurrentReads`, `Validate` > 0, `ValidateOnStart`), секцию `HistoryRead` в
   `appsettings.json` и `HistoryReadGate` (предел из `IOptionsMonitor` при каждом вызове, ожидание с отменой); проверка —
   unit-тесты «Третий вызов ждёт», «Ожидающий вызов отменён», новый предел с ближайшего освобождения; тест настроек — приложение
   с `MaxConcurrentReads` `0` не стартует
-- [ ] 4.2 Добавить `HistoryCall` в `GrpcServices`: очередь, покрытие, затем строки, `ArgumentException` → `INVALID_ARGUMENT`,
+- [x] 4.2 Добавить `HistoryCall` в `GrpcServices`: очередь, покрытие, затем строки, `ArgumentException` → `INVALID_ARGUMENT`,
   `InstrumentNotFoundException` → `NOT_FOUND`, неизвестная биржа и `CANDLE_INTERVAL_UNSPECIFIED` → `INVALID_ARGUMENT`,
   остановка приложения → `UNAVAILABLE` для идущих и ожидающих; проверка — интеграционные тесты кодов и «Приложение
   останавливается во время чтения»
-- [ ] 4.3 Реализовать `History` в `CandleFeedService`, `OpenInterestFeedService`, `LongShortRatioFeedService`,
+- [x] 4.3 Реализовать `History` в `CandleFeedService`, `OpenInterestFeedService`, `LongShortRatioFeedService`,
   `FundingPaymentFeedService`, строки — через существующие конвертеры сообщений лент; проверка — интеграционные тесты в
   `Presentation/GrpcServices` через клиента gRPC: «Свеча истории», «Три года рынка» (окно 1095 дней принимается),
   «Повтор через неделю» (два чтения одного покрытого окна дают одинаковые сообщения после сохранения новых минут и более
   старой истории), покрытие приходит раньше первой строки
-- [ ] 4.4 Обновить `docs/conventions.md` (раздел Presentation: история за период — `History` в ленте, когда потребителю нужен
+- [x] 4.4 Обновить `docs/conventions.md` (раздел Presentation: история за период — `History` в ленте, когда потребителю нужен
   рынок или окно больше страниц; общие сообщения покрытия в `candle_feed.proto`) и README, если он перечисляет вызовы gRPC;
   проверка — текст описывает методы так, как они реализованы
 
 ## 5. Проверка целиком
 
-- [ ] 5.1 `dotnet build`, `dotnet test` и `scripts/verify-format.sh backend/ProfitFox.MarketData.sln` проходят;
+- [x] 5.1 `dotnet build`, `dotnet test` и `scripts/verify-format.sh backend/ProfitFox.MarketData.sln` проходят;
   `openspec validate add-history-stream --strict` проходит
 
 ## Workflow follow-up
