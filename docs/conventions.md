@@ -125,8 +125,15 @@ and this file is silent, ask which to follow.
   `FundingPaymentFeed`, `LiquidationFeed`, `LongShortRatioFeed`), tells live what is stored and catches up from storage with
   `since`; the forming candle of `CandleFeed` is the one thing told that is not stored. What the calls of every feed do the same
   way, the candles among them, is `FeedCall`.
-- The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`.
-  `candle_feed.proto`, the first contract, keeps its `SubscribeRequest`: a new name would change the generated code of its consumers.
+- When a consumer needs more than pages give (a backtest reads the whole market over years), the history of a kind is a `History`
+  call of its feed (`CandleFeed`, `OpenInterestFeed`, `LongShortRatioFeed`, `FundingPaymentFeed`): past days only, the coverage of
+  every instrument first, then the rows inside it as the messages the feed tells live, by time and then by instrument id. What the
+  calls of history do the same way (the queue of `HistoryReadGate`, the checks of a request, the codes) is `HistoryCall`; their
+  handlers share `Persistence/Queries/Handlers/History` and read a UTC day a statement.
+- The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`,
+  `OpenInterestHistoryRequest`. `candle_feed.proto`, the first contract, keeps its `SubscribeRequest`: a new name would change the
+  generated code of its consumers. What several contracts share (`Exchange`, `InstrumentCoverage`, `TimeRange`) is in
+  `candle_feed.proto`, which the others import by file name (`ProtoRoot` of `Protos`), so a consumer keeps the copies side by side.
 - What a handler publishes to a feed is made by the converter of the contract (`Contracts/<Area>/Converters`), as what a query gives.
 
 ## Files and code style

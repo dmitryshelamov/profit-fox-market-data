@@ -51,9 +51,18 @@ public class Program
                     .ValidateOnStart();
             }
 
-            // The feeds of live market data; they need HTTP/2, which has an endpoint of its own in the Kestrel section of the settings.
+            // An app with a broken HistoryRead section stops at start.
+            builder.Services.AddOptions<HistoryReadSettings>()
+                .Bind(builder.Configuration.GetSection(HistoryReadSettings.Section))
+                .Validate(read => read.MaxConcurrentReads > 0, "HistoryRead:MaxConcurrentReads must be above zero.")
+                .ValidateOnStart();
+
+            // The feeds of live market data and their history; they need HTTP/2, which has an endpoint of its own in the Kestrel section of
+            // the settings.
             builder.Services.AddGrpc();
             builder.Services.AddSingleton<FeedCall>();
+            builder.Services.AddSingleton<HistoryReadGate>();
+            builder.Services.AddSingleton<HistoryCall>();
 
             // The failures the application tells by an exception are answered in one place.
             builder.Services.AddProblemDetails();

@@ -11,13 +11,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- The client is generated too: the tests subscribe with it, and a consumer copies the proto and generates its own. -->
-        <Protobuf Include="Protos\candle_feed.proto" GrpcServices="Both"/>
-        <Protobuf Include="Protos\funding_payment_feed.proto" GrpcServices="Both"/>
-        <Protobuf Include="Protos\funding_rate_feed.proto" GrpcServices="Both"/>
-        <Protobuf Include="Protos\liquidation_feed.proto" GrpcServices="Both"/>
-        <Protobuf Include="Protos\long_short_ratio_feed.proto" GrpcServices="Both"/>
-        <Protobuf Include="Protos\open_interest_feed.proto" GrpcServices="Both"/>
+        <!-- The client is generated too: the tests subscribe with it, and a consumer copies the proto and generates its own.
+             The contracts import one another by file name (candle_feed.proto), so a consumer keeps the copies side by side. -->
+        <Protobuf Include="Protos\candle_feed.proto" GrpcServices="Both" ProtoRoot="Protos"/>
+        <Protobuf Include="Protos\funding_payment_feed.proto" GrpcServices="Both" ProtoRoot="Protos"/>
+        <Protobuf Include="Protos\funding_rate_feed.proto" GrpcServices="Both" ProtoRoot="Protos"/>
+        <Protobuf Include="Protos\liquidation_feed.proto" GrpcServices="Both" ProtoRoot="Protos"/>
+        <Protobuf Include="Protos\long_short_ratio_feed.proto" GrpcServices="Both" ProtoRoot="Protos"/>
+        <Protobuf Include="Protos\open_interest_feed.proto" GrpcServices="Both" ProtoRoot="Protos"/>
     </ItemGroup>
 
     <ItemGroup>

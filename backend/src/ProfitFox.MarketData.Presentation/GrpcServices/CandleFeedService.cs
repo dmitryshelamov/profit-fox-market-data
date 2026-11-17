@@ -15,24 +15,28 @@ using ProfitFox.MarketData.Domain.ValueObjects.Candles;
 using ProfitFox.MarketData.Presentation.Protos;
 using ProfitFox.MarketData.Presentation.Settings;
 
-using Enum = System.Enum;
+using CandleInterval = ProfitFox.MarketData.Application.Queries.Candles.CandleInterval;
 using Exchange = ProfitFox.MarketData.Domain.Entities.Instruments.Enums.Exchange;
-using ProtoExchange = ProfitFox.MarketData.Presentation.Protos.Exchange;
+using ProtoInterval = ProfitFox.MarketData.Presentation.Protos.CandleInterval;
 
 namespace ProfitFox.MarketData.Presentation.GrpcServices;
 
 /// <summary>
 ///     The gRPC feed of minute candles, <c>Protos/candle_feed.proto</c>: a caller subscribes once and gets every candle as it is
 ///     saved, after the stored ones it asked to catch up on, and the forming candle of the minute that goes on when it asked for it.
+///     A backtest reads the history of the candles of past days in one call.
 /// </summary>
-public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOptionsMonitor<CandleFeedSettings> settings, FeedCall call)
+public sealed class CandleFeedService(
+    ISender sender,
+    ILiveCandleFeed feed,
+    IOptionsMonitor<CandleFeedSettings> settings,
+    FeedCall call,
+    HistoryCall history)
     : CandleFeed.CandleFeedBase
 {
-    private static readonly Exchange[] All = Enum.GetValues<Exchange>();
-
     public override Task Subscribe(SubscribeRequest request, IServerStreamWriter<CandleUpdate> responseStream, ServerCallContext context)
     {
-        Exchange[] exchanges = Asked(request);
+        Exchange[] exchanges = ExchangeCodes.Asked(request.Exchanges);
 
         // A candle is stored closed and comes live closed or forming, so each has a message of its own making.
         return call.ServeAsync<ClosedCandleInternal, LiveCandle, CandleUpdate>(
@@ -46,29 +50,34 @@ public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOpt
             context);
     }
 
-    // The exchanges asked for; all of them when none is named.
-    private static Exchange[] Asked(SubscribeRequest request)
+    public override Task History(CandleHistoryRequest request, IServerStreamWriter<CandleHistoryItem> responseStream, ServerCallContext context)
     {
-        return request.Exchanges.Count == 0 ? All : [.. request.Exchanges.Select(ToDomain).Distinct()];
+        (Guid[] ids, Exchange[] exchanges, CandleHistoryWindow window) = HistoryCall.Checked(() => (
+            HistoryCall.Ids(request.InstrumentIds),
+            ExchangeCodes.Asked(request.Exchanges),
+            new CandleHistoryWindow(ToDomain(request.Interval), HistoryCall.Time(request.From, "from"), HistoryCall.Time(request.To, "to"), history.Now)));
+
+        return history.ServeAsync<ClosedCandleInternal, CandleHistoryItem>(
+            cancellationToken => sender.Send(new GetCandleHistoryCoverageQuery(ids, exchanges, window), cancellationToken),
+            (coverage, cancellationToken) => sender.CreateStream(new GetCandleHistoryQuery(coverage, window.Interval), cancellationToken),
+            coverage => new CandleHistoryItem { Coverage = HistoryCall.ToMessage(coverage) },
+            candle => new CandleHistoryItem { Candle = ToUpdate(candle) },
+            responseStream,
+            context);
     }
 
-    private static Exchange ToDomain(ProtoExchange exchange)
+    /// <exception cref="ArgumentException">The interval is CANDLE_INTERVAL_UNSPECIFIED or not one of the contract.</exception>
+    private static CandleInterval ToDomain(ProtoInterval interval)
     {
-        return exchange switch
+        return interval switch
         {
-            ProtoExchange.Bybit => Exchange.Bybit,
-            ProtoExchange.Tinvest => Exchange.TInvest,
-            _ => throw new RpcException(new Status(StatusCode.InvalidArgument, $"The exchange {exchange} is not known."))
-        };
-    }
-
-    private static ProtoExchange ToProto(Exchange exchange)
-    {
-        return exchange switch
-        {
-            Exchange.Bybit => ProtoExchange.Bybit,
-            Exchange.TInvest => ProtoExchange.Tinvest,
-            _ => throw new NotSupportedException($"The exchange {exchange} has no code in the contract of the feed.")
+            ProtoInterval.OneMinute => CandleInterval.OneMinute,
+            ProtoInterval.FiveMinutes => CandleInterval.FiveMinutes,
+            ProtoInterval.FifteenMinutes => CandleInterval.FifteenMinutes,
+            ProtoInterval.OneHour => CandleInterval.OneHour,
+            ProtoInterval.FourHours => CandleInterval.FourHours,
+            ProtoInterval.OneDay => CandleInterval.OneDay,
+            _ => throw new ArgumentException($"The interval {interval} is not known.")
         };
     }
 
@@ -91,7 +100,7 @@ public sealed class CandleFeedService(ISender sender, ILiveCandleFeed feed, IOpt
         var update = new CandleUpdate
         {
             InstrumentId = instrumentId.ToString(),
-            Exchange = ToProto(exchange),
+            Exchange = ExchangeCodes.ToProto(exchange),
             OpenTime = Timestamp.FromDateTimeOffset(candle.OpenTime),
             Open = Text(candle.Open),
             High = Text(candle.High),
