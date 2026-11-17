@@ -13,10 +13,10 @@
 
 ## 2. Application: окна и запросы
 
-- [ ] 2.1 Добавить в `Queries` `HistoryWindow` (`from` < `to` ≤ начала текущего дня UTC по `TimeProvider`) и в `Queries/Candles`
+- [x] 2.1 Добавить в `Queries` `HistoryWindow` (`from` < `to` ≤ начала дня UTC переданного `now`) и в `Queries/Candles`
   `CandleHistoryWindow` (интервал, выравнивание по UTC), нарушение — `ArgumentException`; проверка — unit-тесты на окно в
   сегодня, ровно до полуночи, задом наперёд, `1h` с `10:30`, `1d` не с полуночи
-- [ ] 2.2 Добавить для свечей, открытого интереса, лонг/шорт и выплат `Get<Kind>HistoryCoverageQuery` (инструменты, биржи,
+- [x] 2.2 Добавить для свечей, открытого интереса, лонг/шорт и выплат `Get<Kind>HistoryCoverageQuery` (инструменты, биржи,
   окно → покрытие в порядке `instrument_id`) и `Get<Kind>HistoryQuery : IStreamRequest` (покрытие и окно → строки), их
   контракты в `Contracts/<Area>` (`InstrumentCoverageInternal` общий в `Contracts`); проверка — `dotnet build` проходит
 

@@ -123,9 +123,12 @@ message TimeRange {
 - Почему не одна транзакция `REPEATABLE READ` на всё чтение: она держала бы снимок базы до часа, мешая vacuum и сжатию
   чанков, пока идёт загрузка истории. Окончательное покрытие не меняется, поэтому снимок не нужен.
 
-Окна — в `Queries`: `HistoryWindow` (`from` < `to` ≤ начала текущего дня UTC по `TimeProvider`) общее для точечных видов,
-`CandleHistoryWindow` добавляет интервал и выравнивание. Нарушение — `ArgumentException`, как у `CandleWindow` и `PointWindow`;
-вызов истории переводит его в `INVALID_ARGUMENT`, `InstrumentNotFoundException` — в `NOT_FOUND`.
+Окна — в `Queries`: `HistoryWindow` (`from` < `to` ≤ начала дня UTC того `now`, что передал вызов) общее для точечных видов,
+`CandleHistoryWindow` добавляет интервал и выравнивание и держит `HistoryWindow`. `now` берёт вызов gRPC из `TimeProvider`:
+Application часов не читает, и окно остаётся значением. Нарушение — `ArgumentException`, как у `CandleWindow` и `PointWindow`;
+вызов истории переводит его в `INVALID_ARGUMENT`, `InstrumentNotFoundException` — в `NOT_FOUND`. Покрытие —
+`InstrumentCoverageInternal` из `TimeRangeInternal` в `Contracts`: у точечных рядов концы покрытия не на начале минуты, поэтому
+`MinuteRangeInternal` свечей не подходит. Строки свечей — `ClosedCandleInternal`, тот же, что в догоне ленты.
 
 ### Окончательное покрытие свечей считается в SQL
 
