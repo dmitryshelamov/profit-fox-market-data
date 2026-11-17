@@ -152,17 +152,18 @@ public class LongShortRatioFeedServiceTests
         await LoadAsync(Btc, HourAgo.AddHours(-1), HourAgo);
         using AsyncServerStreamingCall<LongShortRatioUpdate> call = await SubscribeAsync(new SubscribeLongShortRatioRequest());
         _app.Bybit
+            .RespondJson(BybitAnswers.LongShortRatioHistory(BybitAnswers.LongShortRatioPoint("0.1", "0.9", HourAgo.AddHours(-1).AddMinutes(-5))))
             .RespondJson(
                 BybitAnswers.LongShortRatioHistory(
                     BybitAnswers.LongShortRatioPoint("0.726", "0.274", HourAgo.AddMinutes(5)),
-                    BybitAnswers.LongShortRatioPoint("0.7302", "0.2698", HourAgo)))
-            .RespondJson(BybitAnswers.LongShortRatioHistory(BybitAnswers.LongShortRatioPoint("0.1", "0.9", HourAgo.AddHours(-1).AddMinutes(-5))));
+                    BybitAnswers.LongShortRatioPoint("0.7302", "0.2698", HourAgo)));
 
         await using (AsyncServiceScope scope = _app.Services.CreateAsyncScope())
         {
             ISender sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-            // Thirteen minutes after the hour: the steps of :00 and :05 are told; then the page of history, five minutes back.
+            // Thirteen minutes after the hour: the page of history, five minutes back, comes first while the steps of :00 and :05 are
+            // less than an hour old; then those two steps.
             var load = new LoadLongShortRatioCommand(Btc.Id, HourAgo.AddHours(-1).AddMinutes(-5), HourAgo.AddMinutes(8));
             await sender.Send(load, CancellationToken.None);
             await sender.Send(load, CancellationToken.None);
@@ -173,7 +174,7 @@ public class LongShortRatioFeedServiceTests
 
         Assert.Multiple(() =>
         {
-            // The two new points of BTC, then the point published after the page of history was loaded: the page told nothing.
+            // The two new points of BTC, then the point published after both pages were loaded: the page of history told nothing.
             Assert.That(updates.Select(update => update.Long), Is.EqualTo(new[] { "0.7302", "0.726", "0.5" }));
             Assert.That(updates.Select(update => update.InstrumentId), Is.EqualTo(new[] { Btc.Id.ToString(), Btc.Id.ToString(), Eth.Id.ToString() }));
             Assert.That(_app.Bybit.Requests, Has.Count.EqualTo(2));

@@ -107,6 +107,25 @@ public class LoadLongShortRatioCommandHandlerTests
         });
     }
 
+    // While the history loads, a round of the market comes back to the contract in minutes, not in an hour: a page of one new step
+    // each time would spend most requests of the loading on the newest points.
+    [Test]
+    public async Task A_round_minutes_later_while_the_history_is_left_asks_for_the_history()
+    {
+        DateTimeOffset from = Until.AddMinutes(-2600);
+        _app.Bybit.RespondJson(History(Until.AddMinutes(-2500), Until)).RespondJson(History(from, Until.AddMinutes(-2500)));
+        await LoadAsync(from, RequestedAt);
+
+        // Five minutes later, when Bybit has told one more step.
+        await LoadAsync(from, RequestedAt.AddMinutes(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_app.Bybit.Requests, Has.Count.EqualTo(2));
+            Assert.That(_app.Bybit.Requests[1].Query, Does.Contain($"endTime={Until.AddMinutes(-2500).ToUnixTimeMilliseconds() - 1}"));
+        });
+    }
+
     [Test]
     public async Task The_history_is_loaded_page_by_page_back_to_the_start_of_the_range()
     {

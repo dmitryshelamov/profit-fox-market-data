@@ -15,15 +15,17 @@ internal sealed class LongShortRatioSyncSettings
 
     /// <summary>
     ///     Seconds the loading waits before its next round once a round found nothing left to load. Bybit gives the ratio a contract a
-    ///     request, so a round of the market is a request a contract, and the newest points are this old at most: an hour by default.
+    ///     request, so a round of the market is a request a contract, and the newest points are this old at most: a step of five
+    ///     minutes by default.
     /// </summary>
-    public int IdleSeconds { get; init; } = 3600;
+    public int IdleSeconds { get; init; } = 300;
 
     /// <summary>
     ///     How many contracts are asked for at the same time. The loading shares the limit of Bybit with the loading of candles, so
-    ///     more of them here means less of the limit there.
+    ///     more of them here means less of the limit there. Three by default: a round of the market at a request a contract then
+    ///     takes less than the five minutes of a step.
     /// </summary>
-    public int Parallelism { get; init; } = 2;
+    public int Parallelism { get; init; } = 3;
 
     public ExchangeSyncSettings Bybit { get; init; } = new ExchangeSyncSettings();
 }

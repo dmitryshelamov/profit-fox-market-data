@@ -34,6 +34,10 @@ internal sealed class LoadLongShortRatioCommandHandler(
     // same wait, for the same reason, as the Publishing of LoadOpenInterestCommandHandler.
     private static readonly TimeSpan Publishing = TimeSpan.FromMinutes(3);
 
+    // How old the newest points of a contract may get while its history loads. Its rounds come back to it in minutes then, and each
+    // would spend its request on the one step told since the round before, leaving the history where it is.
+    private static readonly TimeSpan FreshWhileHistoryLoads = TimeSpan.FromHours(1);
+
     /// <exception cref="InstrumentNotFoundException">The catalog has no instrument of the id.</exception>
     /// <exception cref="NotSupportedException">The instrument is not of Bybit.</exception>
     public async Task<LoadLongShortRatioResult> Handle(LoadLongShortRatioCommand request, CancellationToken cancellationToken)
@@ -80,7 +84,8 @@ internal sealed class LoadLongShortRatioCommandHandler(
     }
 
     // The next page to load: the newest one of the range for a new series; else the oldest one after the coverage, so the coverage
-    // stays one stretch; else the newest one before it. None when the series covers the range.
+    // stays one stretch; else the newest one before it. While history is left, the time after the coverage waits until it is
+    // FreshWhileHistoryLoads long. None when the series covers the range.
     private (DateTimeOffset From, DateTimeOffset Until)? Page(LongShortRatioSeries? stored, DateTimeOffset from, DateTimeOffset until)
     {
         if (stored is null)
@@ -88,12 +93,19 @@ internal sealed class LoadLongShortRatioCommandHandler(
             return (Later(until - bybit.PageLength, from), until);
         }
 
-        if (stored.CoveredUntil < until)
+        bool historyLeft = stored.CoveredFrom > from;
+
+        if (stored.CoveredUntil < until && (!historyLeft || until - stored.CoveredUntil >= FreshWhileHistoryLoads))
         {
             return (stored.CoveredUntil, Earlier(stored.CoveredUntil + bybit.PageLength, until));
         }
 
-        return stored.CoveredFrom > from ? (Later(stored.CoveredFrom - bybit.PageLength, from), stored.CoveredFrom) : null;
+        if (historyLeft)
+        {
+            return (Later(stored.CoveredFrom - bybit.PageLength, from), stored.CoveredFrom);
+        }
+
+        return null;
     }
 
     private static LongShortRatioSeries Covered(

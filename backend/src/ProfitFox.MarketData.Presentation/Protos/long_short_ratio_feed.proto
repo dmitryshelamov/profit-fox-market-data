@@ -14,8 +14,9 @@ service LongShortRatioFeed {
   // takes them as one, by instrument and time. The response headers come once the subscription is in place.
   //
   // The exchange has no live source of the ratio: its points are loaded from its history, a contract a request, in a
-  // round of the market about once an hour. So the points of a contract come in a batch, the five-minute steps since
-  // the round before, up to an hour after their time, and the contracts of a round come one after another.
+  // round of the market about every five minutes. So the points of a contract come with the rounds, the five-minute
+  // steps since the round before, and the contracts of a round come one after another. While the history of a contract
+  // loads, its points come once an hour, in a batch of the steps of that hour.
   //
   // A live point is one loaded after the stored ones of its instrument. The history of an instrument, loaded back to
   // a year, is not told live. A caller that needs it subscribes again with `since`, or asks

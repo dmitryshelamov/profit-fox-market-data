@@ -227,6 +227,23 @@ public class LoadLongShortRatioCommandHandlerTests
     }
 
     [Test]
+    public async Task A_time_since_the_coverage_ended_of_an_hour_comes_before_the_history_left()
+    {
+        // The history loads, and the newest points of the contract are an hour old: they are not left to get older.
+        Stored(Until.AddHours(-3), Until.AddHours(-1));
+        BybitHas(Until.AddHours(-1), Until.AddHours(-1) + Page);
+
+        LoadLongShortRatioResult result = await Load();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.EqualTo(LoadLongShortRatioResult.MoreLeft));
+            Assert.That(_saved!.CoveredFrom, Is.EqualTo(Until.AddHours(-3)));
+            Assert.That(_saved.CoveredUntil, Is.EqualTo(Until.AddHours(-1) + Page));
+        });
+    }
+
+    [Test]
     public async Task A_time_since_the_coverage_ended_longer_than_a_page_is_loaded_from_its_oldest_page()
     {
         // The app was down for an hour: the page next to the coverage comes first, so the coverage stays one stretch.
