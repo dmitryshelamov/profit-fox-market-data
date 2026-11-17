@@ -3,6 +3,7 @@ syntax = "proto3";
 package profitfox.marketdata.v1;
 
 import "google/protobuf/timestamp.proto";
+import "candle_feed.proto";
 
 option csharp_namespace = "ProfitFox.MarketData.Presentation.Protos";
 
@@ -28,6 +29,28 @@ service FundingPaymentFeed {
   // RESOURCE_EXHAUSTED: the caller read slower than they came and is cut off; it subscribes again with `since`.
   // UNAVAILABLE: the service is stopping; the caller subscribes again with `since` once it is back.
   rpc Subscribe (SubscribeFundingPaymentRequest) returns (stream FundingPaymentUpdate);
+
+  // Tells the stored funding payments over a window of past days, for backtests, and ends with OK. Only what will not
+  // change is told: the part of the window where the payments of the instrument are loaded, so a time inside it without
+  // one is a time with no payment; a spot pair, a dated future or a share has none. Nothing is loaded from the
+  // exchange. Only instruments listed now are read: a delisted one is left out, even when named, so the history is the
+  // one of the market as it is listed today.
+  //
+  // The coverage comes first: one `InstrumentCoverage` for every instrument read, ordered by instrument id, with the
+  // parts of the window it covers; an instrument with none gets an empty one. The payments follow, by time and, within
+  // one time, by instrument id, in an order that is the same on every read: the caller does not sort them. Read again,
+  // a window that was covered both times gives the same messages in the same order; a caller that checks it by a hash
+  // hashes the fields in the order they come, not the bytes of the messages, which protobuf does not keep the same.
+  //
+  // The service reads a few History calls at a time, those of every feed together; a call over that waits its turn
+  // before anything comes, until the caller cancels it. A call over the whole market and years is read day by day as
+  // the caller takes it: it takes long, not more memory.
+  //
+  // INVALID_ARGUMENT: the window does not end after it starts or ends after the start of the current UTC day; an
+  // exchange is not one of `Exchange` or is EXCHANGE_UNSPECIFIED; an instrument id is not an id.
+  // NOT_FOUND: an instrument id is not in the catalog.
+  // UNAVAILABLE: the service is stopping; the caller reads again once it is back.
+  rpc History (FundingPaymentHistoryRequest) returns (stream FundingPaymentHistoryItem);
 }
 
 message SubscribeFundingPaymentRequest {
@@ -43,4 +66,26 @@ message FundingPaymentUpdate {
 
   // The rate the exchange settled at the time, a fraction, not a percent. Below zero when the shorts paid the longs.
   string funding_rate = 3;
+}
+
+message FundingPaymentHistoryRequest {
+  // The instruments to read, by their id in the catalog; none means every listed instrument of the exchanges asked for.
+  repeated string instrument_ids = 1;
+
+  // The exchanges whose instruments are read when none are named; none means all.
+  repeated Exchange exchanges = 2;
+
+  // Where the window starts, inclusive.
+  google.protobuf.Timestamp from = 3;
+
+  // Where the window ends, exclusive; not after the start of the current UTC day.
+  google.protobuf.Timestamp to = 4;
+}
+
+// What a call of FundingPaymentFeed.History tells: first the coverage of every instrument, then the payments.
+message FundingPaymentHistoryItem {
+  oneof item {
+    InstrumentCoverage coverage = 1;
+    FundingPaymentUpdate payment = 2;
+  }
 }

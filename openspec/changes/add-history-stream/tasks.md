@@ -2,12 +2,12 @@
 
 ## 1. Контракты
 
-- [ ] 1.1 Добавить в `Protos/candle_feed.proto` `CandleInterval`, `TimeRange`, `InstrumentCoverage`, `CandleHistoryRequest`,
+- [x] 1.1 Добавить в `Protos/candle_feed.proto` `CandleInterval`, `TimeRange`, `InstrumentCoverage`, `CandleHistoryRequest`,
   `CandleHistoryItem` и `rpc History` с комментарием контракта: окно только прошедших дней, покрытие до строк, окончательное
   покрытие Bybit (`covered ∩ settled`), порядок время → инструмент, хэш по разобранным полям, только листингованные
   инструменты, коды `INVALID_ARGUMENT`/`NOT_FOUND`/`UNAVAILABLE`, ожидание очереди; проверка — `dotnet build` проходит,
   `SubscribeRequest` и `CandleUpdate` не изменились (`git diff` по их полям пуст)
-- [ ] 1.2 Добавить `History` с запросом и `oneof`-ответом в `open_interest_feed.proto`, `long_short_ratio_feed.proto`,
+- [x] 1.2 Добавить `History` с запросом и `oneof`-ответом в `open_interest_feed.proto`, `long_short_ratio_feed.proto`,
   `funding_payment_feed.proto`, импортируя `candle_feed.proto` для `Exchange`, `InstrumentCoverage`, `TimeRange`; проверка —
   `dotnet build` проходит, сгенерированные клиенты всех четырёх лент имеют метод `History`
 
