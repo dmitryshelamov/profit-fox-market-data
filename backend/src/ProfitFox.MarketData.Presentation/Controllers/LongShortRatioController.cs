@@ -19,7 +19,7 @@ public sealed class LongShortRatioController(ISender sender) : ControllerBase
     ///     window that holds more gives in <c>continueFrom</c> the time to ask the rest from, null otherwise. <c>coveredFrom</c> and
     ///     <c>coveredUntil</c> tell how far the history is loaded: between them every point the exchange has is stored, a time outside
     ///     them is not loaded yet; both are null for an instrument with nothing loaded, as one without a ratio is. The newest points
-    ///     are loaded once an hour. Nothing is loaded from the exchange on a read. An instrument the catalog does not have is a 404.
+    ///     are loaded every five minutes, once an hour while the history of the instrument loads. Nothing is loaded from the exchange on a read. An instrument the catalog does not have is a 404.
     /// </summary>
     [HttpGet]
     [ProducesResponseType<LongShortRatioPointsInternal>(StatusCodes.Status200OK)]
