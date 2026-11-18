@@ -302,10 +302,9 @@ public class CandleStreamBackgroundServiceTests
         }
     }
 
-    [Test]
-    public async Task A_batch_that_fails_to_save_does_not_stop_the_ones_after_it()
+    // The first save fails, the ones after it are recorded.
+    private TaskCompletionSource FirstSaveFails()
     {
-        Candle second = CandleGenerator.Generate(Minute.AddMinutes(1));
         var failed = new TaskCompletionSource();
         _sender.Send(Arg.Any<SaveClosedCandlesCommand>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -316,10 +315,20 @@ public class CandleStreamBackgroundServiceTests
                     return Task.FromException<SaveClosedCandlesResult>(new InvalidOperationException("Storage is down."));
                 },
                 Recorded);
+
+        return failed;
+    }
+
+    [Test]
+    public async Task A_batch_that_fails_to_save_goes_again_ahead_of_the_next_one()
+    {
+        Candle first = CandleGenerator.Generate(Minute);
+        Candle second = CandleGenerator.Generate(Minute.AddMinutes(1));
+        TaskCompletionSource failed = FirstSaveFails();
         await StartAsync();
         Subscription linear = await _stream.NextAsync();
 
-        linear.Closed("BTCUSDT", CandleGenerator.Generate(Minute));
+        linear.Closed("BTCUSDT", first);
         await PassBatchWindowAsync();
 
         // The first batch is taken by now: a candle told before that would join it and fail with it.
@@ -327,7 +336,32 @@ public class CandleStreamBackgroundServiceTests
         linear.Closed("BTCUSDT", second);
         await PassBatchWindowAsync();
 
-        Assert.That(await SavedAsync(), Is.EqualTo(new[] { new ClosedCandle(Exchange.Bybit, Btc.Id, second) }));
+        Assert.That(
+            await SavedAsync(),
+            Is.EqualTo(new[] { new ClosedCandle(Exchange.Bybit, Btc.Id, first), new ClosedCandle(Exchange.Bybit, Btc.Id, second) }));
+    }
+
+    [Test]
+    public async Task A_batch_that_fails_to_save_carries_ten_thousand_candles_at_most_the_newest()
+    {
+        Candle[] told = [.. Enumerable.Range(0, 10_000).Select(minute => CandleGenerator.Generate(Minute.AddMinutes(minute)))];
+        Candle next = CandleGenerator.Generate(Minute.AddMinutes(10_000));
+        TaskCompletionSource failed = FirstSaveFails();
+        await StartAsync();
+        Subscription linear = await _stream.NextAsync();
+
+        foreach (Candle candle in told)
+        {
+            linear.Closed("BTCUSDT", candle);
+        }
+
+        await PassBatchWindowAsync();
+        await failed.Task.WaitAsync(Patience);
+        linear.Closed("BTCUSDT", next);
+        await PassBatchWindowAsync();
+        IReadOnlyCollection<ClosedCandle> saved = await SavedAsync();
+
+        Assert.That(saved.Select(closed => closed.Candle), Is.EqualTo(told.Skip(1).Append(next)));
     }
 
     [Test]
