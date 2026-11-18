@@ -19,8 +19,9 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 ///     the catalog again every <see cref="CandleStreamSettings.RefreshSeconds" /> for the ones listed since. A delisted instrument stays
 ///     subscribed until the app restarts: its exchange tells nothing more of it. The closed candles wait in memory and are saved together,
 ///     <see cref="CandleStreamSettings.BatchSeconds" /> after the first of them came, so a minute of the whole market is one save. The
-///     forming candles of the minute that goes on are not saved: they go to the feed of live candles as they come. A minute the stream
-///     did not tell, as during a downtime, is left to <see cref="CandleSyncBackgroundService" />.
+///     forming candles of the minute that goes on are not saved: they go to the feed of live candles as they come. A batch that fails to
+///     save goes again with the next one. A minute the stream did not tell, as during a downtime, is left to
+///     <see cref="CandleSyncBackgroundService" />.
 /// </summary>
 internal sealed class CandleStreamBackgroundService(
     IServiceScopeFactory scopes,
@@ -31,8 +32,8 @@ internal sealed class CandleStreamBackgroundService(
     TimeProvider time,
     ILogger<CandleStreamBackgroundService> logger) : BackgroundService
 {
-    // About seven minutes of the candles of the whole market. When storage falls further behind, the oldest waiting candles are dropped:
-    // their minutes stay uncovered and the loading of candles takes them.
+    // About seven minutes of the candles of the whole market, waiting to be saved or carried by a batch that failed. When storage falls
+    // further behind, the oldest waiting candles are dropped: their minutes stay uncovered and the loading of candles takes them.
     private const int WaitingCapacity = 10_000;
 
     private readonly Channel<ClosedCandle> _closed = Channel.CreateBounded<ClosedCandle>(
@@ -188,37 +189,44 @@ internal sealed class CandleStreamBackgroundService(
     }
 
     // The first candle that waits opens a batch; BatchSeconds later all that wait by then are saved together, in a scope of their own.
-    // A candle that comes after that opens the next batch. A batch that fails to save is logged and its minutes are left to the loading
-    // of candles.
+    // A candle that comes after that opens the next batch. A batch that fails to save is logged and goes again ahead of the next one,
+    // so the feed hears of its candles late rather than never: a stall of the disk can hold a save past its timeout. Of the candles a
+    // batch carries, only the newest WaitingCapacity stay; the minutes of the others are left to the loading of candles.
     private async Task SaveAsync(CancellationToken stoppingToken)
     {
         // Valid here: the app checks the settings when it starts.
         CandleStreamSettings stream = settings.CurrentValue;
+        var batch = new List<ClosedCandle>();
 
         while (await _closed.Reader.WaitToReadAsync(stoppingToken))
         {
             await Task.Delay(TimeSpan.FromSeconds(stream.BatchSeconds), time, stoppingToken);
-
-            var batch = new List<ClosedCandle>();
 
             while (_closed.Reader.TryRead(out ClosedCandle? closed))
             {
                 batch.Add(closed);
             }
 
+            if (batch.Count > WaitingCapacity)
+            {
+                batch.RemoveRange(0, batch.Count - WaitingCapacity);
+            }
+
             try
             {
-                SaveClosedCandlesResult result = await scopes.SendAsync(new SaveClosedCandlesCommand(batch), stoppingToken);
+                // A copy: a batch that fails takes more candles, and the command keeps what it was sent with.
+                SaveClosedCandlesResult result = await scopes.SendAsync(new SaveClosedCandlesCommand([.. batch]), stoppingToken);
 
                 logger.LogInformation(
                     "Saved {Saved} of {Told} closed candles, {WithBuyVolume} told with a buy volume.",
                     result.Saved,
                     batch.Count,
                     batch.Count(closed => closed.Candle.BuyVolume is not null));
+                batch = [];
             }
             catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogError(exception, "Saving {Told} closed candles failed.", batch.Count);
+                logger.LogError(exception, "Saving {Told} closed candles failed; they go again with the next batch.", batch.Count);
             }
 
             stream = settings.CurrentOrLastValid(stream, logger);
