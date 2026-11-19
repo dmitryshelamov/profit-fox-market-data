@@ -8,8 +8,8 @@ internal static class GetOpenInterestHistoryQueries
     // Covered is the one range of the series of the instrument: inside it, every point the exchange has is stored.
     public static readonly string CoverageSql = HistoryQueries.PointCoverageSql("open_interest_series");
 
-    // The points of open interest of a day inside the coverage. The time comes first in the order, then the instrument, as Postgres orders its ids: the
-    // same on every read.
+    // The points of open interest of a part of the window inside the coverage. The time comes first in the order, then the instrument, as
+    // Postgres orders its ids: the same on every read.
     public const string PointsSql = HistoryQueries.CoverageSql + """
 
                                                                  SELECT p.instrument_id AS "InstrumentId", p.time AS "Time", p.value AS "Value"
@@ -20,17 +20,16 @@ internal static class GetOpenInterestHistoryQueries
                                                                  ORDER BY p.time, p.instrument_id
                                                                  """;
 
-    // The parameters alone, with the statement beside them: Dapper reads row by row only from a statement and its parameters, not from
-    // a command definition.
-    public static object Day(HistoryDay day)
+    // The parameters of the statement of a part of the read.
+    public static object Period(HistoryPeriod period)
     {
         return new
         {
-            day.InstrumentIds,
-            Froms = day.Froms.Select(from => from.ToUniversalTime()).ToArray(),
-            Untils = day.Untils.Select(until => until.ToUniversalTime()).ToArray(),
-            From = day.From.ToUniversalTime(),
-            Until = day.Until.ToUniversalTime()
+            period.InstrumentIds,
+            Froms = period.Froms.Select(from => from.ToUniversalTime()).ToArray(),
+            Untils = period.Untils.Select(until => until.ToUniversalTime()).ToArray(),
+            From = period.From.ToUniversalTime(),
+            Until = period.Until.ToUniversalTime()
         };
     }
 }

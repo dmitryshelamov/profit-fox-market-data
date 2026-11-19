@@ -190,13 +190,14 @@ public class GetCandleHistoryQueryHandlerTests
     }
 
     [Test]
-    public async Task The_days_of_a_window_come_one_after_another()
+    public async Task The_days_of_a_window_come_one_after_another_across_its_parts()
     {
-        await StoreAsync(Btc, Flat(Day.AddDays(2)), Flat(Day), Flat(Day.AddDays(1)));
+        // 65 days of one pair are two parts: the first 64 days and the last one.
+        await StoreAsync(Btc, Flat(Day.AddDays(64)), Flat(Day), Flat(Day.AddDays(63)));
 
-        IReadOnlyList<ClosedCandleInternal> candles = await ReadAsync(CandleInterval.OneDay, Covered(Btc, Day, Day.AddDays(3)));
+        IReadOnlyList<ClosedCandleInternal> candles = await ReadAsync(CandleInterval.OneDay, Covered(Btc, Day, Day.AddDays(65)));
 
-        Assert.That(candles.Select(candle => candle.OpenTime), Is.EqualTo(new[] { Day, Day.AddDays(1), Day.AddDays(2) }));
+        Assert.That(candles.Select(candle => candle.OpenTime), Is.EqualTo(new[] { Day, Day.AddDays(63), Day.AddDays(64) }));
     }
 
     [Test]
@@ -222,19 +223,47 @@ public class GetCandleHistoryQueryHandlerTests
     }
 
     [Test]
-    public async Task A_day_is_read_only_once_the_rows_of_the_day_before_are_taken()
+    public async Task The_last_day_of_65_of_one_pair_is_read_only_once_the_rows_of_the_part_before_are_taken()
     {
         await StoreAsync(Btc, Flat(Ten), Flat(Ten.AddMinutes(1)));
+        DateTimeOffset lastDay = Ten.AddDays(64);
 
-        await using IAsyncEnumerator<ClosedCandleInternal> candles = Stream(CandleInterval.OneMinute, Covered(Btc, Day, Day.AddDays(2))).GetAsyncEnumerator();
+        await using IAsyncEnumerator<ClosedCandleInternal> candles = Stream(CandleInterval.OneMinute, Covered(Btc, Day, Day.AddDays(65))).GetAsyncEnumerator();
         Assert.That(await candles.MoveNextAsync(), Is.True);
 
-        // Stored after the first row of the first day was taken: a read that held the window, or ran ahead of its caller, would miss it.
-        await using (AsyncServiceScope other = _services.CreateAsyncScope())
-        {
-            await StoreAsync(other.ServiceProvider, Btc, Flat(Ten.AddDays(1)));
-        }
+        // Stored after the first row was taken: a read that held the window, or ran ahead of its caller, would miss it.
+        await StoreLaterAsync(Btc, Flat(lastDay));
 
+        Assert.That(await RestAsync(candles), Is.EqualTo(new[] { Ten.AddMinutes(1), lastDay }));
+    }
+
+    [Test]
+    public async Task A_market_of_65_instruments_is_read_a_day_a_part()
+    {
+        await StoreAsync(Btc, Flat(Ten), Flat(Ten.AddMinutes(1)));
+        InstrumentCoverageInternal[] market =
+        [
+            Covered(Btc, Day, Day.AddDays(2)),
+            .. Enumerable.Range(0, 64).Select(_ => new InstrumentCoverageInternal(Guid.NewGuid(), [new TimeRangeInternal(Day, Day.AddDays(2))]))
+        ];
+
+        await using IAsyncEnumerator<ClosedCandleInternal> candles = Stream(CandleInterval.OneMinute, market).GetAsyncEnumerator();
+        Assert.That(await candles.MoveNextAsync(), Is.True);
+
+        await StoreLaterAsync(Btc, Flat(Ten.AddDays(1)));
+
+        Assert.That(await RestAsync(candles), Is.EqualTo(new[] { Ten.AddMinutes(1), Ten.AddDays(1) }));
+    }
+
+    // Stores in a scope of its own, as the loading does while a read goes on.
+    private async Task StoreLaterAsync(Instrument instrument, params Candle[] candles)
+    {
+        await using AsyncServiceScope other = _services.CreateAsyncScope();
+        await StoreAsync(other.ServiceProvider, instrument, candles);
+    }
+
+    private static async Task<IReadOnlyList<DateTimeOffset>> RestAsync(IAsyncEnumerator<ClosedCandleInternal> candles)
+    {
         var rest = new List<DateTimeOffset>();
 
         while (await candles.MoveNextAsync())
@@ -242,6 +271,6 @@ public class GetCandleHistoryQueryHandlerTests
             rest.Add(candles.Current.OpenTime);
         }
 
-        Assert.That(rest, Is.EqualTo(new[] { Ten.AddMinutes(1), Ten.AddDays(1) }));
+        return rest;
     }
 }

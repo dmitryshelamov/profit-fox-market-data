@@ -20,8 +20,8 @@ internal static class GetCandleHistoryQueries
                                                                 ORDER BY scope.id, lower(r)
                                                                 """;
 
-    // The minutes of a day inside the coverage, as they are stored and as the feed tells them live. The time comes first in the order,
-    // then the instrument, as Postgres orders its ids: the same on every read.
+    // The minutes of a part of the window inside the coverage, as they are stored and as the feed tells them live. The time comes first in
+    // the order, then the instrument, as Postgres orders its ids: the same on every read.
     public const string MinutesSql = HistoryQueries.CoverageSql + """
 
                                                                   SELECT l.exchange AS "Exchange", c.instrument_id AS "InstrumentId", c.open_time AS "OpenTime",
@@ -38,9 +38,10 @@ internal static class GetCandleHistoryQueries
                                                                   ORDER BY c.open_time, c.instrument_id
                                                                   """;
 
-    // The candles of the interval of a day whose minutes the coverage holds all, built as GetCandlesQueries.Buckets builds them for the
-    // REST API: a candle with a minute outside the coverage would tell less than its trades. Every interval divides a day, so no candle
-    // crosses the end of the day the statement reads. Hashed, not sorted, by instrument: a day of the whole market is two million minutes.
+    // The candles of the interval of a part of the window whose minutes the coverage holds all, built as GetCandlesQueries.Buckets builds
+    // them for the REST API: a candle with a minute outside the coverage would tell less than its trades. Every interval divides a day and
+    // a part is whole days, so no candle crosses the end of the part the statement reads. Hashed, not sorted, by instrument: a part of the
+    // whole market is a day, two million minutes.
     public const string BucketsSql = HistoryQueries.CoverageSql + """
                                                                   ,
                                                                   buckets AS (
@@ -70,17 +71,16 @@ internal static class GetCandleHistoryQueries
                                                                   ORDER BY b.open_time, b.instrument_id
                                                                   """;
 
-    // The parameters alone, with the statement beside them: Dapper reads row by row only from a statement and its parameters, not from
-    // a command definition.
-    public static object Day(HistoryDay day, CandleInterval interval)
+    // The parameters of the statement of a part of the read.
+    public static object Period(HistoryPeriod period, CandleInterval interval)
     {
         return new
         {
-            day.InstrumentIds,
-            Froms = day.Froms.Select(from => from.ToUniversalTime()).ToArray(),
-            Untils = day.Untils.Select(until => until.ToUniversalTime()).ToArray(),
-            From = day.From.ToUniversalTime(),
-            Until = day.Until.ToUniversalTime(),
+            period.InstrumentIds,
+            Froms = period.Froms.Select(from => from.ToUniversalTime()).ToArray(),
+            Untils = period.Untils.Select(until => until.ToUniversalTime()).ToArray(),
+            From = period.From.ToUniversalTime(),
+            Until = period.Until.ToUniversalTime(),
             BucketSeconds = (int)interval.Length().TotalSeconds
         };
     }

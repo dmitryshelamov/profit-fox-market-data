@@ -47,15 +47,19 @@ public class IntegrationEnvironment
     }
 
     /// <summary>
-    ///     The services of the infrastructure over the test database.
+    ///     The services of the infrastructure over the test database; <paramref name="replace" /> registers over them what a test
+    ///     watches instead.
     /// </summary>
-    public static ServiceProvider Services()
+    public static ServiceProvider Services(Action<IServiceCollection>? replace = null)
     {
         IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MarketData"] = ConnectionString })
             .Build();
 
-        return new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        IServiceCollection services = new ServiceCollection().AddLogging().AddInfrastructure(configuration);
+        replace?.Invoke(services);
+
+        return services.BuildServiceProvider();
     }
 
     /// <summary>

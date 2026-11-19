@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
 
-using Dapper;
-
 using MediatR;
 
 using Npgsql;
@@ -15,8 +13,9 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.History;
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Candles;
 
 /// <summary>
-///     Reads the candles of the history a UTC day a statement, row by row as they are asked for: Postgres sorts one day of the window, and
-///     the caller passes the rows on without holding them. The minutes come as stored; the candles of a longer interval are built from them.
+///     Reads the candles of the history a part of the window a statement, <see cref="HistoryPeriod" />, row by row as
+///     <see cref="HistoryRows" /> reads them: Postgres sorts one part of the window, and the caller passes the rows on without holding them.
+///     The minutes come as stored; the candles of a longer interval are built from them.
 /// </summary>
 internal sealed class GetCandleHistoryQueryHandler(NpgsqlConnection connection) : IStreamRequestHandler<GetCandleHistoryQuery, ClosedCandleInternal>
 {
@@ -26,11 +25,12 @@ internal sealed class GetCandleHistoryQueryHandler(NpgsqlConnection connection) 
 
         string sql = request.Interval == CandleInterval.OneMinute ? GetCandleHistoryQueries.MinutesSql : GetCandleHistoryQueries.BucketsSql;
 
-        foreach (HistoryDay day in HistoryDay.Split(request.Coverage))
+        foreach (HistoryPeriod period in HistoryPeriod.Split(request.Coverage))
         {
-            IAsyncEnumerable<ClosedCandleDb> rows = connection.QueryUnbufferedAsync<ClosedCandleDb>(sql, GetCandleHistoryQueries.Day(day, request.Interval));
+            IAsyncEnumerable<ClosedCandleDb> rows =
+                HistoryRows.ReadAsync<ClosedCandleDb>(connection, sql, GetCandleHistoryQueries.Period(period, request.Interval), cancellationToken);
 
-            await foreach (ClosedCandleDb row in rows.WithCancellation(cancellationToken))
+            await foreach (ClosedCandleDb row in rows)
             {
                 yield return new ClosedCandleInternal(
                     row.Exchange,
