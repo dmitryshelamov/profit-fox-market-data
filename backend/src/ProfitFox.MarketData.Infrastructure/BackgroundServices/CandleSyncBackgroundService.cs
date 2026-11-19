@@ -16,7 +16,9 @@ namespace ProfitFox.MarketData.Infrastructure.BackgroundServices;
 ///     <see cref="CandleSyncSettings.HistoryDays" /> or, of those <see cref="FullHistorySettings" /> name, to when they started to trade,
 ///     and before them the ranges reads asked for and could not wait for (<see cref="CandleLoadQueue" />). A round loads one page of every
 ///     such range in turn, then one page of every instrument, <see cref="CandleSyncSettings.Parallelism" /> instruments at a time, the
-///     newest it misses first, so fresh minutes come before old history and every instrument moves on at the same pace. Rounds follow
+///     newest it misses first, so every instrument moves on at the same pace. While its history is left, the fresh minutes the stream did
+///     not cover wait until they are an hour long (<see cref="LoadCandlesCommand.FreshMayWait" />): a share that trades now and then has
+///     some at every turn, and they would take its every request. A range a read asked for has its fresh minutes first. Rounds follow
 ///     one another while pages are left; an exchange with none left waits <see cref="CandleSyncSettings.IdleSeconds" />. The settings
 ///     are read again before every round.
 /// </summary>
@@ -84,7 +86,9 @@ internal sealed class CandleSyncBackgroundService(
 
                     try
                     {
-                        if (await LoadPageAsync(exchange, instrument.Id, history, whole.Covers(instrument), token) == LoadCandlesResult.MoreLeft)
+                        LoadCandlesCommand page = new(instrument.Id, history, time.GetUtcNow(), whole.Covers(instrument), FreshMayWait: true);
+
+                        if (await LoadPageAsync(exchange, page, token) == LoadCandlesResult.MoreLeft)
                         {
                             Interlocked.Exchange(ref historyLeft, value: 1);
                         }
@@ -122,7 +126,10 @@ internal sealed class CandleSyncBackgroundService(
 
         foreach (CandleLoadRequest request in queue.Pending().Where(request => ofExchange.Contains(request.InstrumentId)))
         {
-            if (await LoadPageAsync(exchange, request.InstrumentId, request.Range, wholeHistory: false, stoppingToken) == LoadCandlesResult.MoreLeft)
+            // Its reader waits for the range, so the fresh minutes of it come first.
+            var page = new LoadCandlesCommand(request.InstrumentId, request.Range, time.GetUtcNow());
+
+            if (await LoadPageAsync(exchange, page, stoppingToken) == LoadCandlesResult.MoreLeft)
             {
                 hasMorePages = true;
             }
@@ -135,18 +142,13 @@ internal sealed class CandleSyncBackgroundService(
         return hasMorePages;
     }
 
-    // One page of one instrument of the range. A pause of the exchange is waited out here. A page that fails for a reason of its own is
-    // logged and counts as nothing left for now: its history is tried again in the next round.
-    private async Task<LoadCandlesResult> LoadPageAsync(
-        Exchange exchange,
-        Guid instrumentId,
-        MinuteRange range,
-        bool wholeHistory,
-        CancellationToken stoppingToken)
+    // One page of one instrument. A pause of the exchange is waited out here. A page that fails for a reason of its own is logged and
+    // counts as nothing left for now: its history is tried again in the next round.
+    private async Task<LoadCandlesResult> LoadPageAsync(Exchange exchange, LoadCandlesCommand page, CancellationToken stoppingToken)
     {
         try
         {
-            return await scopes.SendAsync(new LoadCandlesCommand(instrumentId, range, time.GetUtcNow(), wholeHistory), stoppingToken);
+            return await scopes.SendAsync(page, stoppingToken);
         }
         catch (ExchangePausedException exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -157,7 +159,7 @@ internal sealed class CandleSyncBackgroundService(
         }
         catch (Exception exception) when (exception is not TransientExchangeException && !stoppingToken.IsCancellationRequested)
         {
-            logger.LogError(exception, "Loading the candles of instrument {InstrumentId} of {Exchange} failed.", instrumentId, exchange);
+            logger.LogError(exception, "Loading the candles of instrument {InstrumentId} of {Exchange} failed.", page.InstrumentId, exchange);
 
             return LoadCandlesResult.NothingLeft;
         }

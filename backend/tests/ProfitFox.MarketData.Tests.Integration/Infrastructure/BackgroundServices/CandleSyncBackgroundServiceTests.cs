@@ -220,7 +220,7 @@ public class CandleSyncBackgroundServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(firstRound, Is.EqualTo(new[] { new LoadCandlesCommand(Delisted.Id, range, Start), new LoadCandlesCommand(Btc.Id, History, Start) }));
+            Assert.That(firstRound, Is.EqualTo(new[] { new LoadCandlesCommand(Delisted.Id, range, Start), new LoadCandlesCommand(Btc.Id, History, Start, FreshMayWait: true) }));
             Assert.That(_queue.Pending(), Is.Empty);
         });
     }
@@ -348,7 +348,7 @@ public class CandleSyncBackgroundServiceTests
 
         Assert.That(
             first.Values,
-            Is.EquivalentTo(new[] { new LoadCandlesCommand(Btc.Id, History, Start), new LoadCandlesCommand(Sber.Id, History, Start) }));
+            Is.EquivalentTo(new[] { new LoadCandlesCommand(Btc.Id, History, Start, FreshMayWait: true), new LoadCandlesCommand(Sber.Id, History, Start, FreshMayWait: true) }));
     }
 
     [Test]
@@ -366,9 +366,9 @@ public class CandleSyncBackgroundServiceTests
             Is.EqualTo(
                 new[]
                 {
-                    new LoadCandlesCommand(Btc.Id, new MinuteRange(BtcLaunch, StartMinute), Start, WholeHistory: true),
-                    new LoadCandlesCommand(BtcSpot.Id, new MinuteRange(DateTimeOffset.UnixEpoch, StartMinute), Start, WholeHistory: true),
-                    new LoadCandlesCommand(Eth.Id, History, Start)
+                    new LoadCandlesCommand(Btc.Id, new MinuteRange(BtcLaunch, StartMinute), Start, WholeHistory: true, FreshMayWait: true),
+                    new LoadCandlesCommand(BtcSpot.Id, new MinuteRange(DateTimeOffset.UnixEpoch, StartMinute), Start, WholeHistory: true, FreshMayWait: true),
+                    new LoadCandlesCommand(Eth.Id, History, Start, FreshMayWait: true)
                 }));
     }
 }

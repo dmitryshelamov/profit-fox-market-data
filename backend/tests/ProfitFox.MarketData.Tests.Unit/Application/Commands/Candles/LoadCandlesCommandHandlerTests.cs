@@ -62,15 +62,27 @@ public class LoadCandlesCommandHandlerTests
         return client;
     }
 
-    private Task<LoadCandlesResult> Load(Instrument instrument, MinuteRange range, DateTimeOffset? requestedAt = null, bool wholeHistory = false)
+    private Task<LoadCandlesResult> Load(
+        Instrument instrument,
+        MinuteRange range,
+        DateTimeOffset? requestedAt = null,
+        bool wholeHistory = false,
+        bool freshMayWait = false)
     {
-        return _handler.Handle(new LoadCandlesCommand(instrument.Id, range, requestedAt ?? Now.AddSeconds(30), wholeHistory), CancellationToken.None);
+        var command = new LoadCandlesCommand(instrument.Id, range, requestedAt ?? Now.AddSeconds(30), wholeHistory, freshMayWait);
+
+        return _handler.Handle(command, CancellationToken.None);
     }
 
-    private void Stored(Instrument instrument, MinuteRange covered)
+    private void Stored(Instrument instrument, params MinuteRange[] covered)
     {
         var series = CandleSeries.Create(instrument.Id);
-        series.Cover(covered, []);
+
+        foreach (MinuteRange range in covered)
+        {
+            series.Cover(range, []);
+        }
+
         _series.GetAsync(instrument.Id, Arg.Any<CancellationToken>()).Returns(series);
     }
 
@@ -82,6 +94,51 @@ public class LoadCandlesCommandHandlerTests
     private static MinuteRange Minutes(int from, int until)
     {
         return new MinuteRange(Now.AddMinutes(from), Now.AddMinutes(until));
+    }
+
+    [Test]
+    public async Task A_fresh_part_is_loaded_first_once_nothing_older_is_left()
+    {
+        Stored(Linear, Minutes(from: -5000, until: -30));
+
+        await Load(Linear, Minutes(from: -5000, until: 0), freshMayWait: true);
+
+        await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -30, until: 0), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task A_fresh_part_of_an_hour_is_loaded_first_while_older_minutes_are_left()
+    {
+        Stored(Linear, Minutes(from: -3000, until: -60));
+
+        await Load(Linear, Minutes(from: -5000, until: 0), freshMayWait: true);
+
+        await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -60, until: 0), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task A_fresh_part_under_an_hour_waits_while_older_minutes_are_left_and_the_newest_of_them_load()
+    {
+        Stored(Linear, Minutes(from: -3000, until: -30));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0), freshMayWait: true);
+
+        Assert.Multiple(async () =>
+        {
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -4000, until: -30) }));
+            await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -4000, until: -3000), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task A_hole_loads_before_the_history_while_the_fresh_part_waits()
+    {
+        Stored(Share, Minutes(from: -3000, until: -100), Minutes(from: -99, until: -30));
+
+        await Load(Share, Minutes(from: -5000, until: 0), freshMayWait: true);
+
+        await _tinvest.Received(1).GetAsync(ShareListing, Minutes(from: -100, until: -99), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -270,6 +327,23 @@ public class LoadCandlesCommandHandlerTests
             Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -5000, until: 0) }));
             Assert.That(_saved.Settled, Is.EqualTo(new[] { Minutes(from: -5000, until: -10) }));
             await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -1010, until: -10), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Test]
+    public async Task The_first_empty_page_of_the_oldest_part_of_a_whole_history_ends_it_while_the_fresh_part_waits()
+    {
+        Stored(Linear, Minutes(from: -1000, until: -30));
+
+        LoadCandlesResult left = await Load(Linear, Minutes(from: -5000, until: 0), wholeHistory: true, freshMayWait: true);
+
+        Assert.Multiple(async () =>
+        {
+            // The fresh part is left: it loads in a later page, once it is an hour long.
+            Assert.That(left, Is.EqualTo(LoadCandlesResult.MoreLeft));
+            Assert.That(_saved!.Covered, Is.EqualTo(new[] { Minutes(from: -5000, until: -30) }));
+            Assert.That(_saved.Settled, Is.EqualTo(new[] { Minutes(from: -5000, until: -1000) }));
+            await _bybit.Received(1).GetAsync(LinearListing, Minutes(from: -2000, until: -1000), Arg.Any<CancellationToken>());
         });
     }
 
