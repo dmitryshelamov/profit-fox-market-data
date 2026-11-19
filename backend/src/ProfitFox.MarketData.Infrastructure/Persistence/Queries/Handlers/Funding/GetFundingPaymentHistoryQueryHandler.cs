@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
 
-using Dapper;
-
 using MediatR;
 
 using Npgsql;
@@ -15,8 +13,8 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.History;
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Funding;
 
 /// <summary>
-///     Reads the funding payments of the history a UTC day a statement, row by row as they are asked for, so the caller passes them on without
-///     holding them all.
+///     Reads the funding payments of the history a part of the window a statement, <see cref="HistoryPeriod" />, row by row as
+///     <see cref="HistoryRows" /> reads them, so the caller passes them on without holding them all.
 /// </summary>
 internal sealed class GetFundingPaymentHistoryQueryHandler(NpgsqlConnection connection) : IStreamRequestHandler<GetFundingPaymentHistoryQuery, InstrumentFundingPaymentInternal>
 {
@@ -24,11 +22,15 @@ internal sealed class GetFundingPaymentHistoryQueryHandler(NpgsqlConnection conn
     {
         await HistoryConnection.PrepareAsync(connection, cancellationToken);
 
-        foreach (HistoryDay day in HistoryDay.Split(request.Coverage))
+        foreach (HistoryPeriod period in HistoryPeriod.Split(request.Coverage))
         {
-            IAsyncEnumerable<InstrumentFundingPaymentDb> rows = connection.QueryUnbufferedAsync<InstrumentFundingPaymentDb>(GetFundingPaymentHistoryQueries.PointsSql, GetFundingPaymentHistoryQueries.Day(day));
+            IAsyncEnumerable<InstrumentFundingPaymentDb> rows = HistoryRows.ReadAsync<InstrumentFundingPaymentDb>(
+                connection,
+                GetFundingPaymentHistoryQueries.PointsSql,
+                GetFundingPaymentHistoryQueries.Period(period),
+                cancellationToken);
 
-            await foreach (InstrumentFundingPaymentDb row in rows.WithCancellation(cancellationToken))
+            await foreach (InstrumentFundingPaymentDb row in rows)
             {
                 yield return new InstrumentFundingPaymentInternal(row.InstrumentId, row.Time, row.Rate);
             }

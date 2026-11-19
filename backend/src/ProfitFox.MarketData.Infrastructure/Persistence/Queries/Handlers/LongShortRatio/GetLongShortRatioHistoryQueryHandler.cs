@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
 
-using Dapper;
-
 using MediatR;
 
 using Npgsql;
@@ -15,8 +13,8 @@ using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.LongShort
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.LongShortRatio;
 
 /// <summary>
-///     Reads the points of the long/short ratio of the history a UTC day a statement, row by row as they are asked for, so the caller passes them on without
-///     holding them all.
+///     Reads the points of the long/short ratio of the history a part of the window a statement, <see cref="HistoryPeriod" />, row by row
+///     as <see cref="HistoryRows" /> reads them, so the caller passes them on without holding them all.
 /// </summary>
 internal sealed class GetLongShortRatioHistoryQueryHandler(NpgsqlConnection connection) : IStreamRequestHandler<GetLongShortRatioHistoryQuery, InstrumentLongShortRatioInternal>
 {
@@ -24,11 +22,15 @@ internal sealed class GetLongShortRatioHistoryQueryHandler(NpgsqlConnection conn
     {
         await HistoryConnection.PrepareAsync(connection, cancellationToken);
 
-        foreach (HistoryDay day in HistoryDay.Split(request.Coverage))
+        foreach (HistoryPeriod period in HistoryPeriod.Split(request.Coverage))
         {
-            IAsyncEnumerable<InstrumentLongShortRatioDb> rows = connection.QueryUnbufferedAsync<InstrumentLongShortRatioDb>(GetLongShortRatioHistoryQueries.PointsSql, GetLongShortRatioHistoryQueries.Day(day));
+            IAsyncEnumerable<InstrumentLongShortRatioDb> rows = HistoryRows.ReadAsync<InstrumentLongShortRatioDb>(
+                connection,
+                GetLongShortRatioHistoryQueries.PointsSql,
+                GetLongShortRatioHistoryQueries.Period(period),
+                cancellationToken);
 
-            await foreach (InstrumentLongShortRatioDb row in rows.WithCancellation(cancellationToken))
+            await foreach (InstrumentLongShortRatioDb row in rows)
             {
                 yield return new InstrumentLongShortRatioInternal(row.InstrumentId, row.Time, row.Long, row.Short);
             }

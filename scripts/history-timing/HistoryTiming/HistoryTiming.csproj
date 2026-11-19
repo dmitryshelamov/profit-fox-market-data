@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- A tool outside ProfitFox.MarketData.sln: the build, the tests and the format check of the service do not take it. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Google.Protobuf" Version="3.31.1"/>
+        <PackageReference Include="Grpc.Net.Client" Version="2.71.0"/>
+        <PackageReference Include="Grpc.Tools" Version="2.72.0" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Protobuf Include="../../../backend/src/ProfitFox.MarketData.Presentation/Protos/candle_feed.proto" GrpcServices="Client" ProtoRoot="../../../backend/src/ProfitFox.MarketData.Presentation/Protos"/>
+        <Protobuf Include="../../../backend/src/ProfitFox.MarketData.Presentation/Protos/funding_payment_feed.proto" GrpcServices="Client" ProtoRoot="../../../backend/src/ProfitFox.MarketData.Presentation/Protos"/>
+    </ItemGroup>
+
+</Project>
