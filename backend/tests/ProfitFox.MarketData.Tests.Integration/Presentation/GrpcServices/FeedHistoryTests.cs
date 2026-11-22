@@ -341,4 +341,13 @@ public class FeedHistoryTests
         // Program logs the failed check of the settings and ends, so the test host finds the app gone, whatever it throws then.
         Assert.That(() => _ = app.Server, Throws.Exception);
     }
+
+    [Test]
+    public async Task An_app_whose_history_waits_for_storage_no_time_does_not_start()
+    {
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("HistoryRead:StatementTimeoutSeconds", "0"));
+
+        // Program logs the failed check of the settings and ends, so the test host finds the app gone, whatever it throws then.
+        Assert.That(() => _ = app.Server, Throws.Exception);
+    }
 }

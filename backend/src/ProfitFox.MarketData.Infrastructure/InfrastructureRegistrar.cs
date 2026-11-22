@@ -22,7 +22,7 @@ public static class InfrastructureRegistrar
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        MediatrRegistrar.Configure(services);
+        MediatrRegistrar.Configure(configuration, services);
         services.AddSingleton(TimeProvider.System);
 
         PostgresRegistrar.Configure(configuration, services);

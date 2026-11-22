@@ -5,16 +5,16 @@
 
 ## 1. Секция `HistoryRead` в Infrastructure
 
-- [ ] 1.1 Перенести `HistoryReadSettings` из `Presentation/Settings` в `Infrastructure/Persistence/Queries/Handlers/History`
+- [x] 1.1 Перенести `HistoryReadSettings` из `Presentation/Settings` в `Infrastructure/Persistence/Queries/Handlers/History`
   (публичный), добавить `StatementTimeoutSeconds` (по умолчанию `120`, XML-summary: ожидание хранилища каждым запросом истории,
   читается при каждом вызове). Регистрировать секцию в Infrastructure (`AddOptions().Bind().Validate()` для обоих свойств
   `> 0` с текстами `HistoryRead:MaxConcurrentReads must be above zero.` / `HistoryRead:StatementTimeoutSeconds must be above
   zero.`, `ValidateOnStart`) и через `LastValidOptionsMonitor<HistoryReadSettings>.Register`; убрать регистрацию из
   `Program.cs`. Добавить `"StatementTimeoutSeconds": 120` в секцию `HistoryRead` `appsettings.json`. Проверка — существующие
   тесты `HistoryReadGateTests` и `FeedHistoryTests` проходят после правки `using`
-- [ ] 1.2 Тест в `FeedHistoryTests` (рядом с `An_app_whose_history_reads_none_at_once_does_not_start`): приложение с
+- [x] 1.2 Тест в `FeedHistoryTests` (рядом с `An_app_whose_history_reads_none_at_once_does_not_start`): приложение с
   `HistoryRead:StatementTimeoutSeconds` = `0` не стартует. Проверка — тест проходит
-- [ ] 1.3 Тест в `SettingsFileTests`: при старте файл даёт `StatementTimeoutSeconds` `120`, затем файл с `0` — монитор
+- [x] 1.3 Тест в `SettingsFileTests`: при старте файл даёт `StatementTimeoutSeconds` `120`, затем файл с `0` — монитор
   `HistoryReadSettings` отдаёт прежние `120` и `MaxConcurrentReads`, а файл с `300` — отдаёт `300`. Проверка — тест проходит
   (сценарии «Правка на ходу» и «Сломанная правка на ходу»)
 
