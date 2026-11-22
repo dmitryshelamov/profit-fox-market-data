@@ -49,6 +49,7 @@ read-only as `/app/config`. When a change takes effect:
 | Settings | Take effect |
 |---|---|
 | `BybitApi` (`RequestsPerSecond`, `LimitPauseSeconds`, `BanPauseMinutes`), `TInvestApi:MarketDataRequestsPerMinute` | at once: the next request, the next pause |
+| `HistoryRead` (`MaxConcurrentReads`, `StatementTimeoutSeconds`) | from the next call of `History` |
 | the sections of the loadings and streams (`CandleSync`, `OpenInterestSync`, `FundingPaymentSync`, `LongShortRatioSync`, `BuyVolumeSync`, `InstrumentSync`, `CandleStream`, `LiquidationStream`, `TickerCollection`, `FullHistory`) | from the next round of each |
 | `Kestrel`, `ConnectionStrings`, `Metrics`, `Serilog` | only after a restart |
 
@@ -58,6 +59,14 @@ ssh 192.168.8.213 'nano ~/profit-fox-market-data/config/market-data.json'
 
 ```json
 { "BybitApi": { "LimitPauseSeconds": 5, "RequestsPerSecond": 8 } }
+```
+
+A call of `History` whose statement waits for the database longer than `HistoryRead:StatementTimeoutSeconds` (120 by default; the
+writes keep the timeout of the connection string) ends with `UNAVAILABLE`, and its consumer reads again. To let the statements wait
+longer while the database is slow:
+
+```json
+{ "HistoryRead": { "StatementTimeoutSeconds": 300 } }
 ```
 
 A file that is not valid JSON, or no file, leaves the service on the settings of its image, at start and on a change alike; the log

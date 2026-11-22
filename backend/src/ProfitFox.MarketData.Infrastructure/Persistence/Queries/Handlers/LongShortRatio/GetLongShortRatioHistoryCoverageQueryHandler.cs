@@ -1,5 +1,7 @@
 using MediatR;
 
+using Microsoft.Extensions.Options;
+
 using Npgsql;
 
 using ProfitFox.MarketData.Application.Contracts;
@@ -13,7 +15,7 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.LongS
 ///     Reads the coverage of a read of the history of points of the long/short ratio in one statement: the series of every instrument it reads, cut to the
 ///     window.
 /// </summary>
-internal sealed class GetLongShortRatioHistoryCoverageQueryHandler(NpgsqlConnection connection)
+internal sealed class GetLongShortRatioHistoryCoverageQueryHandler(NpgsqlConnection connection, IOptionsMonitor<HistoryReadSettings> settings)
     : IRequestHandler<GetLongShortRatioHistoryCoverageQuery, IReadOnlyList<InstrumentCoverageInternal>>
 {
     public Task<IReadOnlyList<InstrumentCoverageInternal>> Handle(GetLongShortRatioHistoryCoverageQuery request, CancellationToken cancellationToken)
@@ -24,6 +26,7 @@ internal sealed class GetLongShortRatioHistoryCoverageQueryHandler(NpgsqlConnect
             request.InstrumentIds,
             request.Exchanges,
             request.Window,
+            settings.CurrentValue.StatementTimeoutSeconds,
             cancellationToken);
     }
 }

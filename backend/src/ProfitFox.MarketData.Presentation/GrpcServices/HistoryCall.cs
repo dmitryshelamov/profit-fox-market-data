@@ -77,7 +77,10 @@ public sealed class HistoryCall(IHostApplicationLifetime lifetime, HistoryReadGa
     /// <summary>
     ///     Serves the call until all of it is told, its caller cancels it, or the app stops.
     /// </summary>
-    /// <exception cref="RpcException">NOT_FOUND when an instrument named is not in the catalog; UNAVAILABLE when the app is stopping.</exception>
+    /// <exception cref="RpcException">
+    ///     NOT_FOUND when an instrument named is not in the catalog; UNAVAILABLE when the app is stopping or storage did not answer a
+    ///     statement in time, which the caller reads again.
+    /// </exception>
     public async Task ServeAsync<TRow, TItem>(
         Func<CancellationToken, Task<IReadOnlyList<InstrumentCoverageInternal>>> coverage,
         Func<IReadOnlyList<InstrumentCoverageInternal>, CancellationToken, IAsyncEnumerable<TRow>> rows,
@@ -110,6 +113,10 @@ public sealed class HistoryCall(IHostApplicationLifetime lifetime, HistoryReadGa
         catch (InstrumentNotFoundException exception)
         {
             throw new RpcException(new Status(StatusCode.NotFound, exception.Message));
+        }
+        catch (StorageTimeoutException exception)
+        {
+            throw new RpcException(new Status(StatusCode.Unavailable, exception.Message));
         }
         catch (OperationCanceledException) when (lifetime.ApplicationStopping.IsCancellationRequested)
         {

@@ -2,6 +2,7 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.MarketData.Application.Exceptions;
 using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.History.Queries;
 
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.History;
@@ -12,13 +13,25 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Histo
 /// </summary>
 internal static class HistoryConnection
 {
-    public static async Task PrepareAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Opens the connection and sets its session, waiting for storage <paramref name="timeoutSeconds" /> at most.
+    /// </summary>
+    /// <exception cref="StorageTimeoutException">Storage did not answer in time.</exception>
+    public static async Task PrepareAsync(NpgsqlConnection connection, int timeoutSeconds, CancellationToken cancellationToken)
     {
         if (connection.State != System.Data.ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
         }
 
-        await connection.ExecuteAsync(new CommandDefinition(HistoryQueries.ReadSettingsSql, cancellationToken: cancellationToken));
+        try
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(HistoryQueries.ReadSettingsSql, commandTimeout: timeoutSeconds, cancellationToken: cancellationToken));
+        }
+        catch (NpgsqlException exception) when (exception.InnerException is TimeoutException)
+        {
+            throw new StorageTimeoutException(timeoutSeconds, exception);
+        }
     }
 }

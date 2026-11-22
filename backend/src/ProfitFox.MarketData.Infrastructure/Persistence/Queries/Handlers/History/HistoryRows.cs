@@ -5,6 +5,8 @@ using Dapper;
 
 using Npgsql;
 
+using ProfitFox.MarketData.Application.Exceptions;
+
 namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.History;
 
 /// <summary>
@@ -16,21 +18,50 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Histo
 internal static class HistoryRows
 {
     /// <summary>
-    ///     The rows of <paramref name="sql" />, each made by Dapper from its columns. A caller that stops early leaves the reader to read
-    ///     the rest of the statement; a cancelled <paramref name="cancellationToken" /> cancels the statement.
+    ///     The rows of <paramref name="sql" />, each made by Dapper from its columns, each answer of storage waited for
+    ///     <paramref name="timeoutSeconds" /> at most. A caller that stops early leaves the reader to read the rest of the statement; a
+    ///     cancelled <paramref name="cancellationToken" /> cancels the statement.
     /// </summary>
+    /// <exception cref="StorageTimeoutException">Storage did not answer in time.</exception>
     public static async IAsyncEnumerable<T> ReadAsync<T>(
         NpgsqlConnection connection,
         string sql,
         object parameters,
+        int timeoutSeconds,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await using DbDataReader reader = await connection.ExecuteReaderAsync(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
-        Func<DbDataReader, T> parse = reader.GetRowParser<T>();
+        // A row is given outside the try: C# yields no row from a try with a catch (CS1626).
+        DbDataReader reader;
 
-        while (await reader.ReadAsync(cancellationToken))
+        try
         {
-            yield return parse(reader);
+            reader = await connection.ExecuteReaderAsync(new CommandDefinition(sql, parameters, commandTimeout: timeoutSeconds, cancellationToken: cancellationToken));
+        }
+        catch (NpgsqlException exception) when (exception.InnerException is TimeoutException)
+        {
+            throw new StorageTimeoutException(timeoutSeconds, exception);
+        }
+
+        await using (reader)
+        {
+            Func<DbDataReader, T> parse = reader.GetRowParser<T>();
+
+            while (await NextAsync(reader, timeoutSeconds, cancellationToken))
+            {
+                yield return parse(reader);
+            }
+        }
+    }
+
+    private static async Task<bool> NextAsync(DbDataReader reader, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await reader.ReadAsync(cancellationToken);
+        }
+        catch (NpgsqlException exception) when (exception.InnerException is TimeoutException)
+        {
+            throw new StorageTimeoutException(timeoutSeconds, exception);
         }
     }
 }

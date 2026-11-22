@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 
+using ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.History;
 using ProfitFox.MarketData.Presentation.GrpcServices;
-using ProfitFox.MarketData.Presentation.Settings;
 
 namespace ProfitFox.MarketData.Tests.Integration.Presentation.GrpcServices;
 

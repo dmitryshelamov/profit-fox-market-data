@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 
 using MediatR;
 
+using Microsoft.Extensions.Options;
+
 using Npgsql;
 
 using ProfitFox.MarketData.Application.Contracts.Funding;
@@ -16,11 +18,13 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Fundi
 ///     Reads the funding payments of the history a part of the window a statement, <see cref="HistoryPeriod" />, row by row as
 ///     <see cref="HistoryRows" /> reads them, so the caller passes them on without holding them all.
 /// </summary>
-internal sealed class GetFundingPaymentHistoryQueryHandler(NpgsqlConnection connection) : IStreamRequestHandler<GetFundingPaymentHistoryQuery, InstrumentFundingPaymentInternal>
+internal sealed class GetFundingPaymentHistoryQueryHandler(NpgsqlConnection connection, IOptionsMonitor<HistoryReadSettings> settings) : IStreamRequestHandler<GetFundingPaymentHistoryQuery, InstrumentFundingPaymentInternal>
 {
     public async IAsyncEnumerable<InstrumentFundingPaymentInternal> Handle(GetFundingPaymentHistoryQuery request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await HistoryConnection.PrepareAsync(connection, cancellationToken);
+        // Read once, so a change of the settings applies from the next call and not in the middle of this one.
+        int timeoutSeconds = settings.CurrentValue.StatementTimeoutSeconds;
+        await HistoryConnection.PrepareAsync(connection, timeoutSeconds, cancellationToken);
 
         foreach (HistoryPeriod period in HistoryPeriod.Split(request.Coverage))
         {
@@ -28,6 +32,7 @@ internal sealed class GetFundingPaymentHistoryQueryHandler(NpgsqlConnection conn
                 connection,
                 GetFundingPaymentHistoryQueries.PointsSql,
                 GetFundingPaymentHistoryQueries.Period(period),
+                timeoutSeconds,
                 cancellationToken);
 
             await foreach (InstrumentFundingPaymentDb row in rows)

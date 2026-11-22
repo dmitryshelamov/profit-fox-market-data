@@ -17,41 +17,53 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Histo
 internal static class HistoryCoverageReader
 {
     /// <summary>
-    ///     The coverage <paramref name="coverageSql" /> reads, of every instrument the request reads, ordered by id.
+    ///     The coverage <paramref name="coverageSql" /> reads, of every instrument the request reads, ordered by id; each statement waits
+    ///     for storage <paramref name="timeoutSeconds" /> at most.
     /// </summary>
     /// <exception cref="InstrumentNotFoundException">An instrument named is not in the catalog.</exception>
+    /// <exception cref="StorageTimeoutException">Storage did not answer a statement in time.</exception>
     public static async Task<IReadOnlyList<InstrumentCoverageInternal>> ReadAsync(
         NpgsqlConnection connection,
         string coverageSql,
         IReadOnlyCollection<Guid> instrumentIds,
         IReadOnlyCollection<Exchange> exchanges,
         HistoryWindow window,
+        int timeoutSeconds,
         CancellationToken cancellationToken)
     {
         Guid[] ids = [.. instrumentIds];
+        IEnumerable<InstrumentRangeDb> rows;
 
-        if (ids.Length > 0)
+        try
         {
-            Guid? unknown = await connection.QueryFirstOrDefaultAsync<Guid?>(
-                new CommandDefinition(HistoryQueries.UnknownSql, new { InstrumentIds = ids }, cancellationToken: cancellationToken));
-
-            if (unknown is not null)
+            if (ids.Length > 0)
             {
-                throw new InstrumentNotFoundException(unknown.Value);
-            }
-        }
+                Guid? unknown = await connection.QueryFirstOrDefaultAsync<Guid?>(
+                    new CommandDefinition(HistoryQueries.UnknownSql, new { InstrumentIds = ids }, commandTimeout: timeoutSeconds, cancellationToken: cancellationToken));
 
-        IEnumerable<InstrumentRangeDb> rows = await connection.QueryAsync<InstrumentRangeDb>(
-            new CommandDefinition(
-                coverageSql,
-                new
+                if (unknown is not null)
                 {
-                    InstrumentIds = ids,
-                    Exchanges = exchanges.Select(exchange => exchange.ToString()).ToArray(),
-                    From = window.From.ToUniversalTime(),
-                    To = window.To.ToUniversalTime()
-                },
-                cancellationToken: cancellationToken));
+                    throw new InstrumentNotFoundException(unknown.Value);
+                }
+            }
+
+            rows = await connection.QueryAsync<InstrumentRangeDb>(
+                new CommandDefinition(
+                    coverageSql,
+                    new
+                    {
+                        InstrumentIds = ids,
+                        Exchanges = exchanges.Select(exchange => exchange.ToString()).ToArray(),
+                        From = window.From.ToUniversalTime(),
+                        To = window.To.ToUniversalTime()
+                    },
+                    commandTimeout: timeoutSeconds,
+                    cancellationToken: cancellationToken));
+        }
+        catch (NpgsqlException exception) when (exception.InnerException is TimeoutException)
+        {
+            throw new StorageTimeoutException(timeoutSeconds, exception);
+        }
 
         // The rows come ordered by instrument and then by range, and a group keeps the order of the rows it took.
         return

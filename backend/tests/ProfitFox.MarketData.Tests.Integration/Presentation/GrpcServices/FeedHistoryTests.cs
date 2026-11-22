@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using Npgsql;
+
 using ProfitFox.MarketData.Domain.Entities.Candles;
 using ProfitFox.MarketData.Domain.Entities.Funding;
 using ProfitFox.MarketData.Domain.Entities.Instruments;
@@ -312,6 +314,48 @@ public class FeedHistoryTests
     }
 
     [Test]
+    public async Task A_call_whose_storage_answers_within_the_wait_tells_all_of_it()
+    {
+        await StoreCandlesAsync(Btc, new MinuteRange(Ten, Ten.AddMinutes(1)), Flat(Ten));
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("HistoryRead:StatementTimeoutSeconds", "10"));
+        using GrpcChannel channel = Channel(app);
+        await using NpgsqlConnection locked = await IntegrationEnvironment.LockCandlesAsync();
+
+        using AsyncServerStreamingCall<CandleHistoryItem> call = new CandleFeed.CandleFeedClient(channel).History(Candles(Day, Today, CandleInterval.OneMinute, Btc));
+        Task<IReadOnlyList<CandleHistoryItem>> reading = ReadAllAsync(call);
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        bool waited = !reading.IsCompleted;
+        await locked.DisposeAsync();
+
+        IReadOnlyList<CandleHistoryItem> items = await reading;
+        Assert.Multiple(() =>
+        {
+            Assert.That(waited, Is.True);
+            Assert.That(
+                items.Select(item => item.ItemCase),
+                Is.EqualTo(new[] { CandleHistoryItem.ItemOneofCase.Coverage, CandleHistoryItem.ItemOneofCase.Candle }));
+        });
+    }
+
+    [Test]
+    public async Task A_call_whose_storage_does_not_answer_within_the_wait_ends_with_unavailable()
+    {
+        await StoreCandlesAsync(Btc, new MinuteRange(Ten, Ten.AddMinutes(1)), Flat(Ten));
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("HistoryRead:StatementTimeoutSeconds", "1"));
+        using GrpcChannel channel = Channel(app);
+        await using NpgsqlConnection locked = await IntegrationEnvironment.LockCandlesAsync();
+
+        using AsyncServerStreamingCall<CandleHistoryItem> call = new CandleFeed.CandleFeedClient(channel).History(Candles(Day, Today, CandleInterval.OneMinute, Btc));
+
+        RpcException? failure = Assert.ThrowsAsync<RpcException>(() => ReadAllAsync(call));
+        Assert.Multiple(() =>
+        {
+            Assert.That(failure!.StatusCode, Is.EqualTo(StatusCode.Unavailable));
+            Assert.That(failure.Status.Detail, Is.EqualTo("The storage did not answer within 1 s."));
+        });
+    }
+
+    [Test]
     public async Task A_call_that_waits_for_its_place_ends_with_unavailable_when_the_app_stops()
     {
         // An app of its own: the one of the other tests goes on.
@@ -337,6 +381,15 @@ public class FeedHistoryTests
     public async Task An_app_whose_history_reads_none_at_once_does_not_start()
     {
         await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("HistoryRead:MaxConcurrentReads", "0"));
+
+        // Program logs the failed check of the settings and ends, so the test host finds the app gone, whatever it throws then.
+        Assert.That(() => _ = app.Server, Throws.Exception);
+    }
+
+    [Test]
+    public async Task An_app_whose_history_waits_for_storage_no_time_does_not_start()
+    {
+        await using WebApplicationFactory<Program> app = _app.WithWebHostBuilder(builder => builder.UseSetting("HistoryRead:StatementTimeoutSeconds", "0"));
 
         // Program logs the failed check of the settings and ends, so the test host finds the app gone, whatever it throws then.
         Assert.That(() => _ = app.Server, Throws.Exception);
