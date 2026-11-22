@@ -1,5 +1,7 @@
 using MediatR;
 
+using Microsoft.Extensions.Options;
+
 using Npgsql;
 
 using ProfitFox.MarketData.Application.Contracts;
@@ -13,7 +15,7 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Fundi
 ///     Reads the coverage of a read of the history of funding payments in one statement: the series of every instrument it reads, cut to the
 ///     window.
 /// </summary>
-internal sealed class GetFundingPaymentHistoryCoverageQueryHandler(NpgsqlConnection connection)
+internal sealed class GetFundingPaymentHistoryCoverageQueryHandler(NpgsqlConnection connection, IOptionsMonitor<HistoryReadSettings> settings)
     : IRequestHandler<GetFundingPaymentHistoryCoverageQuery, IReadOnlyList<InstrumentCoverageInternal>>
 {
     public Task<IReadOnlyList<InstrumentCoverageInternal>> Handle(GetFundingPaymentHistoryCoverageQuery request, CancellationToken cancellationToken)
@@ -24,6 +26,7 @@ internal sealed class GetFundingPaymentHistoryCoverageQueryHandler(NpgsqlConnect
             request.InstrumentIds,
             request.Exchanges,
             request.Window,
+            settings.CurrentValue.StatementTimeoutSeconds,
             cancellationToken);
     }
 }

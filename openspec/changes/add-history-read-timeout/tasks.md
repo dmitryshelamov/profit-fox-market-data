@@ -20,22 +20,22 @@
 
 ## 2. Ожидание хранилища в запросах истории
 
-- [ ] 2.1 Добавить `StorageTimeoutException` в `Application/Exceptions` («The storage did not answer within {seconds} s.»,
+- [x] 2.1 Добавить `StorageTimeoutException` в `Application/Exceptions` («The storage did not answer within {seconds} s.»,
   XML-summary). Проверка — сборка и проверка summary pre-commit hook проходят
-- [ ] 2.2 Красный интеграционный тест в `FeedHistoryTests`: отдельное соединение берёт `LOCK TABLE candles IN ACCESS EXCLUSIVE
+- [x] 2.2 Красный интеграционный тест в `FeedHistoryTests`: отдельное соединение берёт `LOCK TABLE candles IN ACCESS EXCLUSIVE
   MODE` в открытой транзакции; вызов `CandleFeed.History` у приложения с `StatementTimeoutSeconds` = `1` завершается с
   `UNAVAILABLE` за `Patience`. Второй тест: с `StatementTimeoutSeconds` = `10` и блокировкой, снятой через 2 с, вызов отдаёт
   покрытие и строки и завершается с `OK`. Проверка — первый тест падает на текущем коде (`UNKNOWN` или 30 с), второй проходит
-- [ ] 2.3 Передать таймаут: обработчики покрытия и строк четырёх лент (`GetCandleHistory*`, `GetOpenInterestHistory*`,
+- [x] 2.3 Передать таймаут: обработчики покрытия и строк четырёх лент (`GetCandleHistory*`, `GetOpenInterestHistory*`,
   `GetLongShortRatioHistory*`, `GetFundingPaymentHistory*`) берут `IOptionsMonitor<HistoryReadSettings>.CurrentValue` один раз в
   начале и передают `StatementTimeoutSeconds` параметром в `HistoryCoverageReader.ReadAsync`, `HistoryConnection.PrepareAsync`
   и `HistoryRows.ReadAsync`, которые ставят его в `commandTimeout` каждого `CommandDefinition`. Проверка — тесты 2.2 и
   существующие тесты обработчиков истории проходят
-- [ ] 2.4 Переводить `NpgsqlException` с `TimeoutException` внутри в `StorageTimeoutException` в `HistoryCoverageReader`,
+- [x] 2.4 Переводить `NpgsqlException` с `TimeoutException` внутри в `StorageTimeoutException` в `HistoryCoverageReader`,
   `HistoryConnection` и `HistoryRows` (в итераторе — вокруг `ExecuteReaderAsync` и `ReadAsync` читателя, `yield return` вне
   `try`, CS1626); `HistoryCall.ServeAsync` ловит его и бросает `RpcException(StatusCode.Unavailable, message)`, XML-комментарий
   `<exception>` дополняется. Проверка — первый тест 2.2 проходит
-- [ ] 2.5 Тест-обработчика: запрос записи (например, `CandleSeriesRepository`) в той же области с `StatementTimeoutSeconds` = `1`
+- [x] 2.5 Тест-обработчика: запрос записи (например, `CandleSeriesRepository`) в той же области с `StatementTimeoutSeconds` = `1`
   под той же блокировкой ждёт дольше 1 с — то есть таймаут истории его не касается. Если тест выходит хрупким, заменить его
   проверкой, что `commandTimeout` ставится только в файлах `Persistence/Queries/Handlers/History` и обработчиках `*History*`
   (`git grep`). Проверка — тест или проверка проходит

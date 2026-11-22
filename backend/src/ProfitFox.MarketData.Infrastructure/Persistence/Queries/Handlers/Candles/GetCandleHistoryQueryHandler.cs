@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 
 using MediatR;
 
+using Microsoft.Extensions.Options;
+
 using Npgsql;
 
 using ProfitFox.MarketData.Application.Contracts.Candles;
@@ -17,18 +19,20 @@ namespace ProfitFox.MarketData.Infrastructure.Persistence.Queries.Handlers.Candl
 ///     <see cref="HistoryRows" /> reads them: Postgres sorts one part of the window, and the caller passes the rows on without holding them.
 ///     The minutes come as stored; the candles of a longer interval are built from them.
 /// </summary>
-internal sealed class GetCandleHistoryQueryHandler(NpgsqlConnection connection) : IStreamRequestHandler<GetCandleHistoryQuery, ClosedCandleInternal>
+internal sealed class GetCandleHistoryQueryHandler(NpgsqlConnection connection, IOptionsMonitor<HistoryReadSettings> settings) : IStreamRequestHandler<GetCandleHistoryQuery, ClosedCandleInternal>
 {
     public async IAsyncEnumerable<ClosedCandleInternal> Handle(GetCandleHistoryQuery request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await HistoryConnection.PrepareAsync(connection, cancellationToken);
+        // Read once, so a change of the settings applies from the next call and not in the middle of this one.
+        int timeoutSeconds = settings.CurrentValue.StatementTimeoutSeconds;
+        await HistoryConnection.PrepareAsync(connection, timeoutSeconds, cancellationToken);
 
         string sql = request.Interval == CandleInterval.OneMinute ? GetCandleHistoryQueries.MinutesSql : GetCandleHistoryQueries.BucketsSql;
 
         foreach (HistoryPeriod period in HistoryPeriod.Split(request.Coverage))
         {
             IAsyncEnumerable<ClosedCandleDb> rows =
-                HistoryRows.ReadAsync<ClosedCandleDb>(connection, sql, GetCandleHistoryQueries.Period(period, request.Interval), cancellationToken);
+                HistoryRows.ReadAsync<ClosedCandleDb>(connection, sql, GetCandleHistoryQueries.Period(period, request.Interval), timeoutSeconds, cancellationToken);
 
             await foreach (ClosedCandleDb row in rows)
             {

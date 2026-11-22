@@ -63,6 +63,23 @@ public class IntegrationEnvironment
     }
 
     /// <summary>
+    ///     Holds every statement on the candles until the connection it gives is disposed, as a slow disk would: a lock of the table in an
+    ///     open transaction, which the close of the connection rolls back.
+    /// </summary>
+    public static async Task<NpgsqlConnection> LockCandlesAsync()
+    {
+        var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        // The transaction stays open: disposing it here would roll it back, so the close of the connection ends it.
+        NpgsqlTransaction transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand("LOCK TABLE candles IN ACCESS EXCLUSIVE MODE", connection, transaction);
+        await command.ExecuteNonQueryAsync();
+
+        return connection;
+    }
+
+    /// <summary>
     ///     Empties every table the migrations made.
     /// </summary>
     public static async Task ResetDatabase()
