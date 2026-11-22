@@ -42,9 +42,9 @@
 
 ## 3. Документация
 
-- [ ] 3.1 README, «Settings without a restart»: строка таблицы `HistoryRead` (`MaxConcurrentReads`, `StatementTimeoutSeconds`) —
+- [x] 3.1 README, «Settings without a restart»: строка таблицы `HistoryRead` (`MaxConcurrentReads`, `StatementTimeoutSeconds`) —
   «from the next call of `History`»; пример правки ожидания. Проверка — таблица совпадает с кодом регистрации
-- [ ] 3.2 `docs/conventions.md`, абзац про `History`: таймаут запросов истории из `HistoryRead`, таймаут хранилища — `UNAVAILABLE`;
+- [x] 3.2 `docs/conventions.md`, абзац про `History`: таймаут запросов истории из `HistoryRead`, таймаут хранилища — `UNAVAILABLE`;
   «read a UTC day a statement» поправить на части окна до 64 инструменто-дней, как в спеке. Проверка — текст совпадает со
   спекой `history-stream`
 

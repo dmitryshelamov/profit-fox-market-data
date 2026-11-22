@@ -129,7 +129,11 @@ and this file is silent, ask which to follow.
   call of its feed (`CandleFeed`, `OpenInterestFeed`, `LongShortRatioFeed`, `FundingPaymentFeed`): past days only, the coverage of
   every instrument first, then the rows inside it as the messages the feed tells live, by time and then by instrument id. What the
   calls of history do the same way (the queue of `HistoryReadGate`, the checks of a request, the codes) is `HistoryCall`; their
-  handlers share `Persistence/Queries/Handlers/History` and read a UTC day a statement.
+  handlers share `Persistence/Queries/Handlers/History` and read the window a part a statement (`HistoryPeriod`): a UTC day of
+  every instrument of the request or, when they are few, several days, 64 instrument-days at most. Each statement of a read of
+  history waits for storage `HistoryRead:StatementTimeoutSeconds`, read at the start of every call; the other statements keep the
+  timeout of the connection string. A statement that waits longer ends the call with `UNAVAILABLE` (`StorageTimeoutException`),
+  which the consumer reads again.
 - The contracts share one package, so a message is named after its feed: `SubscribeOpenInterestRequest`, `OpenInterestUpdate`,
   `OpenInterestHistoryRequest`. `candle_feed.proto`, the first contract, keeps its `SubscribeRequest`: a new name would change the
   generated code of its consumers. What several contracts share (`Exchange`, `InstrumentCoverage`, `TimeRange`) is in
