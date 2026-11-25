@@ -37,6 +37,11 @@ public sealed record BybitListedInstrument : ListedInstrument
     /// </summary>
     public DateTimeOffset? LaunchTime { get; }
 
+    /// <summary>
+    ///     What Bybit says the instrument is (a share, a fund...); none when Bybit gives no type or one the catalog does not know.
+    /// </summary>
+    public BybitSymbolType? SymbolType { get; }
+
     public override Exchange Exchange => Exchange.Bybit;
 
     /// <exception cref="ArgumentException">A name is blank, a linear contract has no contract type, or a spot pair has one.</exception>
@@ -48,7 +53,8 @@ public sealed record BybitListedInstrument : ListedInstrument
         BybitInstrumentStatus status,
         InstrumentRules rules,
         BybitContractType? contractType = null,
-        DateTimeOffset? launchTime = null)
+        DateTimeOffset? launchTime = null,
+        BybitSymbolType? symbolType = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
         ArgumentException.ThrowIfNullOrWhiteSpace(baseAsset);
@@ -67,5 +73,6 @@ public sealed record BybitListedInstrument : ListedInstrument
         Rules = rules;
         ContractType = contractType;
         LaunchTime = launchTime;
+        SymbolType = symbolType;
     }
 }

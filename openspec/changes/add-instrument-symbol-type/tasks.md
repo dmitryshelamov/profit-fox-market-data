@@ -6,7 +6,7 @@
 
 ## 1. Домен
 
-- [ ] 1.1 `BybitSymbolType` в `Domain/Entities/Instruments/Enums` (решение 1) и `SymbolType` у `BybitListedInstrument`
+- [x] 1.1 `BybitSymbolType` в `Domain/Entities/Instruments/Enums` (решение 1) и `SymbolType` у `BybitListedInstrument`
   (необязательный параметр конструктора, по умолчанию `null`, чтобы прежние вызовы не менялись). Проверить юнит-тестом:
   листинг с типом и без типа равны только при равных типах.
 
