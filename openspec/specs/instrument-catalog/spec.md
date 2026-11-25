@@ -75,6 +75,31 @@ T-Invest. Каталог повторяет списки бирж, помнит 
 - **WHEN** запрошена синхронизация категории `Inverse` Bybit
 - **THEN** система отвечает `400` без запроса к Bybit
 
+### Requirement: Тип инструмента Bybit
+
+Система SHALL хранить у инструмента Bybit его тип: акция, фонд, сырьё, валюта, токенизированная акция, зона инноваций или
+зона приключений. Пустой тип и тип, которого каталог не знает, MUST давать «нет типа», а не ошибку синхронизации.
+
+#### Scenario: Контракт на акцию
+
+- **WHEN** Bybit листингует linear `TSLLUSDT` с типом `stock`, а `SPYUSDT` — с типом `ETF`
+- **THEN** в каталоге у `TSLLUSDT` тип «акция», у `SPYUSDT` — «фонд»
+
+#### Scenario: Тип пуст
+
+- **WHEN** Bybit листингует linear `BTCUSDT` с пустым типом
+- **THEN** в каталоге у `BTCUSDT` нет типа
+
+#### Scenario: Незнакомый тип
+
+- **WHEN** Bybit листингует контракт с типом `bond`, которого каталог не знает
+- **THEN** синхронизация проходит, и у этого контракта нет типа
+
+#### Scenario: Тип сменился
+
+- **WHEN** в каталоге у контракта тип «зона инноваций», а Bybit листингует его с типом `stock`
+- **THEN** после синхронизации у того же инструмента тип «акция»
+
 ### Requirement: Акции T-Invest в каталоге
 
 С T-Invest система SHALL брать только акции режима TQBR в рублях, доступные для торговли через API, с положительными лотом и
@@ -95,6 +120,16 @@ T-Invest. Каталог повторяет списки бирж, помнит 
 
 - **WHEN** в каталоге есть `BTCUSDT` Bybit и `SBER` T-Invest
 - **THEN** `GET api/instruments/bybit` отдаёт только `BTCUSDT`, а `GET api/instruments/tinvest` — только `SBER`
+
+### Requirement: Тип инструмента в ответе
+
+Листинг Bybit в ответе каталога MUST содержать поле `symbolType`: `Stock`, `Etf`, `Commodity`, `Forex`, `XStocks`,
+`Innovation`, `Adventure` или `null`, если типа нет. У листинга T-Invest этого поля нет.
+
+#### Scenario: Тип в ответе
+
+- **WHEN** в каталоге linear `TSLLUSDT` с типом «акция» и linear `BTCUSDT` без типа
+- **THEN** `GET api/instruments/bybit` отдаёт у `TSLLUSDT` `"symbolType": "Stock"`, у `BTCUSDT` — `"symbolType": null`
 
 ### Requirement: Ручная синхронизация
 
