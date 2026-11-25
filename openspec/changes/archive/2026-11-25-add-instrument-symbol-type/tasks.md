@@ -26,8 +26,12 @@
 
 ## 4. Стенд
 
-- [ ] 4.1 После выката на стенд сервиса данных: синхронизация linear и spot, `GET api/instruments/bybit` отдаёт у
+- [x] 4.1 После выката на стенд сервиса данных: синхронизация linear и spot, `GET api/instruments/bybit` отдаёт у
   `TSLLUSDT` `"symbolType": "Stock"`, у `BTCUSDT` linear — `null`; число USDT-контрактов linear по каждому типу
   записать здесь с датой.
+  2026-11-25, v17 на soyo-02: `POST api/instruments/bybit/sync` для `Linear` и `Spot` — `204`. У `BTCUSDT` (linear и
+  spot) `"symbolType": null`; у `TSLLUSDT` — `"Etf"`, а не `"Stock"`: Bybit листингует его как фонд (Tesla с плечом),
+  акция — `TSLAUSDT` с `"Stock"`. USDT-контракты linear `LinearPerpetual` в торговле: без типа 406, `Innovation` 110,
+  `Stock` 248, `Etf` 62, `Commodity` 4, `Forex` 4 (всего 834). Spot: без типа 485, `XStocks` 11, `Adventure` 3.
 
 ## Открыто после применения
