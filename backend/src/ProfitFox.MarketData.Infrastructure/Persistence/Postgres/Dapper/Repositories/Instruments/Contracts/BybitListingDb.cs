@@ -28,4 +28,6 @@ internal sealed record BybitListingDb
     public string? ContractType { get; init; }
 
     public DateTimeOffset? LaunchTime { get; init; }
+
+    public string? SymbolType { get; init; }
 }

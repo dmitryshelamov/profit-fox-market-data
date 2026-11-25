@@ -146,4 +146,30 @@ public class InstrumentsControllerTests
                 Is.EqualTo(new[] { SberUid }));
         });
     }
+
+    [Test]
+    public async Task The_symbol_type_of_a_Bybit_listing_is_in_the_answer_and_a_share_of_tinvest_has_none()
+    {
+        _app.Bybit.RespondJson(
+            BybitAnswers.List(
+                "linear",
+                items: [BybitAnswers.LinearContract("TSLLUSDT", "TSLL", symbolType: "stock"), BybitAnswers.LinearContract("BTCUSDT", "BTC", symbolType: "")]));
+        _app.TInvest.Respond("Shares", TInvestAnswers.Shares(TInvestAnswers.Share("SBER", SberUid)));
+        await _client.PostAsync("api/instruments/bybit/sync?category=Linear", content: null);
+        await _client.PostAsync("api/instruments/tinvest/sync", content: null);
+
+        using var bybit = JsonDocument.Parse(await _client.GetStringAsync("api/instruments/bybit"));
+        using var tinvest = JsonDocument.Parse(await _client.GetStringAsync("api/instruments/tinvest"));
+
+        var symbolTypes = bybit.RootElement
+            .EnumerateArray()
+            .Select(instrument => instrument.GetProperty("listing"))
+            .ToDictionary(listing => listing.GetProperty("symbol").GetString()!, listing => listing.GetProperty("symbolType"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(symbolTypes["TSLLUSDT"].GetString(), Is.EqualTo("Stock"));
+            Assert.That(symbolTypes["BTCUSDT"].ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.That(tinvest.RootElement.EnumerateArray().Single().GetProperty("listing").TryGetProperty("symbolType", out _), Is.False);
+        });
+    }
 }

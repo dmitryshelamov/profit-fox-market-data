@@ -33,9 +33,36 @@ public class BybitListedInstrumentTests
             new BybitListedInstrument(BybitCategory.Spot, symbol, baseAsset, quoteAsset, BybitInstrumentStatus.Trading, Rules));
     }
 
+    [TestCase(BybitSymbolType.Stock, null)]
+    [TestCase(null, BybitSymbolType.Stock)]
+    [TestCase(BybitSymbolType.Stock, BybitSymbolType.Etf)]
+    public void Listings_with_different_symbol_types_differ(BybitSymbolType? symbolType, BybitSymbolType? otherSymbolType)
+    {
+        Assert.That(CreateSpot(symbolType), Is.Not.EqualTo(CreateSpot(otherSymbolType)));
+    }
+
+    [TestCase(BybitSymbolType.Stock)]
+    [TestCase(null)]
+    public void Listings_with_the_same_symbol_type_are_equal(BybitSymbolType? symbolType)
+    {
+        BybitListedInstrument listing = CreateSpot(symbolType);
+        BybitListedInstrument sameListing = CreateSpot(symbolType);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(listing, Is.EqualTo(sameListing));
+            Assert.That(listing.SymbolType, Is.EqualTo(symbolType));
+        });
+    }
+
     private static BybitListedInstrument Create(BybitCategory category, BybitContractType? contractType)
     {
         return new BybitListedInstrument(category, "BTCUSDT", "BTC", "USDT", BybitInstrumentStatus.Trading, Rules, contractType, LaunchTime);
+    }
+
+    private static BybitListedInstrument CreateSpot(BybitSymbolType? symbolType)
+    {
+        return new BybitListedInstrument(BybitCategory.Spot, "BTCUSDT", "BTC", "USDT", BybitInstrumentStatus.Trading, Rules, symbolType: symbolType);
     }
 
     [Test]

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 
 using ProfitFox.MarketData.Domain.Entities.Instruments;
+using ProfitFox.MarketData.Domain.Entities.Instruments.Enums;
 using ProfitFox.MarketData.Domain.Repositories;
 using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 using ProfitFox.MarketData.Tests.Shared.Generators.Domain.Entities.Instruments;
@@ -39,6 +40,25 @@ public class InstrumentRepositoryTests
 
     private ServiceProvider _services = null!;
     private IInstrumentRepository _repository = null!;
+
+    [Test]
+    public async Task A_changed_symbol_type_replaces_the_stored_one()
+    {
+        Instrument instrument = InstrumentGenerator.Generate(BybitListedInstrumentGenerator.GenerateLinear(symbolType: BybitSymbolType.Innovation), Then, LinearId);
+        await _repository.SaveAsync([instrument], CancellationToken.None);
+        BybitSymbolType? storedFirst = ((BybitListedInstrument)(await _repository.GetAllAsync(CancellationToken.None)).Single().Listing).SymbolType;
+        instrument.Refresh(BybitListedInstrumentGenerator.GenerateLinear(symbolType: BybitSymbolType.Stock));
+
+        await _repository.SaveAsync([instrument], CancellationToken.None);
+        Instrument stored = (await _repository.GetAllAsync(CancellationToken.None)).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(storedFirst, Is.EqualTo(BybitSymbolType.Innovation));
+            Assert.That(stored.Id, Is.EqualTo(LinearId));
+            Assert.That(((BybitListedInstrument)stored.Listing).SymbolType, Is.EqualTo(BybitSymbolType.Stock));
+        });
+    }
 
     [Test]
     public async Task An_instrument_is_found_by_its_id_whatever_its_exchange()

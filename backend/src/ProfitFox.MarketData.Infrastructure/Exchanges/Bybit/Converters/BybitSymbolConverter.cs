@@ -7,8 +7,9 @@ using ProfitFox.MarketData.Domain.ValueObjects.Instruments;
 namespace ProfitFox.MarketData.Infrastructure.Exchanges.Bybit.Converters;
 
 /// <summary>
-///     Turns the symbols of Bybit.Net into listings of the domain. A code the domain has no value for fails the whole list: a guessed
-///     status or a skipped symbol would put a wrong instrument into the catalog or delist a listed one.
+///     Turns the symbols of Bybit.Net into listings of the domain. A status or a contract type the domain has no value for fails the whole
+///     list: a guessed status or a skipped symbol would put a wrong instrument into the catalog or delist a listed one. A symbol type it
+///     does not know leaves the listing without one.
 /// </summary>
 internal static class BybitSymbolConverter
 {
@@ -27,7 +28,8 @@ internal static class BybitSymbolConverter
                 spot.PriceFilter!.TickSize,
                 spot.LotSizeFilter!.BasePrecision,
                 spot.LotSizeFilter.MinOrderQuantity,
-                spot.LotSizeFilter.MinOrderValue));
+                spot.LotSizeFilter.MinOrderValue),
+            symbolType: KnownSymbolType(spot.SymbolType));
     }
 
     /// <summary>
@@ -47,7 +49,8 @@ internal static class BybitSymbolConverter
                 linear.LotSizeFilter.MinOrderQuantity,
                 linear.LotSizeFilter.MinNotionalValue),
             LinearContractType(linear.Name, linear.ContractType),
-            new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)));
+            new DateTimeOffset(DateTime.SpecifyKind(linear.LaunchTime, DateTimeKind.Utc)),
+            KnownSymbolType(linear.SymbolType));
     }
 
     private static BybitInstrumentStatus Status(string symbol, SymbolStatus status)
@@ -60,6 +63,25 @@ internal static class BybitSymbolConverter
             SymbolStatus.Delivering => BybitInstrumentStatus.Delivering,
             SymbolStatus.Closed => BybitInstrumentStatus.Closed,
             _ => throw new InvalidOperationException($"Bybit lists {symbol} with status {status}, which the catalog does not know.")
+        };
+    }
+
+    /// <summary>
+    ///     No type for an empty or unknown one, unlike a status: the type only labels an instrument, so a new type of Bybit must not stop the
+    ///     sync of every pair.
+    /// </summary>
+    private static BybitSymbolType? KnownSymbolType(SymbolType? type)
+    {
+        return type switch
+        {
+            SymbolType.Innovation => BybitSymbolType.Innovation,
+            SymbolType.Adventure => BybitSymbolType.Adventure,
+            SymbolType.XStocks => BybitSymbolType.XStocks,
+            SymbolType.Stock => BybitSymbolType.Stock,
+            SymbolType.Etf => BybitSymbolType.Etf,
+            SymbolType.Commodity => BybitSymbolType.Commodity,
+            SymbolType.Forex => BybitSymbolType.Forex,
+            _ => null
         };
     }
 

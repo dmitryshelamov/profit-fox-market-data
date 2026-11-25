@@ -55,6 +55,53 @@ public class BybitInstrumentsClientTests
         Assert.ThrowsAsync<InvalidOperationException>(() => _instruments.ListAsync(BybitCategory.Linear, CancellationToken.None));
     }
 
+    [TestCase("innovation", BybitSymbolType.Innovation)]
+    [TestCase("adventure", BybitSymbolType.Adventure)]
+    [TestCase("xstocks", BybitSymbolType.XStocks)]
+    [TestCase("stock", BybitSymbolType.Stock)]
+    [TestCase("ETF", BybitSymbolType.Etf)]
+    [TestCase("commodity", BybitSymbolType.Commodity)]
+    [TestCase("forex", BybitSymbolType.Forex)]
+    public async Task A_linear_contract_keeps_the_symbol_type_Bybit_gives(string symbolType, BybitSymbolType expected)
+    {
+        _bybit.RespondJson(BybitAnswers.List("linear", items: BybitAnswers.LinearContract("TSLLUSDT", "TSLL", symbolType: symbolType)));
+
+        IReadOnlyList<BybitListedInstrument> listed = await _instruments.ListAsync(BybitCategory.Linear, CancellationToken.None);
+
+        Assert.That(listed.Single().SymbolType, Is.EqualTo(expected));
+    }
+
+    [TestCase("innovation", BybitSymbolType.Innovation)]
+    [TestCase("adventure", BybitSymbolType.Adventure)]
+    [TestCase("xstocks", BybitSymbolType.XStocks)]
+    [TestCase("stock", BybitSymbolType.Stock)]
+    [TestCase("ETF", BybitSymbolType.Etf)]
+    [TestCase("commodity", BybitSymbolType.Commodity)]
+    [TestCase("forex", BybitSymbolType.Forex)]
+    public async Task A_spot_pair_keeps_the_symbol_type_Bybit_gives(string symbolType, BybitSymbolType expected)
+    {
+        _bybit.RespondJson(BybitAnswers.List("spot", items: BybitAnswers.SpotPair("AAPLXUSDT", "AAPLX", "USDT", "0.01", "0.0001", "0.0001", "1", symbolType)));
+
+        IReadOnlyList<BybitListedInstrument> listed = await _instruments.ListAsync(BybitCategory.Spot, CancellationToken.None);
+
+        Assert.That(listed.Single().SymbolType, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task A_contract_with_a_symbol_type_the_catalog_does_not_know_has_none_and_the_list_stays_whole()
+    {
+        _bybit.RespondJson(
+            BybitAnswers.List(
+                "linear",
+                items: [BybitAnswers.LinearContract("USTBUSDT", "USTB", symbolType: "bond"), BybitAnswers.LinearContract("TSLLUSDT", "TSLL", symbolType: "stock")]));
+
+        IReadOnlyList<BybitListedInstrument> listed = await _instruments.ListAsync(BybitCategory.Linear, CancellationToken.None);
+
+        Assert.That(
+            listed.Select(instrument => (instrument.Symbol, instrument.SymbolType)),
+            Is.EqualTo(new (string, BybitSymbolType?)[] { ("USTBUSDT", null), ("TSLLUSDT", BybitSymbolType.Stock) }));
+    }
+
     [Test]
     public void A_page_Bybit_refuses_fails_the_whole_list()
     {
@@ -104,6 +151,26 @@ public class BybitInstrumentsClientTests
             Assert.That(_bybit.Requests.Select(request => request.Query), Has.Exactly(1).Contains("cursor=page2"));
             Assert.That(_bybit.Requests, Has.All.Property(nameof(Uri.Query)).Contains("limit=1000"));
         });
+    }
+
+    [Test]
+    public async Task Linear_contracts_on_shares_and_funds_are_told_apart_from_crypto()
+    {
+        _bybit.RespondJson(
+            BybitAnswers.List(
+                "linear",
+                items:
+                [
+                    BybitAnswers.LinearContract("TSLLUSDT", "TSLL", symbolType: "stock"),
+                    BybitAnswers.LinearContract("SPYUSDT", "SPY", symbolType: "ETF"),
+                    BybitAnswers.LinearContract("BTCUSDT", "BTC", symbolType: "")
+                ]));
+
+        IReadOnlyList<BybitListedInstrument> listed = await _instruments.ListAsync(BybitCategory.Linear, CancellationToken.None);
+
+        Assert.That(
+            listed.Select(instrument => (instrument.Symbol, instrument.SymbolType)),
+            Is.EqualTo(new (string, BybitSymbolType?)[] { ("TSLLUSDT", BybitSymbolType.Stock), ("SPYUSDT", BybitSymbolType.Etf), ("BTCUSDT", null) }));
     }
 
     [Test]
