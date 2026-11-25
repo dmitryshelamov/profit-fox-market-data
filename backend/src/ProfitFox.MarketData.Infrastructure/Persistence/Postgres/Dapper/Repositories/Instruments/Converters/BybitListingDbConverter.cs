@@ -24,7 +24,8 @@ internal static class BybitListingDbConverter
             MinQuantity = listing.Rules.MinQuantity,
             MinAmount = listing.Rules.MinAmount,
             ContractType = listing.ContractType?.ToString(),
-            LaunchTime = listing.LaunchTime
+            LaunchTime = listing.LaunchTime,
+            SymbolType = listing.SymbolType?.ToString()
         };
     }
 
@@ -38,7 +39,8 @@ internal static class BybitListingDbConverter
             Parse<BybitInstrumentStatus>(row.InstrumentId, row.Status),
             new InstrumentRules(row.TickSize, row.QuantityStep, row.MinQuantity, row.MinAmount),
             row.ContractType is null ? null : Parse<BybitContractType>(row.InstrumentId, row.ContractType),
-            row.LaunchTime);
+            row.LaunchTime,
+            row.SymbolType is null ? null : Parse<BybitSymbolType>(row.InstrumentId, row.SymbolType));
     }
 
     private static T Parse<T>(Guid instrumentId, string name)

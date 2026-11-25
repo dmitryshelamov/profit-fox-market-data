@@ -14,6 +14,7 @@ public static class BybitListedInstrumentInternalConverter
             listing.Status,
             listing.Rules.ToInternal(),
             listing.ContractType,
-            listing.LaunchTime);
+            listing.LaunchTime,
+            listing.SymbolType);
     }
 }

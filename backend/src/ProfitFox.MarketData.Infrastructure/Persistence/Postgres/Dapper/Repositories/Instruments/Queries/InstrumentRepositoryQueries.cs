@@ -21,7 +21,7 @@ internal static class InstrumentRepositoryQueries
                                                l.instrument_id AS "InstrumentId", l.category, l.symbol, l.base_asset AS "BaseAsset",
                                                l.quote_asset AS "QuoteAsset", l.status, l.tick_size AS "TickSize", l.quantity_step AS "QuantityStep",
                                                l.min_quantity AS "MinQuantity", l.min_amount AS "MinAmount", l.contract_type AS "ContractType",
-                                               l.launch_time AS "LaunchTime"
+                                               l.launch_time AS "LaunchTime", l.symbol_type AS "SymbolType"
                                         FROM instruments i
                                         JOIN bybit_listings l ON l.instrument_id = i.id
                                         """;
@@ -55,11 +55,11 @@ internal static class InstrumentRepositoryQueries
 
     private const string UpsertBybitSql = """
                                           INSERT INTO bybit_listings (instrument_id, category, symbol, base_asset, quote_asset, status, tick_size,
-                                                                      quantity_step, min_quantity, min_amount, contract_type, launch_time)
+                                                                      quantity_step, min_quantity, min_amount, contract_type, launch_time, symbol_type)
                                           SELECT * FROM unnest(
                                               @InstrumentIds::uuid[], @Categories::text[], @Symbols::text[], @BaseAssets::text[], @QuoteAssets::text[],
                                               @Statuses::text[], @TickSizes::numeric[], @QuantitySteps::numeric[], @MinQuantities::numeric[],
-                                              @MinAmounts::numeric[], @ContractTypes::text[], @LaunchTimes::timestamptz[])
+                                              @MinAmounts::numeric[], @ContractTypes::text[], @LaunchTimes::timestamptz[], @SymbolTypes::text[])
                                           ON CONFLICT (instrument_id) DO UPDATE SET
                                               category = EXCLUDED.category,
                                               symbol = EXCLUDED.symbol,
@@ -71,7 +71,8 @@ internal static class InstrumentRepositoryQueries
                                               min_quantity = EXCLUDED.min_quantity,
                                               min_amount = EXCLUDED.min_amount,
                                               contract_type = EXCLUDED.contract_type,
-                                              launch_time = EXCLUDED.launch_time
+                                              launch_time = EXCLUDED.launch_time,
+                                              symbol_type = EXCLUDED.symbol_type
                                           """;
 
     private const string UpsertTInvestSql = """
@@ -134,7 +135,8 @@ internal static class InstrumentRepositoryQueries
             MinQuantities = rows.Select(row => row.MinQuantity).ToArray(),
             MinAmounts = rows.Select(row => row.MinAmount).ToArray(),
             ContractTypes = rows.Select(row => row.ContractType).ToArray(),
-            LaunchTimes = rows.Select(row => row.LaunchTime?.ToUniversalTime()).ToArray()
+            LaunchTimes = rows.Select(row => row.LaunchTime?.ToUniversalTime()).ToArray(),
+            SymbolTypes = rows.Select(row => row.SymbolType).ToArray()
         };
 
         return new CommandDefinition(UpsertBybitSql, columns, transaction, cancellationToken: cancellationToken);

@@ -11,4 +11,5 @@ public sealed record BybitListedInstrumentInternal(
     BybitInstrumentStatus Status,
     InstrumentRulesInternal Rules,
     BybitContractType? ContractType,
-    DateTimeOffset? LaunchTime) : ListedInstrumentInternal;
+    DateTimeOffset? LaunchTime,
+    BybitSymbolType? SymbolType = null) : ListedInstrumentInternal;

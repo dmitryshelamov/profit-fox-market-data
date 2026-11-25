@@ -19,9 +19,9 @@
 
 ## 3. Хранение и ответ
 
-- [ ] 3.1 Миграция `bybit_listings.symbol_type text NULL` (решение 2); `InstrumentRepository` пишет и читает тип.
+- [x] 3.1 Миграция `bybit_listings.symbol_type text NULL` (решение 2); `InstrumentRepository` пишет и читает тип.
   Проверить интеграционным тестом сценарий «Тип сменился» требования «Инструменты Bybit в каталоге».
-- [ ] 3.2 `SymbolType` в `BybitListedInstrumentInternal` и в ответе (решение 3). Проверить интеграционным тестом
+- [x] 3.2 `SymbolType` в `BybitListedInstrumentInternal` и в ответе (решение 3). Проверить интеграционным тестом
   сценарий «Тип в ответе» требования «Чтение каталога»; у T-Invest поля нет.
 
 ## 4. Стенд
