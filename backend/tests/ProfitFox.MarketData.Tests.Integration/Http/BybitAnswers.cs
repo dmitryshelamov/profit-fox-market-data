@@ -5,23 +5,38 @@ namespace ProfitFox.MarketData.Tests.Integration.Http;
 /// </summary>
 internal static class BybitAnswers
 {
-    public static string SpotPair(string symbol, string baseCoin, string quoteCoin, string tickSize, string basePrecision, string minOrderQty, string minOrderAmt)
+    /// <summary>
+    ///     A spot pair as Bybit writes it; a <paramref name="symbolType" /> given, even empty, is written as <c>symbolType</c>.
+    /// </summary>
+    public static string SpotPair(
+        string symbol,
+        string baseCoin,
+        string quoteCoin,
+        string tickSize,
+        string basePrecision,
+        string minOrderQty,
+        string minOrderAmt,
+        string? symbolType = null)
     {
         return $$$"""
-                  {"symbol":"{{{symbol}}}","baseCoin":"{{{baseCoin}}}","quoteCoin":"{{{quoteCoin}}}","status":"Trading",
+                  {"symbol":"{{{symbol}}}","baseCoin":"{{{baseCoin}}}","quoteCoin":"{{{quoteCoin}}}","status":"Trading",{{{SymbolType(symbolType)}}}
                    "lotSizeFilter":{"basePrecision":"{{{basePrecision}}}","quotePrecision":"0.00000001","minOrderQty":"{{{minOrderQty}}}","maxOrderQty":"1000","minOrderAmt":"{{{minOrderAmt}}}","maxOrderAmt":"2000000"},
                    "priceFilter":{"tickSize":"{{{tickSize}}}"}}
                   """;
     }
 
+    /// <summary>
+    ///     A linear contract as Bybit writes it; a <paramref name="symbolType" /> given, even empty, is written as <c>symbolType</c>.
+    /// </summary>
     public static string LinearContract(
         string symbol,
         string baseCoin,
         string contractType = "LinearPerpetual",
-        string status = "Trading")
+        string status = "Trading",
+        string? symbolType = null)
     {
         return $$$"""
-                  {"symbol":"{{{symbol}}}","contractType":"{{{contractType}}}","status":"{{{status}}}","baseCoin":"{{{baseCoin}}}","quoteCoin":"USDT","settleCoin":"USDT",
+                  {"symbol":"{{{symbol}}}","contractType":"{{{contractType}}}","status":"{{{status}}}","baseCoin":"{{{baseCoin}}}","quoteCoin":"USDT","settleCoin":"USDT",{{{SymbolType(symbolType)}}}
                    "launchTime":"1585526400000","deliveryTime":"0",
                    "priceFilter":{"minPrice":"0.10","maxPrice":"1999999.80","tickSize":"0.10"},
                    "lotSizeFilter":{"maxOrderQty":"1190.000","minOrderQty":"0.001","qtyStep":"0.001","minNotionalValue":"5"}}
@@ -128,5 +143,10 @@ internal static class BybitAnswers
         return $$"""
                  {"retCode":0,"retMsg":"OK","result":{"category":"{{category}}","symbol":"{{symbol}}","list":[{{string.Join(",", klines)}}]},"retExtInfo":{},"time":0}
                  """;
+    }
+
+    private static string SymbolType(string? symbolType)
+    {
+        return symbolType is null ? "" : $"\"symbolType\":\"{symbolType}\",";
     }
 }
